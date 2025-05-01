@@ -32,3 +32,22 @@ These nodes will be reimplemented in ROS 2 written in C++. The project proposal 
 - Fuse human and autonomy velocity vectors to obtain a resulting velocity vector to apply to the robot
 - Publish RViz markers for robot state, velocity vectors (human, autonomy, fused), obstacles, and goal positions
 - **On-the-fly mesh environment adaptation (from (depth) camera input)**
+
+# Potential Fields Implementation Approaches
+
+1. 3D Map `std::unordered_map<Position3D, PotentialForce>` storing potential force (needs to be hashable) of the task-space.
+    - Computationally fast but will use a lot of memory depending on potential container memory footprint and hashing complexity.
+    - Dynamically updating will need to update entire vector. Maybe we can do it smartly by only updating relevant areas.
+    - Could leave map sparse so we aren't front-loading a lot of precomputation and fill in map as we explore the task-space stemming from the robot-state, obstacles, and the goal.
+    - Can use a [`kd-tree`](https://github.com/cdalitz/kdtree-cpp) instead of a hashmap to store positions.
+      - Time Complexity: Construction is `O(n log(n))`, nearest neighbor query is `O(n)` (if balanced then `O(log(n))`), insertion is `O(log(n))`
+      - Space Complexity: `O(n)`
+      - [Wikipedia](https://en.wikipedia.org/wiki/K-d_tree)
+    - Can use an [`Octree`](https://github.com/attcs/Octree) to split regions and model the task-space as a recursive 3D volume with subregions
+      - `m` is number of occupied nodes, `W` is world size, `R` is resolution of leaf node (volume)
+      - Time Complexity: Construction is `O(n log(W/R))`, query is `O(log(W/R))`, insertion is `O(log(W/R))`
+      - Space Complexity: `O(m)`
+      - [Wikipedia](https://en.wikipedia.org/wiki/Octree)
+2. Obstacled-Based, calculate forces using robot-state and set of obstacles without needing to precompute potential in the entire task-space.
+    - Computationally slower than precomputation but would work well with small set of obstacles. Uses less memory since we aren't maintaining a huge 3D HashMap
+    - Can use meshes to represent obstacles for more complex obstacles
