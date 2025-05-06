@@ -27,7 +27,9 @@ def create_basic_field():
     plt.title('Vector Field Towards Goal Point')
     # Show the plot
     plt.grid()
-    plt.show()
+    # plt.show()
+    plt.savefig("basic_vector_field.png")
+    print(f"Saved basic_vector_field.png")
 
 
 class Obstacle:
@@ -47,17 +49,19 @@ class Obstacle:
         return np.linalg.norm(point - self.position) <= (self.radius + influence_radius)
 
 
-def getAttractiveVector(point, goalPoint, attractive_gain=1.0):
+def getAttractiveVector(point, goalPoint, attractive_gain=2.0, max_force=5.0):
     distance = np.linalg.norm(point - goalPoint)
     if distance < 1e-6:
         return np.zeros_like(point)
-    direction = (goalPoint - point) / distance
+    direction = (point - goalPoint) / distance
     magnitude = attractive_gain * distance
-    vector = magnitude * direction
+    if magnitude > max_force:
+        magnitude = max_force
+    vector = -magnitude * direction
     return vector
 
 
-def getRepulsiveVector(point, obstacles, repulsive_gain=1.0, max_force=5.0):
+def getRepulsiveVector(point, obstacles: list[Obstacle], repulsive_gain=1.0, max_force=5.0):
     vector = np.zeros_like(point)
     for obs in obstacles:
         influence_radius = 2 * obs.radius
@@ -67,8 +71,10 @@ def getRepulsiveVector(point, obstacles, repulsive_gain=1.0, max_force=5.0):
                 distance = 1e-5
             force_direction = (point - obs.position) / \
                 np.linalg.norm(point - obs.position)
+            # F = repulsiveGain * (1/influence - 1/distance) * (1 / distance^2)
             force_magnitude = repulsive_gain * \
-                (1 / distance**2)  # Repulsive force
+                (1/distance - 1/influence_radius) * \
+                (1 / distance**2)
             if force_magnitude > max_force:
                 force_magnitude = max_force
             # print(
@@ -128,7 +134,9 @@ def create_2D_vector_field_with_obstacles():
     plt.xlim(0, 10)
     plt.ylim(0, 10)
     plt.axis('equal')
-    plt.show()
+    # plt.show()
+    plt.savefig("2D_vector_field.png")
+    print(f"Saved 2D_vector_field.png")
 
 
 def create_3D_vector_field_with_obstacles():
@@ -136,16 +144,16 @@ def create_3D_vector_field_with_obstacles():
     fig = plt.figure()
     ax = fig.add_subplot(111, projection='3d')
     # Create a 3D grid
-    x = np.linspace(0, 10, 10)
-    y = np.linspace(0, 10, 10)
-    z = np.linspace(0, 10, 10)
+    x = np.linspace(0, 10, 5)
+    y = np.linspace(0, 10, 5)
+    z = np.linspace(0, 10, 5)
     X, Y, Z = np.meshgrid(x, y, z)
     # Define a goal position
     goalPoint = np.array([8, 2, 3])
     # Obstacles are spheres with a center and a radius
     obstacles = [
         Obstacle(np.array([2, 2, 2]), 1),
-        # Obstacle(np.array([7, 7, 7]), 1),
+        Obstacle(np.array([7, 4, 7]), 2),
         Obstacle(np.array([5, 8, 5]), 0.5)
     ]
     U = np.zeros_like(X, dtype=float)
@@ -200,10 +208,66 @@ def create_3D_vector_field_with_obstacles():
     ax.view_init(elev=20, azim=30)  # Set the view angle
     ax.set_box_aspect([1, 1, 1])  # Make the axes equal
     # Show the plot
-    plt.show()
+    # plt.show()
+    plt.savefig("3D_vector_field.png")
+    print(f"Saved 3D_vector_field.png")
+
+
+def graph_forces():
+    # Create a graph of the attractive and repulsive forces
+    # with respect to the distance from the obstacle/goal
+    max_distance = np.sqrt(2) * 10
+    max_force = 10.0
+    distances = np.linspace(0.01, max_distance, 100)
+    goal_point = np.array([0, 0])
+    obstacle = Obstacle(np.array([0, 0]), 1)
+    attractive_forces = [
+        getAttractiveVector(
+            point=np.array([d, 0]),
+            goalPoint=goal_point,
+            attractive_gain=1.0,
+            max_force=max_force
+        ) for d in distances
+    ]
+    repulsive_forces = [
+        getRepulsiveVector(
+            point=np.array([d, 0]),
+            obstacles=[obstacle],
+            repulsive_gain=1.0,
+            max_force=max_force
+        ) for d in distances
+    ]
+    # Calculate the magnitudes of the forces
+    attractive_forces = np.linalg.norm(attractive_forces, axis=1)
+    repulsive_forces = np.linalg.norm(repulsive_forces, axis=1)
+    # Plot the forces on 2 graphs next to each other
+    plt.figure()
+    plt.plot(distances, repulsive_forces, label='Repulsive Force')
+    # Plot influence radius as vertical line
+    plt.axvline(x=2, color='r', linestyle='--', label='Influence Radius')
+    plt.plot(distances, attractive_forces, label='Attractive Force')
+    plt.title('Attractive and Repulsive Forces vs Distance to Goal/Obstacle')
+    plt.text(
+        6, 2.5, f"Max Force: {max_force:.1f} N\nRepulsive Gain: {1.0:.1f} N/m\nAttractive Gain: {1.0:.1f} N/m",
+        fontsize=10, color='black', ha='center', va='center'
+    )
+    plt.xlabel('Distance [m]')
+    plt.ylabel('Force Magnitude [N]')
+    plt.xticks(np.arange(0, max_distance + 1, 1))
+    plt.yticks(np.arange(0, max_force + 1, 1))
+    plt.axhline(y=max_force, color='g', linestyle='--', label='Max Force')
+    plt.xlim(0, max_distance * 1.15)
+    plt.ylim(0, max_force * 1.15)
+    plt.legend()
+    plt.grid()
+    plt.tight_layout()
+    plt.savefig("forces.png")
+    print(f"Saved forces.png")
+    # plt.show()
 
 
 if __name__ == "__main__":
-    # create_basic_field()
-    # create_2D_vector_field_with_obstacles()
+    create_basic_field()
+    graph_forces()
+    create_2D_vector_field_with_obstacles()
     create_3D_vector_field_with_obstacles()
