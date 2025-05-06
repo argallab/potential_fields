@@ -30,10 +30,8 @@ struct Vector {
   float z; // Z-component of vector [m]
 
   float euclideanDistance(const Vector& other) const {
-    return std::sqrt(
-      std::pow(x - other.x, 2) +
-      std::pow(y - other.y, 2) +
-      std::pow(z - other.z, 2)
+    return std::hypot(
+      x - other.x, y - other.y, z - other.z
     );
   }
 
@@ -148,12 +146,51 @@ public:
   }
   ~PotentialField() = default;
 
-  bool updateGoalPosition(Vector newGoalPosition);
+  /**
+ * @brief Updates the goal position (3D Vector) in the potential field.
+ *
+ * @note The Goal Position creates an attractive force towards it
+ *
+ * @param newGoalPosition The new goal position to be set.
+ */
+  void updateGoalPosition(Vector newGoalPosition);
+
+  /**
+   * @brief Updates the attractive gain, scaling the force
+   *        applied pulling points towards the goal.
+   *
+   * @param newAttractiveGain The new attractive gain to be set.
+   */
   void updateAttractiveGain(float newAttractiveGain);
+
+  /**
+   * @brief Adds a new obstacle to the potential field.
+   *
+   * @param obstacle The obstacle to be added.
+   */
   void addObstacle(SphereObstacle obstacle);
+
+  /**
+   * @brief Attempts to remove an obstacle by ID.
+   *
+   * @note If the obstacle is not found, no action is taken.
+   * @param obstacleID  the ID of the obstacle obtained on obstacle creation.
+   * @return true if the obstacle was removed successfully.
+   */
   bool removeObstacle(int obstacleID);
+
+  /**
+   * @brief Clears all obstacles from the potential field.
+   */
   void clearObstacles();
 
+  /**
+   * @brief Given a 3D position, computes the velocity vector
+   *        by combining attractive and repulsive forces.
+   *
+   * @param position The position in 3D space to compute the velocity vector.
+   * @return Vector The resultant velocity vector.
+   */
   Vector computeVelocityAtPosition(Vector position);
 
 private:
@@ -161,7 +198,27 @@ private:
   Vector goalPosition;
   std::vector<SphereObstacle> obstacles;
 
+  /**
+   * @brief Computes the attractive force towards the goal position.
+   *
+   * @note Equation: F = attractiveGain * (distace * direction)
+   *       where direction is a unit vector pointing towards the goal.
+   *
+   * @param position The position in 3D space to compute the force from.
+   * @return Vector The attractive force vector.
+   */
   Vector computeAttractiveForces(Vector position);
+
+  /**
+   * @brief Computes the repulsive forces from all obstacles
+   *        and returns the resultant vector.
+   *
+   * @note Equation: F = repulsiveGain * (1 / distance^2) * direction
+   *       where direction is a unit vector pointing away from the obstacle.
+   *
+   * @param position The position in 3D space to compute the force from.
+   * @return Vector The repulsive force vector.
+   */
   Vector computeRepulsiveForces(Vector position);
 };
 
