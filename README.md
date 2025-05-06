@@ -51,3 +51,58 @@ These nodes will be reimplemented in ROS 2 written in C++. The project proposal 
 2. Obstacled-Based, calculate forces using robot-state and set of obstacles without needing to precompute potential in the entire task-space.
     - Computationally slower than precomputation but would work well with small set of obstacles. Uses less memory since we aren't maintaining a huge 3D HashMap
     - Can use meshes to represent obstacles for more complex obstacles
+
+# Potential Equations
+
+## Attractive Potential
+Attractive Potential is computed using a continuously differentiable function (quadratic function of distance)
+
+$$
+\begin{align}
+U_{att}(q) &= \frac{1}{2}\zeta D\left(q, q_{goal}\right)^2 \\
+\nabla U_{att}(q) &= \nabla \left(\frac{1}{2}\zeta D\left(q, q_{goal}\right)^2\right) \\
+&= \frac{1}{2}\zeta \nabla D\left(q, q_{goal}\right)^2 \\
+\nabla U_{att}(q) &= \zeta \underbrace{\left(q - q_{goal}\right)}_{\text{vector difference}}
+\end{align}
+$$
+
+Where:
+- $\zeta$ is the *attractive gain* parameter
+- $D\left(q, q_{goal}\right)$ is the euclidean distance between vector $q$ and $q_{goal}$
+
+## Repulsive Potential
+Repulsive force increases with proximity to obstacle. Multiple obstacles create commutative forces.
+
+$$
+\begin{align}
+U_{rep}(q) &= \left\{\begin{matrix}\frac{1}{2}\eta\left(\frac{1}{D(q)} - \frac{1}{Q^*}\right)^2 & \text{if } D(q) \leq Q^* \\ 0 & \text{if } D(q) > Q^*\end{matrix}\right. \\
+\nabla U_{rep}(q) &= \left\{\begin{matrix} \eta \left(\frac{1}{Q^*} - \frac{1}{D(q)}\right) \frac{1}{D^2(q)} \nabla D(q)& \text{if } D(q) \leq Q^* \\ 0 & \text{if } D(q) > Q^*\end{matrix}\right.
+\end{align}
+$$
+
+Where:
+- $\eta$ is the repulsive gain parameter
+- $Q^*$ is the influence radius of the obstacle
+- $D(q)$ is the euclidean distance between the vector $q$ and the obstacle
+
+## Total Potential Function
+
+$$
+U(q) = U_{att}(q) + U_{rep}(q) \\ \underbrace{F(q) = - \nabla U(q)}_{\text{Force Equation}}
+$$
+
+We can utilize **gradient descent** to employ a motion-strategy to travel down the potential gradient:
+
+$$
+\begin{align*}
+&q[0] = q_{start} \\
+&i = 0 \\
+&\text{while}||\nabla U(q_i)|| > \epsilon \\
+&\,\,\,\, q_{i+1} = q_i - \alpha_i \nabla U(q_i) \\
+&\,\,\,\, i = i + 1
+\end{align*}
+$$
+
+Where:
+- $\epsilon$ parameterizes when to stop gradient descent
+- $\alpha_i$ is a step-size (learning rate) to progress towards the gradient (specific to each iteration)
