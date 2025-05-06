@@ -213,7 +213,7 @@ private:
    * @brief Computes the repulsive forces from all obstacles
    *        and returns the resultant vector.
    *
-   * @note Equation: F = repulsiveGain * (1 / distance^2) * direction
+   * @note Equation: F = repulsiveGain * (1/distance - 1/influence) * (1 / distance^2) * direction
    *       where direction is a unit vector pointing away from the obstacle.
    *
    * @param position The position in 3D space to compute the force from.

@@ -44,14 +44,15 @@ Vector PotentialField::computeVelocityAtPosition(Vector position) {
 }
 
 Vector PotentialField::computeAttractiveForces(Vector position) {
-  // Attractive force towards the goal position
-  float distance = this->goalPosition.euclideanDistance(position);
-  Vector direction = this->goalPosition - position;
+  // Attractive force towards the goal position (pos - goal)
+  float distance = position.euclideanDistance(this->goalPosition);
+  Vector direction = position - this->goalPosition;
   // If distance is (near) zero, return zero force
   /// TODO: Parameterize this small threshold
   if (distance < 1e-3) { return Vector{0, 0, 0}; }
   direction /= distance; // Normalize the direction
-  float magnitude = this->attractiveGain * distance;
+  // Attractive force is negative
+  float magnitude = -this->attractiveGain * distance;
   return direction * magnitude;
 }
 
@@ -59,9 +60,8 @@ Vector PotentialField::computeRepulsiveForces(Vector position) {
   Vector repulsiveForce{0, 0, 0};
   for (const auto& obst : this->obstacles) {
     // Each obstacle is a sphere
-    // float distance = position.euclideanDistance(obstPosition);
+    // Only calculate repulsive force if within influence radius
     if (obst.withinInfluenceRadius(position)) {
-      // Only calculate repulsive force if within influence radius
       Vector obstPosition = obst.getPosition();
       Vector direction = position - obstPosition;
       float distance = position.euclideanDistance(obstPosition);
@@ -69,9 +69,8 @@ Vector PotentialField::computeRepulsiveForces(Vector position) {
       /// TODO: Parameterize this small threshold
       if (distance < 1e-3) { continue; }
       direction /= distance; // Normalize the direction
-      // Calculate the repulsive force magnitude using inverse square law
-      // F = repulsiveGain * (1 / distance^2)
-      float magnitude = obst.getRepulsiveGain() * (1.0f / (distance * distance));
+      // Calculate the repulsive force magnitude
+      float magnitude = obst.getRepulsiveGain() * ((1 / distance) - (1 / obst.getInfluenceRadius())) * (1.0f / (distance * distance));
       // Add the repulsive forces together
       repulsiveForce += (direction * magnitude);
     }
