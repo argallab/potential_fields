@@ -62,7 +62,7 @@ $$
 U_{att}(q) &= \frac{1}{2}\zeta D\left(q, q_{goal}\right)^2 \\
 \nabla U_{att}(q) &= \nabla \left(\frac{1}{2}\zeta D\left(q, q_{goal}\right)^2\right) \\
 &= \frac{1}{2}\zeta \nabla D\left(q, q_{goal}\right)^2 \\
-\nabla U_{att}(q) &= \zeta \underbrace{\left(q - q_{goal}\right)}_{\text{vector difference}}
+\nabla U_{att}(q) &= \zeta \underbrace{\left(q - q_{goal}\right)}_{\text{vector distance}}
 \end{align}
 $$
 
@@ -76,7 +76,7 @@ Repulsive force increases with proximity to obstacle. Multiple obstacles create 
 $$
 \begin{align}
 U_{rep}(q) &= \left\{\begin{matrix}\frac{1}{2}\eta\left(\frac{1}{D(q)} - \frac{1}{Q^*}\right)^2 & \text{if } D(q) \leq Q^* \\ 0 & \text{if } D(q) > Q^*\end{matrix}\right. \\
-\nabla U_{rep}(q) &= \left\{\begin{matrix} \eta \left(\frac{1}{Q^*} - \frac{1}{D(q)}\right) \frac{1}{D^2(q)} \nabla D(q)& \text{if } D(q) \leq Q^* \\ 0 & \text{if } D(q) > Q^*\end{matrix}\right.
+\nabla U_{rep}(q) &= \left\{\begin{matrix} \eta \left(\frac{1}{D(q)} - \frac{1}{Q^*}\right) \frac{1}{D^2(q)} \nabla D(q)& \text{if } D(q) \leq Q^* \\ 0 & \text{if } D(q) > Q^*\end{matrix}\right.
 \end{align}
 $$
 
