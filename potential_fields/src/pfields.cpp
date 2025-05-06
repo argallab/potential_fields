@@ -1,9 +1,8 @@
 #include "pfields.hpp"
 #include <algorithm>
 
-bool PotentialField::updateGoalPosition(Vector newGoalPosition) {
+void PotentialField::updateGoalPosition(Vector newGoalPosition) {
   this->goalPosition = newGoalPosition;
-  return true;
 }
 
 void PotentialField::updateAttractiveGain(float newAttractiveGain) {
@@ -49,7 +48,7 @@ Vector PotentialField::computeAttractiveForces(Vector position) {
   float distance = this->goalPosition.euclideanDistance(position);
   Vector direction = this->goalPosition - position;
   // If distance is (near) zero, return zero force
-  // TODO: Parameterize this small threshold
+  /// TODO: Parameterize this small threshold
   if (distance < 1e-3) { return Vector{0, 0, 0}; }
   direction /= distance; // Normalize the direction
   float magnitude = this->attractiveGain * distance;
@@ -66,16 +65,15 @@ Vector PotentialField::computeRepulsiveForces(Vector position) {
       Vector obstPosition = obst.getPosition();
       Vector direction = position - obstPosition;
       float distance = position.euclideanDistance(obstPosition);
-      // If distance is (near) zero, return zero force
+      // If distance is (near) zero, don't apply force
+      /// TODO: Parameterize this small threshold
       if (distance < 1e-3) { continue; }
       direction /= distance; // Normalize the direction
-      // Apply inverse distance law for repulsive force
-      float magnitude = obst.getRepulsiveGain() * (1.0f / distance - 1.0f / obst.getInfluenceRadius());
-      // Clamp magnitude to a positive maximum value
-      // TODO: Parameterize this maximum value
-      magnitude = std::clamp(magnitude, 0.0f, 10.0f);
+      // Calculate the repulsive force magnitude using inverse square law
+      // F = repulsiveGain * (1 / distance^2)
+      float magnitude = obst.getRepulsiveGain() * (1.0f / (distance * distance));
       // Add the repulsive forces together
-      repulsiveForce += direction * magnitude;
+      repulsiveForce += (direction * magnitude);
     }
   }
   return repulsiveForce;
