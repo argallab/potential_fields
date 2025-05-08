@@ -16,9 +16,9 @@ def create_basic_field():
     U /= norm
     V /= norm
     # Create a quiver plot
-    plt.quiver(X, Y, U, V, color='r')
+    plt.quiver(X, Y, U, V, color='b')
     # Plot the goal point
-    plt.plot(goalPoint[0], goalPoint[1], 'bo', markersize=10)
+    plt.plot(goalPoint[0], goalPoint[1], 'go', markersize=10)
     # Set the limits and labels
     plt.xlim(0, 10)
     plt.ylim(0, 10)
@@ -123,13 +123,13 @@ def create_2D_vector_field_with_obstacles():
     plt.quiver(X, Y, U_norm, V_norm, magnitude, cmap='viridis')
     plt.colorbar(label='Magnitude')
     for obs in obstacles:
-        circle = plt.Circle(obs.position, obs.radius, color='g', alpha=1.0)
+        circle = plt.Circle(obs.position, obs.radius, color='r', alpha=1.0)
         plt.gca().add_artist(circle)
         # Plot influence radius
         influence_circle = plt.Circle(
             obs.position, 2 * obs.radius, color='y', alpha=0.2)
         plt.gca().add_artist(influence_circle)
-    plt.plot(goalPoint[0], goalPoint[1], 'bo', markersize=10)
+    plt.plot(goalPoint[0], goalPoint[1], 'go', markersize=10)
     plt.title('Vector Field with Obstacles')
     plt.xlim(0, 10)
     plt.ylim(0, 10)
@@ -173,7 +173,7 @@ def create_3D_vector_field_with_obstacles():
     # Create a quiver plot
     ax.quiver(X, Y, Z, U, V, W, length=0.75, normalize=True)
     # Plot the goal point
-    ax.scatter(goalPoint[0], goalPoint[1], goalPoint[2], color='b', s=100)
+    ax.scatter(goalPoint[0], goalPoint[1], goalPoint[2], color='g', s=100)
     # Plot obstacles
     for obst in obstacles:
         # Create a sphere for the obstacle
@@ -185,7 +185,7 @@ def create_3D_vector_field_with_obstacles():
             np.outer(np.sin(u), np.sin(v)) + obst.position[1]
         z_sphere = obst.radius * \
             np.outer(np.ones(np.size(u)), np.cos(v)) + obst.position[2]
-        ax.plot_surface(x_sphere, y_sphere, z_sphere, color='g', alpha=1.0)
+        ax.plot_surface(x_sphere, y_sphere, z_sphere, color='r', alpha=1.0)
         # Plot influence radius
         u = np.linspace(0, 2 * np.pi, 100)
         v = np.linspace(0, np.pi, 100)
@@ -203,7 +203,7 @@ def create_3D_vector_field_with_obstacles():
     ax.set_zlim(0, 10)
     ax.set_xlabel('X-axis')
     ax.set_ylabel('Y-axis')
-    ax.set_zlabel('Z-axi10s')
+    ax.set_zlabel('Z-axis')
     ax.set_title('3D Vector Field Towards Goal Point')
     ax.view_init(elev=20, azim=30)  # Set the view angle
     ax.set_box_aspect([1, 1, 1])  # Make the axes equal
@@ -211,6 +211,11 @@ def create_3D_vector_field_with_obstacles():
     # plt.show()
     plt.savefig("3D_vector_field.png")
     print(f"Saved 3D_vector_field.png")
+    # Change the viewing angle and save another plot
+    # Rotate the view
+    ax.view_init(elev=20, azim=150)
+    plt.savefig("3D_vector_field_rotated.png")
+    print(f"Saved 3D_vector_field_rotated.png")
 
 
 def graph_forces():
