@@ -120,3 +120,11 @@ $$
 Where:
 - $\epsilon$ parameterizes when to stop gradient descent
 - $\alpha_i$ is a step-size (learning rate) to progress towards the gradient (specific to each iteration)
+
+# Robots to test
+Robot Arms the Argallab uses:
+- Ufactory X Arm 7-DOF
+- Kinova Gen2 Jaco
+- Kinova Mico 6-DOF
+
+Other Robots 
