@@ -129,8 +129,7 @@ MarkerArray PotentialFieldManager::createPotentialVectorMarkers() {
   MarkerArray markerArray;
   int id = 0;
   // Discretize the space around the goal till the farthest obstacle
-  // Draw in potential vector markers at a single Z-heigh (same as goal)
-  // For now, let's hard-code 20x20 grid
+  // For now, let's hard-code 10x10 grid at a single Z-height
   float Z = this->pField.getGoalPosition().z;
   for (float x = -5.0f; x <= 5.0f; x += 1.0f) {
     for (float y = -5.0f; y <= 5.0f; y += 1.0f) {
@@ -140,9 +139,7 @@ MarkerArray PotentialFieldManager::createPotentialVectorMarkers() {
       // Normalize the velocity vector since we want to show direction
       float magnitude = std::hypot(velocity.x, velocity.y, velocity.z);
       if (magnitude > 0.0f) {
-        velocity.x /= magnitude;
-        velocity.y /= magnitude;
-        velocity.z /= magnitude;
+        velocity /= magnitude; // Normalize
       }
       vectorMarker.header.frame_id = "map";
       vectorMarker.header.stamp = this->now();
@@ -156,8 +153,8 @@ MarkerArray PotentialFieldManager::createPotentialVectorMarkers() {
       // Set the orientation of the arrow to point in the direction of the velocity vector
       float yaw = std::atan2(velocity.y, velocity.x);
       vectorMarker.pose.orientation = PotentialFieldManager::getQuaternionFromYaw(yaw);
-      vectorMarker.scale.x = 0.2f; // Shaft diameter
-      vectorMarker.scale.y = 0.4f; // Head diameter
+      vectorMarker.scale.x = 0.15f; // Shaft diameter
+      vectorMarker.scale.y = 0.3f; // Head diameter
       vectorMarker.scale.z = 0.75f; // Length of the arrow
       // Color the arrows using a gradient depending on
       // the magnitude of the velocity vector
