@@ -53,7 +53,9 @@ These nodes will be reimplemented in ROS 2 written in C++. The project proposal 
     - Can use meshes to represent obstacles for more complex obstacles
 
 # Potential Equations
-These equations were obtained from a [Columbia Presentation on Potential Field Path Planning](https://www.cs.columbia.edu/~allen/F17/NOTES/potentialfield.pdf). The potential functions are scalar fields representing potential energy (Newton-meters [Nm]). The gradient of the potential is represented as a force (Newtons [N]). To obtain velocity vectors, we use some parameter ($\zeta$ and $\eta$) that acts as an inverse damping coefficient (Newton-seconds / meter [Ns/m]) to convert the force into a velocity (meters / second [m/s]).
+These equations were obtained from a [Columbia Presentation on Potential Field Path Planning](https://www.cs.columbia.edu/~allen/F17/NOTES/potentialfield.pdf). The paper: [Real-Time Obstacle Avoidance for Manipulators and Mobile Robots](https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=1087247) is the original reference for these equations and describe the derivation of the potential equations, how to obtain the gradients, and how to obtain a velocity from the gradients.
+
+The potential functions are scalar fields representing potential energy (Newton-meters [Nm]). The gradient of the potential is represented as a force (Newtons [N]). To obtain velocity vectors, we use some parameter ($\zeta$ and $\eta$) that acts as an inverse damping coefficient (Newton-seconds / meter [Ns/m]) to convert the force into a velocity (meters / second [m/s]).
 ## Attractive Potential
 Attractive Potential is computed using a continuously differentiable function (quadratic function of distance)
 
@@ -80,6 +82,8 @@ U_{rep}(q) &= \left\{\begin{matrix}\frac{1}{2}\eta\left(\frac{1}{D(q)} - \frac{1
 \end{align}
 $$
 
+*Note that the gradient result doesn't include a minus sign inside the parenthesis, this is because the negative value is absorbed by the distance calculation, this is verified within the visualization.*
+
 Where:
 - $\eta$ is the repulsive gain parameter
 - $Q^*$ is the influence radius of the obstacle
@@ -88,12 +92,12 @@ Where:
 ## Total Potential Function
 
 $$
-\begin{align*}
+\begin{align}
 U(q) &= U_{att}(q) + U_{rep}(q) \\ 
 F(q) &= - \nabla U(q) \\
 v &= k\cdot F(q) \\
 v &= \zeta \nabla U_{att}(q) + \eta \nabla U_{rep}(q)
-\end{align*}
+\end{align}
 $$
 
 Where:
