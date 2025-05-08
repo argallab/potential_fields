@@ -95,14 +95,15 @@ $$
 \begin{align}
 U(q) &= U_{att}(q) + U_{rep}(q) \\ 
 F(q) &= - \nabla U(q) \\
-v &= k\cdot F(q) \\
-v &= \zeta \nabla U_{att}(q) + \eta \nabla U_{rep}(q)
+v(q) &= k\cdot F(q) \\
+v(q) &= \zeta \nabla U_{att}(q) + \eta \nabla U_{rep}(q)
 \end{align}
 $$
 
 Where:
 - $q$ is a vector in the potiential field (position/pose)
 - $k$ is a constant (combination of $\zeta$ and $\eta$) converting force into velocity
+- $v(q)$ is the velocity vector computed at vector $q$
 
 We can utilize **gradient descent** to employ a motion-strategy to travel down the potential gradient:
 
