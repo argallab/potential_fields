@@ -53,7 +53,7 @@ These nodes will be reimplemented in ROS 2 written in C++. The project proposal 
     - Can use meshes to represent obstacles for more complex obstacles
 
 # Potential Equations
-
+These equations were obtained from a [Columbia Presentation on Potential Field Path Planning](https://www.cs.columbia.edu/~allen/F17/NOTES/potentialfield.pdf). The potential functions are scalar fields representing potential energy (Newton-meters [Nm]). The gradient of the potential is represented as a force (Newtons [N]). To obtain velocity vectors, we use some parameter ($\zeta$ and $\eta$) that acts as an inverse damping coefficient (Newton-seconds / meter [Ns/m]) to convert the force into a velocity (meters / second [m/s]).
 ## Attractive Potential
 Attractive Potential is computed using a continuously differentiable function (quadratic function of distance)
 
@@ -67,7 +67,7 @@ U_{att}(q) &= \frac{1}{2}\zeta D\left(q, q_{goal}\right)^2 \\
 $$
 
 Where:
-- $\zeta$ is the *attractive gain* parameter
+- $\zeta$ is the *attractive gain* parameter 
 - $D\left(q, q_{goal}\right)$ is the euclidean distance between vector $q$ and $q_{goal}$
 
 ## Repulsive Potential
@@ -88,8 +88,17 @@ Where:
 ## Total Potential Function
 
 $$
-U(q) = U_{att}(q) + U_{rep}(q) \\ \underbrace{F(q) = - \nabla U(q)}_{\text{Force Equation}}
+\begin{align*}
+U(q) &= U_{att}(q) + U_{rep}(q) \\ 
+F(q) &= - \nabla U(q) \\
+v &= k\cdot F(q) \\
+v &= \zeta \nabla U_{att}(q) + \eta \nabla U_{rep}(q)
+\end{align*}
 $$
+
+Where:
+- $q$ is a vector in the potiential field (position/pose)
+- $k$ is a constant (combination of $\zeta$ and $\eta$) converting force into velocity
 
 We can utilize **gradient descent** to employ a motion-strategy to travel down the potential gradient:
 
