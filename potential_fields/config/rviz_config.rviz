@@ -33,7 +33,7 @@ Visualization Manager:
       Cell Size: 1
       Class: rviz_default_plugins/Grid
       Color: 160; 160; 164
-      Enabled: true
+      Enabled: false
       Line Style:
         Line Width: 0.029999999329447746
         Value: Lines
@@ -46,12 +46,15 @@ Visualization Manager:
       Plane: XY
       Plane Cell Count: 10
       Reference Frame: <Fixed Frame>
-      Value: true
+      Value: false
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
       Name: MarkerArray
       Namespaces:
         goal: true
+        obstacle: true
+        obstacle_influence: true
+        potential_vectors: true
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -105,7 +108,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 8.776195526123047
+      Distance: 15.91808795928955
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -120,10 +123,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.4053983688354492
+      Pitch: 0.7147971391677856
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 0.8753979206085205
+      Yaw: 1.8804036378860474
     Saved: ~
 Window Geometry:
   Displays:

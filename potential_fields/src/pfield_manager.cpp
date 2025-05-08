@@ -1,5 +1,6 @@
 #include "rclcpp/rclcpp.hpp"
 #include "pfield_manager.hpp"
+#include "pfield.hpp"
 
 PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager") {
   RCLCPP_INFO(this->get_logger(), "PotentialFieldManager Initialized");
@@ -8,17 +9,19 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   this->timerFreq = this->declare_parameter("timer_frequency", 10.0f); // [Hz]
   this->attractiveGain = this->declare_parameter("attractive_gain", 1.0f); // [N]
   this->repulsiveGain = this->declare_parameter("repulsive_gain", 1.0f); // [N]
-  this->max_force = this->declare_parameter("max_force", 10.0f); // [N]
-  this->influence_radius_scale = this->declare_parameter("influence_radius_scale", 2.0f); // Scale for influence radius
+  this->maxForce = this->declare_parameter("max_force", 10.0f); // [N]
+  this->influenceRadiusScalar = this->declare_parameter("influence_radius_scale", 2.0f); // Scale for influence radius
   // Get parameters from yaml file
   this->timerFreq = this->get_parameter("timer_frequency").as_double();
   this->attractiveGain = this->get_parameter("attractive_gain").as_double();
   this->repulsiveGain = this->get_parameter("repulsive_gain").as_double();
-  this->max_force = this->get_parameter("max_force").as_double();
-  this->influence_radius_scale = this->get_parameter("influence_radius_scale").as_double();
+  this->maxForce = this->get_parameter("max_force").as_double();
+  this->influenceRadiusScalar = this->get_parameter("influence_radius_scale").as_double();
 
   // Initialize the potential field
   this->pField = PotentialField(Vector3D{0, 0, 0}, this->attractiveGain);
+  this->pField.addObstacle(SphereObstacle(0, Vector3D{3, 3, 0}, 1.0f, 2.0f, this->repulsiveGain));
+  this->pField.addObstacle(SphereObstacle(1, Vector3D{-5, -5, 0}, 1.5f, 2.5f, this->repulsiveGain));
 
   // Setup marker publisher
   this->markerPub = this->create_publisher<MarkerArray>("visualization_marker_array", 10);
@@ -31,15 +34,16 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
 }
 
 void PotentialFieldManager::timerCallback() {
-  this->drawPotentialField();
+  this->visualizePF();
 }
 
-void PotentialFieldManager::drawPotentialField() {
+void PotentialFieldManager::visualizePF() {
   MarkerArray markerArray;
   markerArray.markers.push_back(this->createGoalMarker());
   auto obstacleMarkers = this->createObstacleMarkers();
   markerArray.markers.insert(markerArray.markers.cend(), obstacleMarkers.markers.cbegin(), obstacleMarkers.markers.cend());
-
+  auto potentialVectorMarkers = this->createPotentialVectorMarkers();
+  markerArray.markers.insert(markerArray.markers.cend(), potentialVectorMarkers.markers.cbegin(), potentialVectorMarkers.markers.cend());
   // Publish the marker array
   this->markerPub->publish(markerArray);
 }
@@ -119,6 +123,54 @@ Marker PotentialFieldManager::createGoalMarker() {
   goalMarker.color.a = 1.0f; // Opaque
   goalMarker.lifetime = rclcpp::Duration(0, 0); // No lifetime
   return goalMarker;
+}
+
+MarkerArray PotentialFieldManager::createPotentialVectorMarkers() {
+  MarkerArray markerArray;
+  int id = 0;
+  // Discretize the space around the goal till the farthest obstacle
+  // Draw in potential vector markers at a single Z-heigh (same as goal)
+  // For now, let's hard-code 20x20 grid
+  float Z = this->pField.getGoalPosition().z;
+  for (float x = -5.0f; x <= 5.0f; x += 1.0f) {
+    for (float y = -5.0f; y <= 5.0f; y += 1.0f) {
+      Marker vectorMarker;
+      Vector3D position{x, y, Z};
+      Vector3D velocity = this->pField.computeVelocityAtPosition(position);
+      // Normalize the velocity vector since we want to show direction
+      float magnitude = std::hypot(velocity.x, velocity.y, velocity.z);
+      if (magnitude > 0.0f) {
+        velocity.x /= magnitude;
+        velocity.y /= magnitude;
+        velocity.z /= magnitude;
+      }
+      vectorMarker.header.frame_id = "map";
+      vectorMarker.header.stamp = this->now();
+      vectorMarker.ns = "potential_vectors";
+      vectorMarker.id = id++;
+      vectorMarker.type = Marker::ARROW;
+      vectorMarker.action = Marker::ADD;
+      vectorMarker.pose.position.x = position.x;
+      vectorMarker.pose.position.y = position.y;
+      vectorMarker.pose.position.z = position.z;
+      // Set the orientation of the arrow to point in the direction of the velocity vector
+      float yaw = std::atan2(velocity.y, velocity.x);
+      vectorMarker.pose.orientation = PotentialFieldManager::getQuaternionFromYaw(yaw);
+      vectorMarker.scale.x = 0.2f; // Shaft diameter
+      vectorMarker.scale.y = 0.4f; // Head diameter
+      vectorMarker.scale.z = 0.75f; // Length of the arrow
+      // Color the arrows using a gradient depending on
+      // the magnitude of the velocity vector
+      float colorScale = std::min(magnitude / this->maxForce, 1.0f);
+      vectorMarker.color.r = 1.0f - colorScale; // Red to yellow
+      vectorMarker.color.g = colorScale; // Yellow to green
+      vectorMarker.color.b = 0.0f; // No blue
+      vectorMarker.color.a = 0.75f; // Semi-transparent
+      vectorMarker.lifetime = rclcpp::Duration(0, 0); // No lifetime
+      markerArray.markers.push_back(vectorMarker);
+    }
+  }
+  return markerArray;
 }
 
 int main(int argc, char* argv[]) {

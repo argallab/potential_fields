@@ -18,7 +18,7 @@ include_directories(
   include/potential_fields
 )
 
-add_executable(pfield_manager src/pfield_manager.cpp)
+add_executable(pfield_manager src/pfield_manager.cpp src/pfield.cpp)
 ament_target_dependencies(
   pfield_manager
   rclcpp

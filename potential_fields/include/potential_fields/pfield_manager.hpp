@@ -21,12 +21,21 @@ public:
   PotentialFieldManager();
   ~PotentialFieldManager() = default;
 
+  static Quaternion getQuaternionFromYaw(float yaw) {
+    Quaternion q;
+    q.x = 0.0;
+    q.y = 0.0;
+    q.z = sin(yaw / 2);
+    q.w = cos(yaw / 2);
+    return q;
+  }
+
 private:
   float timerFreq; // Timer frequency [Hz]
   float attractiveGain; // Attractive gain [N]
   float repulsiveGain; // Repulsive gain [N]
-  float max_force; // Maximum force [N]
-  float influence_radius_scale; // Scale for influence radius
+  float maxForce; // Maximum force [N]
+  float influenceRadiusScalar; // Scale for influence radius
 
   // Potential field object
   PotentialField pField;
@@ -37,9 +46,10 @@ private:
   // Publisher for visualization markers
   rclcpp::Publisher<MarkerArray>::SharedPtr markerPub;
 
-  void drawPotentialField();
+  void visualizePF();
   MarkerArray createObstacleMarkers();
   Marker createGoalMarker();
+  MarkerArray createPotentialVectorMarkers();
 
   void timerCallback();
 };
