@@ -253,7 +253,7 @@ def graph_forces():
     plt.plot(distances, attractive_forces, label='Attractive Force')
     plt.title('Attractive and Repulsive Forces vs Distance to Goal/Obstacle')
     plt.text(
-        6, 2.5, f"Max Force: {max_force:.1f} N\nRepulsive Gain: {1.0:.1f} N/m\nAttractive Gain: {1.0:.1f} N/m",
+        6, 2.5, f"Max Force: {max_force:.1f} N\nRepulsive Gain: {1.0:.1f} m/Ns\nAttractive Gain: {1.0:.1f} m/Ns",
         fontsize=10, color='black', ha='center', va='center'
     )
     plt.xlabel('Distance [m]')
