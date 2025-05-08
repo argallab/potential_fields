@@ -11,6 +11,8 @@ endif()
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(geometry_msgs REQUIRED)
+find_package(visualization_msgs REQUIRED)
 
 include_directories(
   include/potential_fields
@@ -20,6 +22,8 @@ add_executable(pfield_manager src/pfield_manager.cpp)
 ament_target_dependencies(
   pfield_manager
   rclcpp
+  geometry_msgs
+  visualization_msgs
 )
 
 install(TARGETS

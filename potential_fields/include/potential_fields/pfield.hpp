@@ -24,63 +24,63 @@
  // 2. Create obstacles with a specified geometry
  // 3. Compute velocity vector at a given position
 
-struct Vector {
-  float x; // X-component of vector [m]
-  float y; // Y-component of vector [m]
-  float z; // Z-component of vector [m]
+struct Vector3D {
+  float x; // X-component of vector
+  float y; // Y-component of vector
+  float z; // Z-component of vector
 
-  float euclideanDistance(const Vector& other) const {
+  float euclideanDistance(const Vector3D& other) const {
     return std::hypot(
       x - other.x, y - other.y, z - other.z
     );
   }
 
-  Vector operator-() const {
-    return Vector{-x, -y, -z};
+  Vector3D operator-() const {
+    return Vector3D{-x, -y, -z};
   }
 
-  Vector operator+(const Vector& other) const {
-    return Vector{x + other.x, y + other.y, z + other.z};
+  Vector3D operator+(const Vector3D& other) const {
+    return Vector3D{x + other.x, y + other.y, z + other.z};
   }
 
-  Vector operator+=(const Vector& other) {
+  Vector3D operator+=(const Vector3D& other) {
     x += other.x;
     y += other.y;
     z += other.z;
     return *this;
   }
 
-  Vector operator-(const Vector& other) const {
-    return Vector{x - other.x, y - other.y, z - other.z};
+  Vector3D operator-(const Vector3D& other) const {
+    return Vector3D{x - other.x, y - other.y, z - other.z};
   }
 
-  Vector operator-=(const Vector& other) {
+  Vector3D operator-=(const Vector3D& other) {
     x -= other.x;
     y -= other.y;
     z -= other.z;
     return *this;
   }
 
-  Vector operator*(float scalar) const {
-    return Vector{x * scalar, y * scalar, z * scalar};
+  Vector3D operator*(float scalar) const {
+    return Vector3D{x * scalar, y * scalar, z * scalar};
   }
 
-  Vector operator*=(float scalar) {
+  Vector3D operator*=(float scalar) {
     x *= scalar;
     y *= scalar;
     z *= scalar;
     return *this;
   }
 
-  Vector operator/(float scalar) const {
+  Vector3D operator/(float scalar) const {
     if (scalar != 0) {
-      return Vector{x / scalar, y / scalar, z / scalar};
+      return Vector3D{x / scalar, y / scalar, z / scalar};
     } else {
       throw std::invalid_argument("Division by zero");
     }
   }
 
-  Vector operator/=(float scalar) {
+  Vector3D operator/=(float scalar) {
     if (scalar != 0) {
       x /= scalar;
       y /= scalar;
@@ -91,11 +91,11 @@ struct Vector {
     }
   }
 
-  bool operator==(const Vector& other) const {
+  bool operator==(const Vector3D& other) const {
     return (x == other.x && y == other.y && z == other.z);
   }
 
-  bool operator!=(const Vector& other) const {
+  bool operator!=(const Vector3D& other) const {
     return !(*this == other);
   }
 };
@@ -103,7 +103,7 @@ struct Vector {
 class SphereObstacle {
 public:
   SphereObstacle() = default;
-  SphereObstacle(int id, Vector position, float radius, float influenceRadius, float repulsiveGain)
+  SphereObstacle(int id, Vector3D position, float radius, float influenceRadius, float repulsiveGain)
     : id(id),
     position(position),
     radius(radius),
@@ -112,13 +112,13 @@ public:
   }
   ~SphereObstacle() = default;
 
-  Vector getPosition() const { return position; }
+  Vector3D getPosition() const { return position; }
   float getRadius() const { return radius; }
   int getID() const { return id; }
   float getInfluenceRadius() const { return influenceRadius; }
   float getRepulsiveGain() const { return repulsiveGain; }
 
-  bool withinInfluenceRadius(Vector pos) const {
+  bool withinInfluenceRadius(Vector3D pos) const {
     return (this->position.euclideanDistance(pos) <= influenceRadius);
   }
 
@@ -131,7 +131,7 @@ public:
 
 private:
   int id = 0; // Unique ID for the obstacle
-  Vector position; // Center Position of the obstacle in 3D space
+  Vector3D position; // Center Position of the obstacle in 3D space
   float radius; // Sphere's radius [m]
   float influenceRadius; // Sphere's influence radius [m]
   float repulsiveGain = 1.0f; // Gain for repulsive force
@@ -140,9 +140,8 @@ private:
 class PotentialField {
 public:
   PotentialField() = default;
-  PotentialField(Vector goalPosition, float attractiveGain)
-    : goalPosition(goalPosition),
-    attractiveGain(attractiveGain) {
+  PotentialField(Vector3D goalPosition, float attractiveGain)
+    : attractiveGain(attractiveGain), goalPosition(goalPosition) {
   }
   ~PotentialField() = default;
 
@@ -153,7 +152,7 @@ public:
  *
  * @param newGoalPosition The new goal position to be set.
  */
-  void updateGoalPosition(Vector newGoalPosition);
+  void updateGoalPosition(Vector3D newGoalPosition);
 
   /**
    * @brief Updates the attractive gain, scaling the force
@@ -191,11 +190,14 @@ public:
    * @param position The position in 3D space to compute the velocity vector.
    * @return Vector The resultant velocity vector.
    */
-  Vector computeVelocityAtPosition(Vector position);
+  Vector3D computeVelocityAtPosition(Vector3D position);
+
+  Vector3D getGoalPosition() const { return goalPosition; }
+  std::vector<SphereObstacle> getObstacles() const { return obstacles; }
 
 private:
   float attractiveGain = 1.0f; // Gain for attractive force
-  Vector goalPosition;
+  Vector3D goalPosition;
   std::vector<SphereObstacle> obstacles;
 
   /**
@@ -207,7 +209,7 @@ private:
    * @param position The position in 3D space to compute the force from.
    * @return Vector The attractive force vector.
    */
-  Vector computeAttractiveForces(Vector position);
+  Vector3D computeAttractiveForces(Vector3D position);
 
   /**
    * @brief Computes the repulsive forces from all obstacles
@@ -219,7 +221,7 @@ private:
    * @param position The position in 3D space to compute the force from.
    * @return Vector The repulsive force vector.
    */
-  Vector computeRepulsiveForces(Vector position);
+  Vector3D computeRepulsiveForces(Vector3D position);
 };
 
 #endif // PFIELDS_HPP

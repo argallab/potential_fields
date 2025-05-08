@@ -17,6 +17,12 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   this->max_force = this->get_parameter("max_force").as_double();
   this->influence_radius_scale = this->get_parameter("influence_radius_scale").as_double();
 
+  // Initialize the potential field
+  this->pField = PotentialField(Vector3D{0, 0, 0}, this->attractiveGain);
+
+  // Setup marker publisher
+  this->markerPub = this->create_publisher<MarkerArray>("visualization_marker_array", 10);
+  std::cout << "Markers publishing on: " << this->markerPub->get_topic_name() << std::endl;
 
   this->timer = this->create_wall_timer(
     std::chrono::seconds(static_cast<int>(1.0f / this->timerFreq)),
@@ -25,7 +31,94 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
 }
 
 void PotentialFieldManager::timerCallback() {
-  RCLCPP_INFO(this->get_logger(), "Timer triggered");
+  this->drawPotentialField();
+}
+
+void PotentialFieldManager::drawPotentialField() {
+  MarkerArray markerArray;
+  markerArray.markers.push_back(this->createGoalMarker());
+  auto obstacleMarkers = this->createObstacleMarkers();
+  markerArray.markers.insert(markerArray.markers.cend(), obstacleMarkers.markers.cbegin(), obstacleMarkers.markers.cend());
+
+  // Publish the marker array
+  this->markerPub->publish(markerArray);
+}
+
+MarkerArray PotentialFieldManager::createObstacleMarkers() {
+  MarkerArray markerArray;
+  int id = 0;
+  for (const auto& obstacle : this->pField.getObstacles()) {
+    Marker obstacleMarker;
+    obstacleMarker.header.frame_id = "map";
+    obstacleMarker.header.stamp = this->now();
+    obstacleMarker.ns = "obstacle";
+    obstacleMarker.id = id++;
+    obstacleMarker.type = Marker::SPHERE;
+    obstacleMarker.action = Marker::ADD;
+    Vector3D position = obstacle.getPosition();
+    obstacleMarker.pose.position.x = position.x;
+    obstacleMarker.pose.position.y = position.y;
+    obstacleMarker.pose.position.z = position.z;
+    obstacleMarker.pose.orientation.w = 1.0;
+    // Scale is the Diameter of the Sphere
+    obstacleMarker.scale.x = obstacle.getRadius() * 2.0f;
+    obstacleMarker.scale.y = obstacle.getRadius() * 2.0f;
+    obstacleMarker.scale.z = obstacle.getRadius() * 2.0f;
+    obstacleMarker.color.r = 1.0f;
+    obstacleMarker.color.g = 0.0f;
+    obstacleMarker.color.b = 0.0f;
+    obstacleMarker.color.a = 1.0f; // Opaque
+    obstacleMarker.lifetime = rclcpp::Duration(0, 0); // No lifetime
+    markerArray.markers.push_back(obstacleMarker);
+    // Create a transparent sphere representing the influence radius
+    Marker influenceMarker;
+    influenceMarker.header.frame_id = "map";
+    influenceMarker.header.stamp = this->now();
+    influenceMarker.ns = "obstacle_influence";
+    influenceMarker.id = id++;
+    influenceMarker.type = Marker::SPHERE;
+    influenceMarker.action = Marker::ADD;
+    influenceMarker.pose.position.x = position.x;
+    influenceMarker.pose.position.y = position.y;
+    influenceMarker.pose.position.z = position.z;
+    influenceMarker.pose.orientation.w = 1.0;
+    // Scale is the Diameter of the Sphere
+    influenceMarker.scale.x = obstacle.getInfluenceRadius() * 2.0f;
+    influenceMarker.scale.y = obstacle.getInfluenceRadius() * 2.0f;
+    influenceMarker.scale.z = obstacle.getInfluenceRadius() * 2.0f;
+    influenceMarker.color.r = 1.0f;
+    influenceMarker.color.g = 1.0f;
+    influenceMarker.color.b = 0.0f;
+    influenceMarker.color.a = 0.5f; // Semi-transparent
+    influenceMarker.lifetime = rclcpp::Duration(0, 0); // No lifetime
+    markerArray.markers.push_back(influenceMarker);
+  }
+  return markerArray;
+}
+
+Marker PotentialFieldManager::createGoalMarker() {
+  // Create a green sphere marker
+  Marker goalMarker;
+  goalMarker.header.frame_id = "map";
+  goalMarker.header.stamp = this->now();
+  goalMarker.ns = "goal";
+  goalMarker.id = 0;
+  goalMarker.type = Marker::SPHERE;
+  goalMarker.action = Marker::ADD;
+  Vector3D goalPosition = this->pField.getGoalPosition();
+  goalMarker.pose.position.x = goalPosition.x;
+  goalMarker.pose.position.y = goalPosition.y;
+  goalMarker.pose.position.z = goalPosition.z;
+  goalMarker.pose.orientation.w = 1.0;
+  goalMarker.scale.x = 0.5;
+  goalMarker.scale.y = 0.5;
+  goalMarker.scale.z = 0.5;
+  goalMarker.color.r = 0.0f;
+  goalMarker.color.g = 1.0f;
+  goalMarker.color.b = 0.0f;
+  goalMarker.color.a = 1.0f; // Opaque
+  goalMarker.lifetime = rclcpp::Duration(0, 0); // No lifetime
+  return goalMarker;
 }
 
 int main(int argc, char* argv[]) {
