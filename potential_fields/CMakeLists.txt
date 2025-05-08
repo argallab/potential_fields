@@ -11,21 +11,19 @@ endif()
 # find dependencies
 find_package(ament_cmake REQUIRED)
 find_package(rclcpp REQUIRED)
-find_package(geometry_msgs REQUIRED)
 
-include_direectories(
+include_directories(
   include/potential_fields
 )
 
-add_executable(pfields src/pfields_node.cpp)
+add_executable(pfield_manager src/pfield_manager.cpp)
 ament_target_dependencies(
-  pfields
+  pfield_manager
   rclcpp
-  geometry_msgs
 )
 
 install(TARGETS
-  pfields
+  pfield_manager
   DESTINATION lib/${PROJECT_NAME}
 )
 
@@ -58,7 +56,7 @@ endif()
 option(BUILD_DOCS "Build the documentation" OFF)
 
 # build just because Doxygen is missing
-if(${DOXYGEN_FOUND} AND ${BUILD_DOCS})
+if(DOXYGEN_FOUND AND BUILD_DOCS)
   # Turn the README.md into the homepage of the doxygen docs
   set(DOXYGEN_USE_MDFILE_AS_MAINPAGE README.md)
 

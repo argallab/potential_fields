@@ -1,4 +1,4 @@
-#include "pfields.hpp"
+#include "pfield.hpp"
 #include <algorithm>
 
 void PotentialField::updateGoalPosition(Vector newGoalPosition) {

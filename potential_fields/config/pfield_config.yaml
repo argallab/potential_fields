@@ -1,0 +1,7 @@
+pfield_manager:
+  ros__parameters:
+    timer_frequency: 10.0 # [Hz]
+    attractive_gain: 1.0 # [N]
+    repulsive_gain: 1.0 # [N]
+    max_force: 10.0 # [N]
+    influence_radius_scale: 1.5 # Scale factor of obstacle's radius to calculate influence radius

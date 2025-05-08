@@ -1,0 +1,9 @@
+<launch>
+  <node pkg="potential_fields" exec="pfield_manager" name="pfield_manager" output="screen">
+    <param from="$(find-pkg-share potential_fields)/config/pfield_config.yaml"/>
+  </node>
+  <node pkg="rviz2" exec="rviz2" name="rviz2" output="screen">
+    <param name="config" value="$(find-pkg-share potential_fields)/config/rviz_config.rviz"/>
+    <param name="use_sim_time" value="true"/>
+  </node>
+</launch>
