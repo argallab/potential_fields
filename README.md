@@ -150,6 +150,34 @@ q_{diff} &= q_{diff} \cdot \omega
 \end{align}
 $$
 
+# Test Cases
+
+## SpatialVector
+- EuclideanDistance
+- ConstructorAndAccessors
+- NormalizePositionVector
+- OperatorAddition
+- OperatorSubtraction
+- OperatorMultiply
+- OperatorDivide
+- OperatorDivideByZero 
+- QuaternionDifferenceZero
+- QuaternionGeodesic
+- QuaternionDifference
+- QuaternionFromEuler
+- EulerRoundTrip
+
+## PotentialField
+- UpdateGoalPositionAndGain
+- AddAndRemoveObstacles
+- ClearObstacles
+- VelocityAtGoalIsZero
+- AttractiveFieldPullsTowardGoal
+- RepulsiveFieldPushesAwayFromObstacle
+- NearZeroDistanceAttraction
+- RepulsionAtSurfaceBoundary
+- RotationalAttraction
+
 # Robots to test
 Robot Arms the Argallab uses:
 - Ufactory X Arm 7-DOF
