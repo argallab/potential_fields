@@ -18,48 +18,12 @@
 #include <stdexcept>
 #include <math.h>
 #include "spatial_vector.hpp"
+#include "sphere_obstacle.hpp"
 
  // Functionality to support:
  // 1. Track a Goal Position (Initialization and Update)
  // 2. Create obstacles with a specified geometry
  // 3. Compute velocity vector at a given position
-
-class SphereObstacle {
-public:
-  SphereObstacle() = default;
-  SphereObstacle(int id, SpatialVector position, float radius, float influenceRadius, float repulsiveGain)
-    : id(id),
-    position(position),
-    radius(radius),
-    influenceRadius(influenceRadius),
-    repulsiveGain(repulsiveGain) {
-  }
-  ~SphereObstacle() = default;
-
-  SpatialVector getPosition() const { return position; }
-  float getRadius() const { return radius; }
-  int getID() const { return id; }
-  float getInfluenceRadius() const { return influenceRadius; }
-  float getRepulsiveGain() const { return repulsiveGain; }
-
-  bool withinInfluenceRadius(SpatialVector pos) const {
-    return (this->position.euclideanDistance(pos) <= influenceRadius);
-  }
-
-  bool operator==(const SphereObstacle& other) const {
-    return (position == other.position && radius == other.radius);
-  }
-  bool operator!=(const SphereObstacle& other) const {
-    return !(*this == other);
-  }
-
-private:
-  int id = 0; // Unique ID for the obstacle
-  SpatialVector position; // Center Position of the obstacle in 3D space
-  float radius; // Sphere's radius [m]
-  float influenceRadius; // Sphere's influence radius [m]
-  float repulsiveGain = 1.0f; // Gain for repulsive force
-};
 
 class PotentialField {
 public:
@@ -121,6 +85,7 @@ public:
 
 private:
   float attractiveGain = 1.0f; // Gain for attractive force
+  float rotationalAttractiveGain = 0.7f; // Gain for rotational attractive force
   SpatialVector goalPosition;
   std::vector<SphereObstacle> obstacles;
 

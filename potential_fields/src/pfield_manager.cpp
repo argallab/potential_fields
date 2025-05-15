@@ -19,7 +19,7 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   this->influenceRadiusScalar = this->get_parameter("influence_radius_scale").as_double();
 
   // Initialize the potential field
-  this->pField = PotentialField(SpatialVector{0, 0, 0}, this->attractiveGain);
+  this->pField = PotentialField(SpatialVector{}, this->attractiveGain);
   this->pField.addObstacle(SphereObstacle(0, SpatialVector{3, 3, 0}, 1.0f, 2.0f, this->repulsiveGain));
   this->pField.addObstacle(SphereObstacle(1, SpatialVector{-5, -5, 0}, 1.5f, 2.5f, this->repulsiveGain));
 
@@ -60,10 +60,13 @@ MarkerArray PotentialFieldManager::createObstacleMarkers() {
     obstacleMarker.type = Marker::SPHERE;
     obstacleMarker.action = Marker::ADD;
     SpatialVector position = obstacle.getPosition();
-    obstacleMarker.pose.position.x = position.x;
-    obstacleMarker.pose.position.y = position.y;
-    obstacleMarker.pose.position.z = position.z;
-    obstacleMarker.pose.orientation.w = 1.0;
+    obstacleMarker.pose.position.x = position.getX();
+    obstacleMarker.pose.position.y = position.getY();
+    obstacleMarker.pose.position.z = position.getZ();
+    obstacleMarker.pose.orientation.x = position.getQX();
+    obstacleMarker.pose.orientation.y = position.getQY();
+    obstacleMarker.pose.orientation.z = position.getQZ();
+    obstacleMarker.pose.orientation.w = position.getQW();
     // Scale is the Diameter of the Sphere
     obstacleMarker.scale.x = obstacle.getRadius() * 2.0f;
     obstacleMarker.scale.y = obstacle.getRadius() * 2.0f;
@@ -82,9 +85,9 @@ MarkerArray PotentialFieldManager::createObstacleMarkers() {
     influenceMarker.id = id++;
     influenceMarker.type = Marker::SPHERE;
     influenceMarker.action = Marker::ADD;
-    influenceMarker.pose.position.x = position.x;
-    influenceMarker.pose.position.y = position.y;
-    influenceMarker.pose.position.z = position.z;
+    influenceMarker.pose.position.x = position.getX();
+    influenceMarker.pose.position.y = position.getY();
+    influenceMarker.pose.position.z = position.getZ();
     influenceMarker.pose.orientation.w = 1.0;
     // Scale is the Diameter of the Sphere
     influenceMarker.scale.x = obstacle.getInfluenceRadius() * 2.0f;
@@ -110,10 +113,10 @@ Marker PotentialFieldManager::createGoalMarker() {
   goalMarker.type = Marker::SPHERE;
   goalMarker.action = Marker::ADD;
   SpatialVector goalPosition = this->pField.getGoalPosition();
-  goalMarker.pose.position.x = goalPosition.x;
-  goalMarker.pose.position.y = goalPosition.y;
-  goalMarker.pose.position.z = goalPosition.z;
-  goalMarker.pose.orientation.w = 1.0;
+  goalMarker.pose.position.x = goalPosition.getX();
+  goalMarker.pose.position.y = goalPosition.getY();
+  goalMarker.pose.position.z = goalPosition.getZ();
+  goalMarker.pose.orientation.w = goalPosition.getQW();
   goalMarker.scale.x = 0.5;
   goalMarker.scale.y = 0.5;
   goalMarker.scale.z = 0.5;
@@ -130,14 +133,14 @@ MarkerArray PotentialFieldManager::createPotentialVectorMarkers() {
   int id = 0;
   // Discretize the space around the goal till the farthest obstacle
   // For now, let's hard-code 10x10 grid at a single Z-height
-  float Z = this->pField.getGoalPosition().z;
+  float Z = this->pField.getGoalPosition().getZ();
   for (float x = -5.0f; x <= 5.0f; x += 1.0f) {
     for (float y = -5.0f; y <= 5.0f; y += 1.0f) {
       Marker vectorMarker;
       SpatialVector position{x, y, Z};
       SpatialVector velocity = this->pField.computeVelocityAtPosition(position);
       // Normalize the velocity vector since we want to show direction
-      float magnitude = std::hypot(velocity.x, velocity.y, velocity.z);
+      float magnitude = std::hypot(velocity.getX(), velocity.getY(), velocity.getZ());
       if (magnitude > 0.0f) {
         velocity /= magnitude; // Normalize
       }
@@ -147,11 +150,11 @@ MarkerArray PotentialFieldManager::createPotentialVectorMarkers() {
       vectorMarker.id = id++;
       vectorMarker.type = Marker::ARROW;
       vectorMarker.action = Marker::ADD;
-      vectorMarker.pose.position.x = position.x;
-      vectorMarker.pose.position.y = position.y;
-      vectorMarker.pose.position.z = position.z;
+      vectorMarker.pose.position.x = position.getX();
+      vectorMarker.pose.position.y = position.getY();
+      vectorMarker.pose.position.z = position.getZ();
       // Set the orientation of the arrow to point in the direction of the velocity vector
-      float yaw = std::atan2(velocity.y, velocity.x);
+      float yaw = std::atan2(velocity.getY(), velocity.getX());
       vectorMarker.pose.orientation = PotentialFieldManager::getQuaternionFromYaw(yaw);
       vectorMarker.scale.x = 0.15f; // Shaft diameter
       vectorMarker.scale.y = 0.3f; // Head diameter
