@@ -77,8 +77,8 @@ Repulsive force increases with proximity to obstacle. Multiple obstacles create 
 
 $$
 \begin{align}
-U_{rep}(q) &= \left\{\begin{matrix}\frac{1}{2}\eta\left(\frac{1}{D(q)} - \frac{1}{Q^*}\right)^2 & \text{if } D(q) \leq Q^* \\ 0 & \text{if } D(q) > Q^*\end{matrix}\right. \\
-\nabla U_{rep}(q) &= \left\{\begin{matrix} \eta \left(\frac{1}{D(q)} - \frac{1}{Q^*}\right) \frac{1}{D^2(q)} \nabla D(q)& \text{if } D(q) \leq Q^* \\ 0 & \text{if } D(q) > Q^*\end{matrix}\right.
+U_{rep}(q) &= \begin{cases}\frac{1}{2}\eta\left(\frac{1}{D(q)} - \frac{1}{Q^*}\right)^2 & \text{if } D(q) \leq Q^* \\ 0 & \text{if } D(q) > Q^*\end{cases} \\
+\nabla U_{rep}(q) &= \begin{cases} \eta \left(\frac{1}{D(q)} - \frac{1}{Q^*}\right) \frac{1}{D^2(q)} \nabla D(q)& \text{if } D(q) \leq Q^* \\ 0 & \text{if } D(q) > Q^*\end{cases}
 \end{align}
 $$
 
