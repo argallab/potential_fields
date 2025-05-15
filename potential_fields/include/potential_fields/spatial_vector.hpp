@@ -112,25 +112,8 @@ public:
 
   float geodesicDistance(const SpatialVector& other) {
     // Compute the geodesic distance between two quaternions
-    // self.diff_quat = tfs.quaternion_multiply(tfs.quaternion_inverse(self.eef_quat), self.goal_quat)
-    //   self.diff_quat = self.diff_quat / np.linalg.norm(self.diff_quat)  # normalize
     this->inverseQuaternion();
     this->quaternionMultiply(other);
-    // float dot = this->qx * other.getQX() +
-    //   this->qy * other.getQY() + this->qz * other.getQZ() + this->qw * other.getQW();
-    // // Normalize the quaternion difference
-    // float norm = std::sqrt(
-    //   this->qx * this->qx + this->qy * this->qy +
-    //   this->qz * this->qz + this->qw * this->qw);
-    // if (norm == 0) {
-    //   throw std::invalid_argument("Cannot normalize a zero quaternion");
-    // }
-    // this->qx /= norm;
-    // this->qy /= norm;
-    // this->qz /= norm;
-    // this->qw /= norm;
-    // // Clamp the dot product to avoid NaN from acos
-    // dot = std::clamp(dot, -1.0f, 1.0f);
     float theta = 2.0f * acos(this->qw); // [0, 2pi]
     // Wrap to [0, pi]
     if (theta > M_PI) {
@@ -142,6 +125,9 @@ public:
       this->qw = -this->qw;
     }
     return theta;
+    // float dot = this->qx * other.getQX() + this->qy * other.getQY()
+    //   + this->qz * other.getQZ() + this->qw * other.getQW();
+    // return 2.0f * std::acos(std::min(1.0f, std::fabs(dot)));
   }
 
   SpatialVector quaternionDifference(const SpatialVector& other) {

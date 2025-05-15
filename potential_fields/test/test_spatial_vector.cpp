@@ -79,7 +79,7 @@ TEST(SpatialVectorTest, QuaternionGeodesic) {
   a.setOrientationEuler(0, 0, 0);
   b.setOrientationEuler(0, 0, M_PI_2); // Yaw 90 degrees
   EXPECT_NEAR(a.geodesicDistance(b), M_PI_2, 1e-5);
-  // Check the reverse operation
+  // Check the reverse operation since angles should be bounded by [0, pi]
   EXPECT_NEAR(b.geodesicDistance(a), M_PI_2, 1e-5);
 }
 
