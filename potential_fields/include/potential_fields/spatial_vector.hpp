@@ -134,10 +134,6 @@ public:
     float theta = 2.0f * acos(this->qw); // [0, 2pi]
     // Wrap to [0, pi]
     if (theta > M_PI) {
-      // if self.theta_to_goal > math.pi:  # wrap angle
-      //   self.theta_to_goal -= 2 * math.pi
-      //   self.theta_to_goal = abs(self.theta_to_goal)
-      //   self.diff_quat = -self.diff_quat
       theta -= (2.0f * M_PI);
       theta = std::abs(theta);
       this->qx = -this->qx;
@@ -154,7 +150,17 @@ public:
     this->inverseQuaternion();
     // Multiply this quaternion with the other quaternion
     this->quaternionMultiply(other);
-    this->geodesicDistance(other);
+    // Geodesic distance
+    float theta = 2.0f * acos(this->qw); // [0, 2pi]
+    // Wrap to [0, pi]
+    if (theta > M_PI) {
+      theta -= (2.0f * M_PI);
+      theta = std::abs(theta);
+      this->qx = -this->qx;
+      this->qy = -this->qy;
+      this->qz = -this->qz;
+      this->qw = -this->qw;
+    }
     // float qx = this->qw * other.getQX() + this->qx * other.getQW() + this->qy * other.getQZ() - this->qz * other.getQY();
     // float qy = this->qw * other.getQY() + this->qy * other.getQW() + this->qz * other.getQX() - this->qx * other.getQZ();
     // float qz = this->qw * other.getQZ() + this->qz * other.getQW() + this->qx * other.getQY() - this->qy * other.getQX();
