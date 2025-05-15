@@ -14,6 +14,20 @@ find_package(rclcpp REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 
+# Enable testing
+enable_testing()
+find_package(ament_cmake_gtest REQUIRED)
+
+# Add test executable
+ament_add_gtest(test_spatial_vector
+  test/test_spatial_vector.cpp
+)
+
+# Install the test executable (optional, for debugging)
+install(TARGETS test_spatial_vector
+  DESTINATION lib/${PROJECT_NAME}
+)
+
 include_directories(
   include/potential_fields
 )

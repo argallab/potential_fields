@@ -2,7 +2,9 @@
 #include "pfield_manager.hpp"
 #include "pfield.hpp"
 
-PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager") {
+PotentialFieldManager::PotentialFieldManager()
+: Node("potential_field_manager")
+{
   RCLCPP_INFO(this->get_logger(), "PotentialFieldManager Initialized");
 
   // Declare parameters
@@ -20,8 +22,10 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
 
   // Initialize the potential field
   this->pField = PotentialField(SpatialVector{}, this->attractiveGain);
-  this->pField.addObstacle(SphereObstacle(0, SpatialVector{3, 3, 0}, 1.0f, 2.0f, this->repulsiveGain));
-  this->pField.addObstacle(SphereObstacle(1, SpatialVector{-5, -5, 0}, 1.5f, 2.5f, this->repulsiveGain));
+  this->pField.addObstacle(SphereObstacle(0, SpatialVector{3, 3, 0}, 1.0f, 2.0f,
+    this->repulsiveGain));
+  this->pField.addObstacle(SphereObstacle(1, SpatialVector{-5, -5, 0}, 1.5f, 2.5f,
+    this->repulsiveGain));
 
   // Setup marker publisher
   this->markerPub = this->create_publisher<MarkerArray>("visualization_marker_array", 10);
@@ -33,25 +37,30 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   );
 }
 
-void PotentialFieldManager::timerCallback() {
+void PotentialFieldManager::timerCallback()
+{
   this->visualizePF();
 }
 
-void PotentialFieldManager::visualizePF() {
+void PotentialFieldManager::visualizePF()
+{
   MarkerArray markerArray;
   markerArray.markers.push_back(this->createGoalMarker());
   auto obstacleMarkers = this->createObstacleMarkers();
-  markerArray.markers.insert(markerArray.markers.cend(), obstacleMarkers.markers.cbegin(), obstacleMarkers.markers.cend());
+  markerArray.markers.insert(markerArray.markers.cend(), obstacleMarkers.markers.cbegin(),
+    obstacleMarkers.markers.cend());
   auto potentialVectorMarkers = this->createPotentialVectorMarkers();
-  markerArray.markers.insert(markerArray.markers.cend(), potentialVectorMarkers.markers.cbegin(), potentialVectorMarkers.markers.cend());
+  markerArray.markers.insert(markerArray.markers.cend(), potentialVectorMarkers.markers.cbegin(),
+    potentialVectorMarkers.markers.cend());
   // Publish the marker array
   this->markerPub->publish(markerArray);
 }
 
-MarkerArray PotentialFieldManager::createObstacleMarkers() {
+MarkerArray PotentialFieldManager::createObstacleMarkers()
+{
   MarkerArray markerArray;
   int id = 0;
-  for (const auto& obstacle : this->pField.getObstacles()) {
+  for (const auto & obstacle : this->pField.getObstacles()) {
     Marker obstacleMarker;
     obstacleMarker.header.frame_id = "map";
     obstacleMarker.header.stamp = this->now();
@@ -103,7 +112,8 @@ MarkerArray PotentialFieldManager::createObstacleMarkers() {
   return markerArray;
 }
 
-Marker PotentialFieldManager::createGoalMarker() {
+Marker PotentialFieldManager::createGoalMarker()
+{
   // Create a green sphere marker
   Marker goalMarker;
   goalMarker.header.frame_id = "map";
@@ -128,7 +138,8 @@ Marker PotentialFieldManager::createGoalMarker() {
   return goalMarker;
 }
 
-MarkerArray PotentialFieldManager::createPotentialVectorMarkers() {
+MarkerArray PotentialFieldManager::createPotentialVectorMarkers()
+{
   MarkerArray markerArray;
   int id = 0;
   // Discretize the space around the goal till the farthest obstacle
@@ -173,7 +184,8 @@ MarkerArray PotentialFieldManager::createPotentialVectorMarkers() {
   return markerArray;
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char * argv[])
+{
   rclcpp::init(argc, argv);
   rclcpp::spin(std::make_shared<PotentialFieldManager>());
   rclcpp::shutdown();

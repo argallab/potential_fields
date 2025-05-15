@@ -3,40 +3,51 @@
 #include "spatial_vector.hpp"
 
 class SphereObstacle {
-public: // Constructors and Destructor
+public:
+        // Constructors and Destructor
   SphereObstacle() = default;
-  SphereObstacle(int id, SpatialVector position, float radius, float influenceRadius, float repulsiveGain)
-    : id(id),
+  SphereObstacle(
+    int id, SpatialVector position, float radius, float influenceRadius,
+    float repulsiveGain)
+  : id(id),
     position(position),
     radius(radius),
     influenceRadius(influenceRadius),
-    repulsiveGain(repulsiveGain) {
+    repulsiveGain(repulsiveGain)
+  {
   }
   ~SphereObstacle() = default;
 
-public: // Getters and Setters
-  SpatialVector getPosition() const { return this->position; }
-  float getRadius() const { return this->radius; }
-  int getID() const { return this->id; }
-  float getInfluenceRadius() const { return this->influenceRadius; }
-  float getRepulsiveGain() const { return this->repulsiveGain; }
+public:
+        // Getters and Setters
+  SpatialVector getPosition() const {return this->position;}
+  float getRadius() const {return this->radius;}
+  int getID() const {return this->id;}
+  float getInfluenceRadius() const {return this->influenceRadius;}
+  float getRepulsiveGain() const {return this->repulsiveGain;}
 
-public: // Class Methods
+public:
+        // Class Methods
 
-  bool withinInfluenceRadius(SpatialVector pos) const {
-    return (this->position.euclideanDistance(pos) <= this->influenceRadius);
+  bool withinInfluenceRadius(SpatialVector pos) const
+  {
+    return  this->position.euclideanDistance(pos) <= this->influenceRadius;
   }
 
-public: // Operator Overloads
+public:
+        // Operator Overloads
 
-  bool operator==(const SphereObstacle& other) const {
-    return (this->position == other.position && this->radius == other.radius);
+  bool operator==(const SphereObstacle & other) const
+  {
+    return  this->position == other.position && this->radius == other.radius;
   }
-  bool operator!=(const SphereObstacle& other) const {
+  bool operator!=(const SphereObstacle & other) const
+  {
     return !(*this == other);
   }
 
-private: // Private Members
+private:
+         // Private Members
   int id = 0; // Unique ID for the obstacle
   SpatialVector position; // Center Position of the obstacle in 3D space
   float radius; // Sphere's radius [m]
