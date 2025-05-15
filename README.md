@@ -141,7 +141,7 @@ Where:
 - $\langle q_1, q_2\rangle = x_1 x_2 + y_1 y_2 + z_1 z_2 + w_1 w_2$
 - The absolute value ensures shortest path (since $q$ and $-q$ represent the same rotation)
 
-We can use the geodesic distance $\theta$ and a rotational attractive gain parameter $\omega = 0.7$ (from original implementation) to scale the quaternion representing the difference $q_{diff}$ to act as a rotational attraction force:
+We can use the geodesic distance $\theta$ and a rotational attractive gain parameter $\omega$ ($0.7$ in original implementation) to scale the quaternion representing the difference $q_{diff}$ to act as a rotational attraction force:
 
 $$
 \begin{align}
