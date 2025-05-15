@@ -127,6 +127,18 @@ Robot Arms the Argallab uses:
 - Kinova Gen2 Jaco
 - Kinova Mico 6-DOF
 
+# Meeting Notes
+- Eigen/Armadillo for matrix library
+- Use C++ data for Python graphs
+- Edit RViz visuals
+- Implement Tests for verifying forces and testing runtime
+- Implement orientation -> angular velocity
+- Dynamic Obstacles
+- Connect to planning with robot (Franka first, Kinova)
+- Only need simulation for planning
+- Different types of obstacles (rectangular prisms)
+
+
 # References
  [1] [Columbia Presentation on Potential Field Path Planning](https://www.cs.columbia.edu/~allen/F17/NOTES/potentialfield.pdf)
  
