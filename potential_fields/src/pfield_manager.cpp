@@ -9,18 +9,20 @@ PotentialFieldManager::PotentialFieldManager()
   // Declare parameters
   this->timerFreq = this->declare_parameter("timer_frequency", 10.0f); // [Hz]
   this->attractiveGain = this->declare_parameter("attractive_gain", 1.0f); // [N]
+  this->rotationalAttractiveGain = this->declare_parameter("rotational_attractive_gain", 0.7f); // [N]
   this->repulsiveGain = this->declare_parameter("repulsive_gain", 1.0f); // [N]
   this->maxForce = this->declare_parameter("max_force", 10.0f); // [N]
   this->influenceRadiusScalar = this->declare_parameter("influence_radius_scale", 2.0f); // Scale for influence radius
   // Get parameters from yaml file
   this->timerFreq = this->get_parameter("timer_frequency").as_double();
   this->attractiveGain = this->get_parameter("attractive_gain").as_double();
+  this->rotationalAttractiveGain = this->get_parameter("rotational_attractive_gain").as_double();
   this->repulsiveGain = this->get_parameter("repulsive_gain").as_double();
   this->maxForce = this->get_parameter("max_force").as_double();
   this->influenceRadiusScalar = this->get_parameter("influence_radius_scale").as_double();
 
   // Initialize the potential field
-  this->pField = PotentialField(SpatialVector{}, this->attractiveGain);
+  this->pField = PotentialField(SpatialVector{}, this->attractiveGain, this->rotationalAttractiveGain);
   this->pField.addObstacle(SphereObstacle(0, SpatialVector{3, 3, 0}, 1.0f, 2.0f,
     this->repulsiveGain));
   this->pField.addObstacle(SphereObstacle(1, SpatialVector{-5, -5, 0}, 1.5f, 2.5f,

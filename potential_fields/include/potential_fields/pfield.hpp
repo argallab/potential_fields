@@ -28,8 +28,13 @@
 class PotentialField {
 public:
   PotentialField() = default;
-  PotentialField(SpatialVector goalPosition, float attractiveGain)
-    : attractiveGain(attractiveGain), goalPosition(goalPosition) {
+  PotentialField(SpatialVector goalPosition)
+    : goalPosition(goalPosition) {
+  }
+  PotentialField(SpatialVector goalPosition, float attractiveGain, float rotationalAttractiveGain)
+    : attractiveGain(attractiveGain),
+    rotationalAttractiveGain(rotationalAttractiveGain),
+    goalPosition(goalPosition) {
   }
   ~PotentialField() = default;
 

@@ -33,6 +33,7 @@ public:
 private:
   float timerFreq; // Timer frequency [Hz]
   float attractiveGain; // Attractive gain [N]
+  float rotationalAttractiveGain; // Rotational attractive gain [N]
   float repulsiveGain; // Repulsive gain [N]
   float maxForce; // Maximum force [N]
   float influenceRadiusScalar; // Scale for influence radius

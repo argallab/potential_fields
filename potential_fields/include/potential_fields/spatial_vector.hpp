@@ -7,6 +7,7 @@
  * @date 2025-05-14
  *
  * TODO: Utilize Eigen/Armadillo for vector operations.
+ * TODO: Split functionality into a PositionVector and OrientationVector and pack both into SpatialVector
  *
  * @copyright Copyright (c) 2025
  *
@@ -48,6 +49,23 @@ public:
   float getQZ() const { return this->qz; }
   float getQW() const { return this->qw; }
 
+  void getEulerAngles(float& roll, float& pitch, float& yaw) const {
+    // Pitch (y-axis rotation)
+    float sinp = 2.0f * (this->qw * this->qy - this->qz * this->qx);
+    if (std::abs(sinp) >= 1.0f) {
+      pitch = std::copysign(M_PI / 2.0f, sinp);  // clamp to pi/2
+    } else {
+      pitch = std::asin(sinp);
+    }
+    // Roll (x-axis rotation)
+    roll = std::atan2(2.0f * (this->qw * this->qx + this->qy * this->qz),
+      1.0f - 2.0f * (this->qx * this->qx + this->qy * this->qy));
+    // Yaw (z-axis rotation)
+    yaw = std::atan2(2.0f * (this->qw * this->qz + this->qx * this->qy),
+      1.0f - 2.0f * (this->qy * this->qy + this->qz * this->qz));
+  }
+
+
   void setOrientationEuler(float roll, float pitch, float yaw) {
     // Convert Euler angles to quaternion
     euler2Quaternion(roll, pitch, yaw, this->qx, this->qy, this->qz, this->qw);
@@ -69,7 +87,7 @@ public:
     );
   }
 
-  void normalize() {
+  void normalizePosition() {
     float magnitude = std::hypot(this->x, this->y, this->z);
     if (magnitude > 0) {
       this->x /= magnitude;
@@ -80,55 +98,77 @@ public:
     }
   }
 
-  float geodesicDistance(const SpatialVector& other) const {
-    // Compute the geodesic distance between two quaternions
-    float dot = this->qx * other.qx + this->qy * other.qy +
-      this->qz * other.qz + this->qw * other.qw;
-    return 2.0f * acos(std::abs(dot));
-  }
-
-  SpatialVector quaternionDifference(const SpatialVector& other) const {
-    // Get the quaternion representing the difference
-    // between two quaternions using geodesic distance
-    // 1. Invert this quaternion
-    float qx_inv = -this->qx;
-    float qy_inv = -this->qy;
-    float qz_inv = -this->qz;
-    float qw_inv = this->qw;
-    // 2. Multiply other quaternion with the inverted quaternion
-    float qx_diff = other.qw * qx_inv + other.qx * qw_inv + other.qy * qz_inv - other.qz * qy_inv;
-    float qy_diff = other.qw * qy_inv - other.qx * qz_inv + other.qy * qw_inv + other.qz * qx_inv;
-    float qz_diff = other.qw * qz_inv + other.qx * qy_inv - other.qy * qx_inv + other.qz * qw_inv;
-    float qw_diff = other.qw * qw_inv - other.qx * qx_inv - other.qy * qy_inv - other.qz * qz_inv;
-    // 3. Normalize the resulting quaternion
-    float magnitude = std::sqrt(qx_diff * qx_diff + qy_diff * qy_diff + qz_diff * qz_diff +
-      qw_diff * qw_diff);
-    if (magnitude > 0) {
-      qx_diff /= magnitude;
-      qy_diff /= magnitude;
-      qz_diff /= magnitude;
-      qw_diff /= magnitude;
+  void normalizeQuaternion() {
+    float qMagnitude = std::sqrt(this->qx * this->qx + this->qy * this->qy + this->qz * this->qz + this->qw * this->qw);
+    if (qMagnitude > 0) {
+      this->qx /= qMagnitude;
+      this->qy /= qMagnitude;
+      this->qz /= qMagnitude;
+      this->qw /= qMagnitude;
     } else {
       throw std::invalid_argument("Cannot normalize a zero quaternion");
     }
-    // 4. Compute the angle of rotation
-    float theta = 2.0f * acos(std::clamp(qw_diff, -1.0f, 1.0f));
-    // 5. Wrap angle to [0, pi]
+  }
+
+  float geodesicDistance(const SpatialVector& other) {
+    // Compute the geodesic distance between two quaternions
+    // self.diff_quat = tfs.quaternion_multiply(tfs.quaternion_inverse(self.eef_quat), self.goal_quat)
+    //   self.diff_quat = self.diff_quat / np.linalg.norm(self.diff_quat)  # normalize
+    this->inverseQuaternion();
+    this->quaternionMultiply(other);
+    // float dot = this->qx * other.getQX() +
+    //   this->qy * other.getQY() + this->qz * other.getQZ() + this->qw * other.getQW();
+    // // Normalize the quaternion difference
+    // float norm = std::sqrt(
+    //   this->qx * this->qx + this->qy * this->qy +
+    //   this->qz * this->qz + this->qw * this->qw);
+    // if (norm == 0) {
+    //   throw std::invalid_argument("Cannot normalize a zero quaternion");
+    // }
+    // this->qx /= norm;
+    // this->qy /= norm;
+    // this->qz /= norm;
+    // this->qw /= norm;
+    // // Clamp the dot product to avoid NaN from acos
+    // dot = std::clamp(dot, -1.0f, 1.0f);
+    float theta = 2.0f * acos(this->qw); // [0, 2pi]
+    // Wrap to [0, pi]
     if (theta > M_PI) {
-      theta = (2.0f * M_PI) - theta;
-      qx_diff = -qx_diff;
-      qy_diff = -qy_diff;
-      qz_diff = -qz_diff;
+      // if self.theta_to_goal > math.pi:  # wrap angle
+      //   self.theta_to_goal -= 2 * math.pi
+      //   self.theta_to_goal = abs(self.theta_to_goal)
+      //   self.diff_quat = -self.diff_quat
+      theta -= (2.0f * M_PI);
+      theta = std::abs(theta);
+      this->qx = -this->qx;
+      this->qy = -this->qy;
+      this->qz = -this->qz;
+      this->qw = -this->qw;
     }
-    // 6. Avoid division by zero
-    float denom = std::sqrt(1.0f - qw_diff * qw_diff);
-    // If angle is small, direction is not well-defined so
-    if (denom > 1e-6) {
-      qx_diff /= denom;
-      qy_diff /= denom;
-      qz_diff /= denom;
+    return theta;
+  }
+
+  SpatialVector quaternionDifference(const SpatialVector& other) {
+    // Get the quaternion representing the difference
+    // between two quaternions using geodesic distance
+    this->inverseQuaternion();
+    // Multiply this quaternion with the other quaternion
+    this->quaternionMultiply(other);
+    this->geodesicDistance(other);
+    // float qx = this->qw * other.getQX() + this->qx * other.getQW() + this->qy * other.getQZ() - this->qz * other.getQY();
+    // float qy = this->qw * other.getQY() + this->qy * other.getQW() + this->qz * other.getQX() - this->qx * other.getQZ();
+    // float qz = this->qw * other.getQZ() + this->qz * other.getQW() + this->qx * other.getQY() - this->qy * other.getQX();
+    // float qw = this->qw * other.getQW() - this->qx * other.getQX() - this->qy * other.getQY() - this->qz * other.getQZ();
+    float norm_denominator = std::sqrt(1 - this->qw * this->qw);
+    if (norm_denominator >= 1e-3) {
+      this->qx /= norm_denominator;
+      this->qy /= norm_denominator;
+      this->qz /= norm_denominator;
     }
-    return SpatialVector{this->x, this->y, this->z, qx_diff, qy_diff, qz_diff, qw_diff};
+    return SpatialVector{
+      this->x, this->y, this->z,
+      this->qx, this->qy, this->qz, this->qw
+    };
   }
 
 public:
@@ -139,7 +179,23 @@ public:
   }
 
   SpatialVector operator+(const SpatialVector& other) const {
-    return SpatialVector{this->x + other.x, this->y + other.y, this->z + other.z};
+    if (other.qx == 0 && other.qy == 0 && other.qz == 0 && other.qw == 1) {
+      return SpatialVector{
+        this->x + other.x, this->y + other.y, this->z + other.z,
+        this->qx, this->qy, this->qz, this->qw
+      };
+    } else if (this->qx == 0 && this->qy == 0 && this->qz == 0 && this->qw == 1) {
+      return SpatialVector{
+        this->x + other.x, this->y + other.y, this->z + other.z,
+        other.qx, other.qy, other.qz, other.qw
+      };
+    } else { // Both vectors have orientation (for now just pick this one)
+      return SpatialVector{
+        this->x + other.x, this->y + other.y, this->z + other.z,
+        this->qx, this->qy, this->qz, this->qw
+      };
+    }
+
   }
 
   SpatialVector operator+=(const SpatialVector& other) {
@@ -150,10 +206,22 @@ public:
   }
 
   SpatialVector operator-(const SpatialVector& other) const {
-    return SpatialVector{
-      this->x - other.x, this->y - other.y, this->z - other.z,
-      other.qx, other.qy, other.qz, other.qw
-    };
+    if (other.qx == 0 && other.qy == 0 && other.qz == 0 && other.qw == 1) {
+      return SpatialVector{
+        this->x - other.x, this->y - other.y, this->z - other.z,
+        this->qx, this->qy, this->qz, this->qw
+      };
+    } else if (this->qx == 0 && this->qy == 0 && this->qz == 0 && this->qw == 1) {
+      return SpatialVector{
+        this->x - other.x, this->y - other.y, this->z - other.z,
+        other.qx, other.qy, other.qz, other.qw
+      };
+    } else { // Both vectors have orientation (for now just pick this one)
+      return SpatialVector{
+        this->x - other.x, this->y - other.y, this->z - other.z,
+        other.qx, other.qy, other.qz, other.qw
+      };
+    }
   }
 
   SpatialVector operator-=(const SpatialVector& other) {
@@ -161,6 +229,14 @@ public:
     this->y -= other.y;
     this->z -= other.z;
     return *this;
+  }
+
+  SpatialVector operator*(const SpatialVector& other) {
+    this->quaternionMultiply(other);
+    return SpatialVector{
+      this->x * other.x, this->y * other.y, this->z * other.z,
+      this->qx, this->qy, this->qz, this->qw
+    };
   }
 
   SpatialVector operator*(float scalar) const {
@@ -203,7 +279,7 @@ public:
 
 private:
   // Private Members
-// Position components
+  // Position components
   float x; // X-component of vector
   float y; // Y-component of vector
   float z; // Z-component of vector
@@ -230,6 +306,46 @@ private:
     qx = cy * cp * sr - sy * sp * cr;
     qy = sy * cp * cr + cy * sp * sr;
     qz = sy * cp * sr - cy * sp * cr;
+  }
+
+  void conjugate() {
+    this->qx = -this->qx;
+    this->qy = -this->qy;
+    this->qz = -this->qz;
+    this->qw = this->qw;
+  }
+
+  void inverseQuaternion() {
+    this->conjugate();
+    float dot = this->qx * this->qx + this->qy * this->qy +
+      this->qz * this->qz + this->qw * this->qw;
+    if (dot != 0) {
+      this->qx /= dot;
+      this->qy /= dot;
+      this->qz /= dot;
+      this->qw /= dot;
+    } else {
+      throw std::invalid_argument("Cannot normalize a zero quaternion");
+    }
+  }
+
+  void quaternionMultiply(const SpatialVector& other) {
+    this->qx = this->qw * other.getQX() + this->qx * other.getQW() + this->qy * other.getQZ() - this->qz * other.getQY();
+    this->qy = this->qw * other.getQY() + this->qy * other.getQW() + this->qz * other.getQX() - this->qx * other.getQZ();
+    this->qz = this->qw * other.getQZ() + this->qz * other.getQW() + this->qx * other.getQY() - this->qy * other.getQX();
+    this->qw = this->qw * other.getQW() - this->qx * other.getQX() - this->qy * other.getQY() - this->qz * other.getQZ();
+    // Normalize the quaternion
+    float norm = std::sqrt(
+      this->qx * this->qx + this->qy * this->qy +
+      this->qz * this->qz + this->qw * this->qw);
+    if (norm != 0) {
+      this->qx /= norm;
+      this->qy /= norm;
+      this->qz /= norm;
+      this->qw /= norm;
+    } else {
+      throw std::invalid_argument("Cannot normalize a zero quaternion");
+    }
   }
 };
 

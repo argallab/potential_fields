@@ -68,7 +68,7 @@ SpatialVector PotentialField::computeAttractiveForces(SpatialVector position) {
       orientationDiff.getQX() * this->rotationalAttractiveGain,
       orientationDiff.getQY() * this->rotationalAttractiveGain,
       orientationDiff.getQZ() * this->rotationalAttractiveGain,
-      orientationDiff.getQW()
+      orientationDiff.getQW() * this->rotationalAttractiveGain
     );
   }
   return attractiveForce;
