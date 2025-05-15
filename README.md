@@ -111,9 +111,9 @@ $$
 \begin{align*}
 &q[0] = q_{start} \\
 &i = 0 \\
-&\text{while}||\nabla U(q_i)|| > \epsilon \\
-&\,\,\,\, q_{i+1} = q_i - \alpha_i \nabla U(q_i) \\
-&\,\,\,\, i = i + 1
+&\text{while }\Vert\nabla U(q_i)\Vert > \epsilon \\
+& q_{i+1} = q_i - \alpha_i \nabla U(q_i) \\
+& i = i + 1
 \end{align*}
 $$
 
@@ -140,6 +140,15 @@ $$
 Where:
 - $\langle q_1, q_2\rangle = x_1 x_2 + y_1 y_2 + z_1 z_2 + w_1 w_2$
 - The absolute value ensures shortest path (since $q$ and $-q$ represent the same rotation)
+
+We can use the geodesic distance $\theta$ and a rotational attractive gain parameter $\omega = 0.7$ (from original implementation) to scale the quaternion representing the difference $q_{diff}$ to act as a rotational attraction force:
+
+$$
+\begin{align}
+q_{diff} &= \langle(q_1)^{-1} , q_2\rangle \\
+q_{diff} &= q_{diff} \cdot \omega
+\end{align}
+$$
 
 # Robots to test
 Robot Arms the Argallab uses:

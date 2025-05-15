@@ -147,10 +147,6 @@ public:
       this->qz = -this->qz;
       this->qw = -this->qw;
     }
-    // float qx = this->qw * other.getQX() + this->qx * other.getQW() + this->qy * other.getQZ() - this->qz * other.getQY();
-    // float qy = this->qw * other.getQY() + this->qy * other.getQW() + this->qz * other.getQX() - this->qx * other.getQZ();
-    // float qz = this->qw * other.getQZ() + this->qz * other.getQW() + this->qx * other.getQY() - this->qy * other.getQX();
-    // float qw = this->qw * other.getQW() - this->qx * other.getQX() - this->qy * other.getQY() - this->qz * other.getQZ();
     float norm_denominator = std::sqrt(1 - this->qw * this->qw);
     if (norm_denominator >= 1e-3) {
       this->qx /= norm_denominator;
