@@ -29,8 +29,7 @@ class PotentialField {
 public:
   PotentialField() = default;
   PotentialField(SpatialVector goalPosition, float attractiveGain)
-  : attractiveGain(attractiveGain), goalPosition(goalPosition)
-  {
+    : attractiveGain(attractiveGain), goalPosition(goalPosition) {
   }
   ~PotentialField() = default;
 
@@ -81,8 +80,8 @@ public:
    */
   SpatialVector computeVelocityAtPosition(SpatialVector position);
 
-  SpatialVector getGoalPosition() const {return goalPosition;}
-  std::vector<SphereObstacle> getObstacles() const {return obstacles;}
+  SpatialVector getGoalPosition() const { return goalPosition; }
+  std::vector<SphereObstacle> getObstacles() const { return obstacles; }
 
 private:
   float attractiveGain = 1.0f; // Gain for attractive force

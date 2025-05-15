@@ -19,46 +19,41 @@
 
 class SpatialVector {
 public:
-        // Constructors and Destructor
+  // Constructors and Destructor
   SpatialVector()
-  :x(0.0f), y(0.0f), z(0.0f),
-    qx(0.0f), qy(0.0f), qz(0.0f), qw(1.0f)
-  {
+    :x(0.0f), y(0.0f), z(0.0f),
+    qx(0.0f), qy(0.0f), qz(0.0f), qw(1.0f) {
   }
 
   SpatialVector(float x, float y, float z)
-  : x(x), y(y), z(z), qx(0.0f), qy(0.0f), qz(0.0f), qw(1.0f)
-  {
+    : x(x), y(y), z(z), qx(0.0f), qy(0.0f), qz(0.0f), qw(1.0f) {
   }
 
   SpatialVector(
     float x, float y, float z,
     float qx, float qy, float qz, float qw)
-  : x(x), y(y), z(z), qx(qx), qy(qy), qz(qz), qw(qw)
-  {
+    : x(x), y(y), z(z), qx(qx), qy(qy), qz(qz), qw(qw) {
   }
 
   ~SpatialVector() = default;
 
 public:
-        // Getters and Setters
+  // Getters and Setters
 
-  float getX() const {return this->x;}
-  float getY() const {return this->y;}
-  float getZ() const {return this->z;}
-  float getQX() const {return this->qx;}
-  float getQY() const {return this->qy;}
-  float getQZ() const {return this->qz;}
-  float getQW() const {return this->qw;}
+  float getX() const { return this->x; }
+  float getY() const { return this->y; }
+  float getZ() const { return this->z; }
+  float getQX() const { return this->qx; }
+  float getQY() const { return this->qy; }
+  float getQZ() const { return this->qz; }
+  float getQW() const { return this->qw; }
 
-  void setOrientationEuler(float roll, float pitch, float yaw)
-  {
+  void setOrientationEuler(float roll, float pitch, float yaw) {
     // Convert Euler angles to quaternion
     euler2Quaternion(roll, pitch, yaw, this->qx, this->qy, this->qz, this->qw);
   }
 
-  void setOrientationQuaternion(float qx, float qy, float qz, float qw)
-  {
+  void setOrientationQuaternion(float qx, float qy, float qz, float qw) {
     this->qx = qx;
     this->qy = qy;
     this->qz = qz;
@@ -66,17 +61,15 @@ public:
   }
 
 public:
-        // Vector Operations
+  // Vector Operations
 
-  float euclideanDistance(const SpatialVector & other) const
-  {
+  float euclideanDistance(const SpatialVector& other) const {
     return std::hypot(
       this->x - other.x, this->y - other.y, this->z - other.z
     );
   }
 
-  void normalize()
-  {
+  void normalize() {
     float magnitude = std::hypot(this->x, this->y, this->z);
     if (magnitude > 0) {
       this->x /= magnitude;
@@ -87,16 +80,14 @@ public:
     }
   }
 
-  float geodesicDistance(const SpatialVector & other) const
-  {
+  float geodesicDistance(const SpatialVector& other) const {
     // Compute the geodesic distance between two quaternions
     float dot = this->qx * other.qx + this->qy * other.qy +
       this->qz * other.qz + this->qw * other.qw;
     return 2.0f * acos(std::abs(dot));
   }
 
-  SpatialVector quaternionDifference(const SpatialVector & other) const
-  {
+  SpatialVector quaternionDifference(const SpatialVector& other) const {
     // Get the quaternion representing the difference
     // between two quaternions using geodesic distance
     // 1. Invert this quaternion
@@ -141,57 +132,49 @@ public:
   }
 
 public:
-        // Operator Overloads
+  // Operator Overloads
 
-  SpatialVector operator-() const
-  {
+  SpatialVector operator-() const {
     return SpatialVector{-this->x, -this->y, -this->z};
   }
 
-  SpatialVector operator+(const SpatialVector & other) const
-  {
+  SpatialVector operator+(const SpatialVector& other) const {
     return SpatialVector{this->x + other.x, this->y + other.y, this->z + other.z};
   }
 
-  SpatialVector operator+=(const SpatialVector & other)
-  {
+  SpatialVector operator+=(const SpatialVector& other) {
     this->x += other.x;
     this->y += other.y;
     this->z += other.z;
     return *this;
   }
 
-  SpatialVector operator-(const SpatialVector & other) const
-  {
+  SpatialVector operator-(const SpatialVector& other) const {
     return SpatialVector{
       this->x - other.x, this->y - other.y, this->z - other.z,
       other.qx, other.qy, other.qz, other.qw
     };
   }
 
-  SpatialVector operator-=(const SpatialVector & other)
-  {
+  SpatialVector operator-=(const SpatialVector& other) {
     this->x -= other.x;
     this->y -= other.y;
     this->z -= other.z;
     return *this;
   }
 
-  SpatialVector operator*(float scalar) const
-  {
+  SpatialVector operator*(float scalar) const {
     return SpatialVector{this->x * scalar, this->y * scalar, this->z * scalar};
   }
 
-  SpatialVector operator*=(float scalar)
-  {
+  SpatialVector operator*=(float scalar) {
     this->x *= scalar;
     this->y *= scalar;
     this->z *= scalar;
     return *this;
   }
 
-  SpatialVector operator/(float scalar) const
-  {
+  SpatialVector operator/(float scalar) const {
     if (scalar != 0) {
       return SpatialVector{this->x / scalar, this->y / scalar, this->z / scalar};
     } else {
@@ -199,8 +182,7 @@ public:
     }
   }
 
-  SpatialVector operator/=(float scalar)
-  {
+  SpatialVector operator/=(float scalar) {
     if (scalar != 0) {
       this->x /= scalar;
       this->y /= scalar;
@@ -211,19 +193,17 @@ public:
     }
   }
 
-  bool operator==(const SpatialVector & other) const
-  {
+  bool operator==(const SpatialVector& other) const {
     return  this->x == other.x && this->y == other.y && this->z == other.z;
   }
 
-  bool operator!=(const SpatialVector & other) const
-  {
+  bool operator!=(const SpatialVector& other) const {
     return !(*this == other);
   }
 
 private:
-         // Private Members
-  // Position components
+  // Private Members
+// Position components
   float x; // X-component of vector
   float y; // Y-component of vector
   float z; // Z-component of vector
@@ -234,11 +214,10 @@ private:
   float qw; // W-component of quaternion
 
 private:
-         // Private Methods
+  // Private Methods
   void euler2Quaternion(
     float roll, float pitch, float yaw,
-    float & qx, float & qy, float & qz, float & qw)
-  {
+    float& qx, float& qy, float& qz, float& qw) {
     // Convert Euler angles to quaternion
     float cy = cos(yaw * 0.5);
     float sy = sin(yaw * 0.5);

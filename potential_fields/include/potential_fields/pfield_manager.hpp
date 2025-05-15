@@ -21,8 +21,7 @@ public:
   PotentialFieldManager();
   ~PotentialFieldManager() = default;
 
-  static Quaternion getQuaternionFromYaw(float yaw)
-  {
+  static Quaternion getQuaternionFromYaw(float yaw) {
     Quaternion q;
     q.x = 0.0;
     q.y = 0.0;

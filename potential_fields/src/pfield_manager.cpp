@@ -3,8 +3,7 @@
 #include "pfield.hpp"
 
 PotentialFieldManager::PotentialFieldManager()
-: Node("potential_field_manager")
-{
+  : Node("potential_field_manager") {
   RCLCPP_INFO(this->get_logger(), "PotentialFieldManager Initialized");
 
   // Declare parameters
@@ -37,13 +36,11 @@ PotentialFieldManager::PotentialFieldManager()
   );
 }
 
-void PotentialFieldManager::timerCallback()
-{
+void PotentialFieldManager::timerCallback() {
   this->visualizePF();
 }
 
-void PotentialFieldManager::visualizePF()
-{
+void PotentialFieldManager::visualizePF() {
   MarkerArray markerArray;
   markerArray.markers.push_back(this->createGoalMarker());
   auto obstacleMarkers = this->createObstacleMarkers();
@@ -56,11 +53,10 @@ void PotentialFieldManager::visualizePF()
   this->markerPub->publish(markerArray);
 }
 
-MarkerArray PotentialFieldManager::createObstacleMarkers()
-{
+MarkerArray PotentialFieldManager::createObstacleMarkers() {
   MarkerArray markerArray;
   int id = 0;
-  for (const auto & obstacle : this->pField.getObstacles()) {
+  for (const auto& obstacle : this->pField.getObstacles()) {
     Marker obstacleMarker;
     obstacleMarker.header.frame_id = "map";
     obstacleMarker.header.stamp = this->now();
@@ -112,8 +108,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers()
   return markerArray;
 }
 
-Marker PotentialFieldManager::createGoalMarker()
-{
+Marker PotentialFieldManager::createGoalMarker() {
   // Create a green sphere marker
   Marker goalMarker;
   goalMarker.header.frame_id = "map";
@@ -138,8 +133,7 @@ Marker PotentialFieldManager::createGoalMarker()
   return goalMarker;
 }
 
-MarkerArray PotentialFieldManager::createPotentialVectorMarkers()
-{
+MarkerArray PotentialFieldManager::createPotentialVectorMarkers() {
   MarkerArray markerArray;
   int id = 0;
   // Discretize the space around the goal till the farthest obstacle
@@ -184,8 +178,7 @@ MarkerArray PotentialFieldManager::createPotentialVectorMarkers()
   return markerArray;
 }
 
-int main(int argc, char * argv[])
-{
+int main(int argc, char* argv[]) {
   rclcpp::init(argc, argv);
   rclcpp::spin(std::make_shared<PotentialFieldManager>());
   rclcpp::shutdown();
