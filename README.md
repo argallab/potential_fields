@@ -126,7 +126,7 @@ Geodesic distance is the distance between two unit quaternions $q_1$ and $q_2$ (
 
 $$
 \begin{align*}
-q_1 &= \left[x_1, y_1, z_1, w_1\right]
+q_1 &= \left[x_1, y_1, z_1, w_1\right]\\
 q_2 &= \left[x_2, y_2, z_2, w_2\right]
 \end{align*}
 $$
