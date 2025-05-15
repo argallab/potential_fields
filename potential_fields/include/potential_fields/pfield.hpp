@@ -1,5 +1,5 @@
 /**
- * @file potential_field.hpp
+ * @file pfield.hpp
  * @author Sharwin Patil (sharwinpatil@u.northwestern.edu)
  * @brief Library for managing a vector field overlaid onto a
  *        robot's task-space (3D World) as a velocity field
