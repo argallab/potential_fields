@@ -1,7 +1,7 @@
 #include "pfield.hpp"
 #include <algorithm>
 
-void PotentialField::updateGoalPosition(Vector3D newGoalPosition) {
+void PotentialField::updateGoalPosition(SpatialVector newGoalPosition) {
   this->goalPosition = newGoalPosition;
 }
 
@@ -37,33 +37,33 @@ void PotentialField::clearObstacles() {
   this->obstacles.clear();
 }
 
-Vector3D PotentialField::computeVelocityAtPosition(Vector3D position) {
-  Vector3D attractiveForce = this->computeAttractiveForces(position);
-  Vector3D repulsiveForce = this->computeRepulsiveForces(position);
+SpatialVector PotentialField::computeVelocityAtPosition(SpatialVector position) {
+  SpatialVector attractiveForce = this->computeAttractiveForces(position);
+  SpatialVector repulsiveForce = this->computeRepulsiveForces(position);
   return attractiveForce + repulsiveForce;
 }
 
-Vector3D PotentialField::computeAttractiveForces(Vector3D position) {
+SpatialVector PotentialField::computeAttractiveForces(SpatialVector position) {
   // Attractive force towards the goal position (pos - goal)
   float distance = position.euclideanDistance(this->goalPosition);
-  Vector3D direction = position - this->goalPosition;
+  SpatialVector direction = position - this->goalPosition;
   // If distance is (near) zero, return zero force
   /// TODO: Parameterize this small threshold
-  if (distance < 1e-3) { return Vector3D{0, 0, 0}; }
+  if (distance < 1e-3) { return SpatialVector{0, 0, 0}; }
   direction /= distance; // Normalize the direction
   // Attractive force is negative
   float magnitude = -this->attractiveGain * distance;
   return direction * magnitude;
 }
 
-Vector3D PotentialField::computeRepulsiveForces(Vector3D position) {
-  Vector3D repulsiveForce{0, 0, 0};
+SpatialVector PotentialField::computeRepulsiveForces(SpatialVector position) {
+  SpatialVector repulsiveForce{0, 0, 0};
   for (const auto& obst : this->obstacles) {
     // Each obstacle is a sphere
     // Only calculate repulsive force if within influence radius
     if (obst.withinInfluenceRadius(position)) {
-      Vector3D obstPosition = obst.getPosition();
-      Vector3D direction = position - obstPosition;
+      SpatialVector obstPosition = obst.getPosition();
+      SpatialVector direction = position - obstPosition;
       float distance = position.euclideanDistance(obstPosition);
       // If distance is (near) zero, don't apply force
       /// TODO: Parameterize this small threshold

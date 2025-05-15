@@ -19,9 +19,9 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   this->influenceRadiusScalar = this->get_parameter("influence_radius_scale").as_double();
 
   // Initialize the potential field
-  this->pField = PotentialField(Vector3D{0, 0, 0}, this->attractiveGain);
-  this->pField.addObstacle(SphereObstacle(0, Vector3D{3, 3, 0}, 1.0f, 2.0f, this->repulsiveGain));
-  this->pField.addObstacle(SphereObstacle(1, Vector3D{-5, -5, 0}, 1.5f, 2.5f, this->repulsiveGain));
+  this->pField = PotentialField(SpatialVector{0, 0, 0}, this->attractiveGain);
+  this->pField.addObstacle(SphereObstacle(0, SpatialVector{3, 3, 0}, 1.0f, 2.0f, this->repulsiveGain));
+  this->pField.addObstacle(SphereObstacle(1, SpatialVector{-5, -5, 0}, 1.5f, 2.5f, this->repulsiveGain));
 
   // Setup marker publisher
   this->markerPub = this->create_publisher<MarkerArray>("visualization_marker_array", 10);
@@ -59,7 +59,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers() {
     obstacleMarker.id = id++;
     obstacleMarker.type = Marker::SPHERE;
     obstacleMarker.action = Marker::ADD;
-    Vector3D position = obstacle.getPosition();
+    SpatialVector position = obstacle.getPosition();
     obstacleMarker.pose.position.x = position.x;
     obstacleMarker.pose.position.y = position.y;
     obstacleMarker.pose.position.z = position.z;
@@ -109,7 +109,7 @@ Marker PotentialFieldManager::createGoalMarker() {
   goalMarker.id = 0;
   goalMarker.type = Marker::SPHERE;
   goalMarker.action = Marker::ADD;
-  Vector3D goalPosition = this->pField.getGoalPosition();
+  SpatialVector goalPosition = this->pField.getGoalPosition();
   goalMarker.pose.position.x = goalPosition.x;
   goalMarker.pose.position.y = goalPosition.y;
   goalMarker.pose.position.z = goalPosition.z;
@@ -134,8 +134,8 @@ MarkerArray PotentialFieldManager::createPotentialVectorMarkers() {
   for (float x = -5.0f; x <= 5.0f; x += 1.0f) {
     for (float y = -5.0f; y <= 5.0f; y += 1.0f) {
       Marker vectorMarker;
-      Vector3D position{x, y, Z};
-      Vector3D velocity = this->pField.computeVelocityAtPosition(position);
+      SpatialVector position{x, y, Z};
+      SpatialVector velocity = this->pField.computeVelocityAtPosition(position);
       // Normalize the velocity vector since we want to show direction
       float magnitude = std::hypot(velocity.x, velocity.y, velocity.z);
       if (magnitude > 0.0f) {

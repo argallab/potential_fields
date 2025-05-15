@@ -127,4 +127,7 @@ Robot Arms the Argallab uses:
 - Kinova Gen2 Jaco
 - Kinova Mico 6-DOF
 
-Other Robots 
+# References
+ [1] [Columbia Presentation on Potential Field Path Planning](https://www.cs.columbia.edu/~allen/F17/NOTES/potentialfield.pdf)
+ 
+ [2] [Real-Time Obstacle Avoidance for Manipulators and Mobile Robots](https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=1087247)
