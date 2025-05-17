@@ -19,6 +19,7 @@
 #include <math.h>
 #include "spatial_vector.hpp"
 #include "sphere_obstacle.hpp"
+#include <eigen3/Eigen/Dense>
 
  // Functionality to support:
  // 1. Track a Goal Position (Initialization and Update)
@@ -28,14 +29,15 @@
 class PotentialField {
 public:
   PotentialField() = default;
-  PotentialField(SpatialVector goalPosition)
-    : goalPosition(goalPosition) {
+  PotentialField(SpatialVector goalPose) :
+    goalPose(goalPose) {
   }
-  PotentialField(SpatialVector goalPosition, float attractiveGain, float rotationalAttractiveGain)
-    : attractiveGain(attractiveGain),
+
+  PotentialField(SpatialVector goalPose, double attractiveGain, double rotationalAttractiveGain) : attractiveGain(attractiveGain),
     rotationalAttractiveGain(rotationalAttractiveGain),
-    goalPosition(goalPosition) {
+    goalPose(goalPose) {
   }
+
   ~PotentialField() = default;
 
   /**
@@ -43,9 +45,9 @@ public:
  *
  * @note The Goal Position creates an attractive force towards it
  *
- * @param newGoalPosition The new goal position to be set.
+ * @param newGoalPose The new goal position to be set.
  */
-  void updateGoalPosition(SpatialVector newGoalPosition);
+  void updateGoalPosition(SpatialVector newGoalPose);
 
   /**
    * @brief Updates the attractive gain, scaling the force
@@ -53,7 +55,7 @@ public:
    *
    * @param newAttractiveGain The new attractive gain to be set.
    */
-  void updateAttractiveGain(float newAttractiveGain);
+  void updateAttractiveGain(double newAttractiveGain);
 
   /**
    * @brief Adds a new obstacle to the potential field.
@@ -80,30 +82,33 @@ public:
    * @brief Given a 3D position, computes the velocity vector
    *        by combining attractive and repulsive forces.
    *
-   * @param position The position in 3D space to compute the velocity vector.
-   * @return Vector The resultant velocity vector.
+   * @param queryPose The pose in 3D space to compute the velocity vector.
+   * @return SpatialVector The resultant velocity vector.
    */
-  SpatialVector computeVelocityAtPosition(SpatialVector position);
+  SpatialVector evaluateVelocityAtPose(SpatialVector queryPose);
 
-  SpatialVector getGoalPosition() const { return goalPosition; }
-  std::vector<SphereObstacle> getObstacles() const { return obstacles; }
+  SpatialVector getGoalPose() const { return this->goalPose; }
+  std::vector<SphereObstacle> getObstacles() const { return this->obstacles; }
 
 private:
-  float attractiveGain = 1.0f; // Gain for attractive force
-  float rotationalAttractiveGain = 0.7f; // Gain for rotational attractive force
-  SpatialVector goalPosition;
+  double attractiveGain = 1.0f; // Gain for attractive force
+  double rotationalAttractiveGain = 0.7f; // Gain for rotational attractive force
+  double translationalTolerance = 1e-3f; // Threshold for distances to the goal and obstacles
+  double rotationalThreshold = 0.06f; // Threshold for rotational geodesic distance
+  SpatialVector goalPose;
   std::vector<SphereObstacle> obstacles;
 
   /**
-   * @brief Computes the attractive force towards the goal position.
+   * @brief Computes the attractive force towards the goal pose. Also computes the
+   * rotational force to align the query pose with the goal pose.
    *
    * @note Equation: F = attractiveGain * (distace * direction)
    *       where direction is a unit vector pointing towards the goal.
    *
-   * @param position The position in 3D space to compute the force from.
-   * @return Vector The attractive force vector.
+   * @param queryPose The pose in 3D space to compute the force from.
+   * @return SpatialVector The attractive force vector.
    */
-  SpatialVector computeAttractiveForces(SpatialVector position);
+  SpatialVector computeAttractiveForces(SpatialVector queryPose);
 
   /**
    * @brief Computes the repulsive forces from all obstacles
@@ -112,10 +117,10 @@ private:
    * @note Equation: F = repulsiveGain * (1/distance - 1/influence) * (1 / distance^2) * direction
    *       where direction is a unit vector pointing away from the obstacle.
    *
-   * @param position The position in 3D space to compute the force from.
-   * @return Vector The repulsive force vector.
+   * @param queryPose The position in 3D space to compute the force from.
+   * @return SpatialVector The repulsive force vector.
    */
-  SpatialVector computeRepulsiveForces(SpatialVector position);
+  SpatialVector computeRepulsiveForces(SpatialVector queryPose);
 };
 
 #endif // PFIELDS_HPP
