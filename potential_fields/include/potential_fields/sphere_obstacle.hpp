@@ -1,14 +1,14 @@
 #ifndef SPHERE_OBSTACLE_HPP
 #define SPHERE_OBSTACLE_HPP
 #include "spatial_vector.hpp"
+#include <eigen3/Eigen/Dense>
+
 
 class SphereObstacle {
 public:
   // Constructors and Destructor
   SphereObstacle() = default;
-  SphereObstacle(
-    int id, SpatialVector position, float radius, float influenceRadius,
-    float repulsiveGain)
+  SphereObstacle(int id, Eigen::Vector3d position, double radius, double influenceRadius, double repulsiveGain)
     : id(id),
     position(position),
     radius(radius),
@@ -19,17 +19,18 @@ public:
 
 public:
   // Getters and Setters
-  SpatialVector getPosition() const { return this->position; }
-  float getRadius() const { return this->radius; }
+  Eigen::Vector3d getPosition() const { return this->position; }
+  double getRadius() const { return this->radius; }
   int getID() const { return this->id; }
-  float getInfluenceRadius() const { return this->influenceRadius; }
-  float getRepulsiveGain() const { return this->repulsiveGain; }
+  double getInfluenceRadius() const { return this->influenceRadius; }
+  double getRepulsiveGain() const { return this->repulsiveGain; }
 
 public:
   // Class Methods
 
-  bool withinInfluenceRadius(SpatialVector pos) const {
-    return  this->position.euclideanDistance(pos) <= this->influenceRadius;
+  bool withinInfluenceRadius(Eigen::Vector3d pos) const {
+    double euclideanDistance = (pos - this->position).norm();
+    return euclideanDistance <= this->influenceRadius;
   }
 
 public:
@@ -45,10 +46,10 @@ public:
 private:
   // Private Members
   int id = 0; // Unique ID for the obstacle
-  SpatialVector position; // Center Position of the obstacle in 3D space
-  float radius; // Sphere's radius [m]
-  float influenceRadius; // Sphere's influence radius [m]
-  float repulsiveGain = 1.0f; // Gain for repulsive force
+  Eigen::Vector3d position; // Center Position of the obstacle in 3D space
+  double radius; // Sphere's radius [m]
+  double influenceRadius; // Sphere's influence radius [m]
+  double repulsiveGain = 1.0f; // Gain for repulsive force
 };
 
 #endif // SPHERE_OBSTACLE_HPP
