@@ -21,7 +21,7 @@ public:
   PotentialFieldManager();
   ~PotentialFieldManager() = default;
 
-  static Quaternion getQuaternionFromYaw(float yaw) {
+  static Quaternion getQuaternionFromYaw(double yaw) {
     Quaternion q;
     q.x = 0.0;
     q.y = 0.0;
@@ -31,12 +31,12 @@ public:
   }
 
 private:
-  float timerFreq; // Timer frequency [Hz]
-  float attractiveGain; // Attractive gain [N]
-  float rotationalAttractiveGain; // Rotational attractive gain [N]
-  float repulsiveGain; // Repulsive gain [N]
-  float maxForce; // Maximum force [N]
-  float influenceRadiusScalar; // Scale for influence radius
+  double timerFreq; // Timer frequency [Hz]
+  double attractiveGain; // Attractive gain [N]
+  double rotationalAttractiveGain; // Rotational attractive gain [N]
+  double repulsiveGain; // Repulsive gain [N]
+  double maxForce; // Maximum force [N]
+  double influenceRadiusScalar; // Scale for influence radius
 
   // Potential field object
   PotentialField pField;
