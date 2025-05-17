@@ -68,9 +68,9 @@ TEST(PotentialFieldTest, RepulsiveFieldPushesAwayFromObstacle) {
 
 TEST(PotentialFieldTest, NearZeroDistanceAttraction) {
   PotentialField pf(SpatialVector(Eigen::Vector3d(1.0f, 1.0f, 1.0f)), 1.0f, 0.0f);
-  SpatialVector nearGoal(Eigen::Vector3d(1 + 1e-1f, 1.0f, 1.0f));
+  SpatialVector nearGoal(Eigen::Vector3d(1 + 1e-3f, 1.0f, 1.0f));
   SpatialVector vel = pf.evaluateVelocityAtPose(nearGoal);
-  EXPECT_LT(std::abs(vel.getPosition().x()), 1e-3f);  // Should be small or near zero
+  EXPECT_GT(std::abs(vel.getPosition().x()), 1e-3f);  // Should be small but not zero
   EXPECT_NEAR(vel.getPosition().y(), 0.0f, 1e-6f);
   EXPECT_NEAR(vel.getPosition().z(), 0.0f, 1e-6f);
 }

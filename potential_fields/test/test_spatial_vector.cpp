@@ -2,11 +2,6 @@
 #include "spatial_vector.hpp"
 #include <eigen3/Eigen/Dense>
 
-TEST(SpatialVectorTest, EuclideanDistance) {
-  SpatialVector a;
-  SpatialVector b(Eigen::Vector3d(3.0f, 4.0f, 0.0f));
-  EXPECT_FLOAT_EQ(a.euclideanDistance(b), 5.0f);
-}
 
 TEST(SpatialVectorTest, ConstructorAndAccessors) {
   // SpatialVector v(1.0f, 2.0f, 3.0f, 0.1f, 0.2f, 0.3f, 0.9f);
@@ -17,6 +12,26 @@ TEST(SpatialVectorTest, ConstructorAndAccessors) {
   EXPECT_EQ(v.getOrientation(), Eigen::Quaterniond(0.0f, 0.0f, 0.0f, 1.0f));
   v.setPosition(Eigen::Vector3d(4.0f, 5.0f, 6.0f));
   EXPECT_EQ(v.getPosition(), Eigen::Vector3d(4.0f, 5.0f, 6.0f));
+}
+
+TEST(SpatialVectorTest, EuclideanDistanceSamePosition) {
+  SpatialVector a;
+  SpatialVector b;
+  EXPECT_FLOAT_EQ(a.euclideanDistance(b), 0.0f);
+}
+
+TEST(SpatialVectorTest, EuclideanDistance) {
+  SpatialVector a;
+  SpatialVector b(Eigen::Vector3d(3.0f, 4.0f, 0.0f));
+  EXPECT_FLOAT_EQ(a.euclideanDistance(b), 5.0f);
+  b.setPosition(Eigen::Vector3d(-4.5f, -2.1f, 3.0f));
+  EXPECT_FLOAT_EQ(a.euclideanDistance(b), 5.801724f);
+}
+
+TEST(SpatialVectorTest, NormalizePosition) {
+  SpatialVector v(Eigen::Vector3d(3.0f, 4.0f, 0.0f));
+  v.normalizePosition();
+  EXPECT_FLOAT_EQ(v.getPosition().norm(), 1.0f);
 }
 
 TEST(SpatialVectorTest, GeodesicDistance) {
