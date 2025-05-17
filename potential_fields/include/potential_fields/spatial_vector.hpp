@@ -53,9 +53,12 @@ public:
   void setPosition(const Eigen::Vector3d& position) { this->position = position; }
   void setOrientation(const Eigen::Quaterniond& orientation) { this->orientation = orientation; }
   void setOrientationEuler(double roll, double pitch, double yaw) {
-    this->orientation = Eigen::AngleAxisd(roll, Eigen::Vector3d::UnitX()) *
+    // extrinsic X→Y→Z: roll, then pitch, then yaw
+    this->orientation =
+      Eigen::AngleAxisd(roll, Eigen::Vector3d::UnitX()) *
       Eigen::AngleAxisd(pitch, Eigen::Vector3d::UnitY()) *
       Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ());
+    this->orientation.normalize();
   }
 
 public:

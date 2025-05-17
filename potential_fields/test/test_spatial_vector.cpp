@@ -34,6 +34,15 @@ TEST(SpatialVectorTest, NormalizePosition) {
   EXPECT_FLOAT_EQ(v.getPosition().norm(), 1.0f);
 }
 
+TEST(SpatialVectorTest, SetAndGetEulerAngles) {
+  SpatialVector v;
+  v.setOrientationEuler(0.0f, M_PI_2, M_PI_4);
+  Eigen::Vector3d euler = v.getOrientationEuler();
+  EXPECT_NEAR(euler.x(), 0.0f, 1e-5); // roll
+  EXPECT_NEAR(euler.y(), M_PI_2, 1e-5); // pitch
+  EXPECT_NEAR(euler.z(), M_PI_4, 1e-5); // yaw
+}
+
 TEST(SpatialVectorTest, GeodesicDistance) {
   SpatialVector a;
   SpatialVector b;
@@ -42,4 +51,8 @@ TEST(SpatialVectorTest, GeodesicDistance) {
   EXPECT_NEAR(a.geodesicDistance(b), M_PI_2, 1e-5);
   // Check the reverse operation since angles should be bounded by [0, pi]
   EXPECT_NEAR(b.geodesicDistance(a), M_PI_2, 1e-5);
+  a.setOrientationEuler(0, 0, 0);
+  b.setOrientationEuler(0, 0, 0);
+  EXPECT_NEAR(a.geodesicDistance(b), 0.0f, 1e-5);
 }
+
