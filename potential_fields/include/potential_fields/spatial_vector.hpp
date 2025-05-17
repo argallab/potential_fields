@@ -65,6 +65,11 @@ public:
     return (this->position - other.position).norm();
   }
 
+  void normalizePosition() {
+    // Normalize the position vector
+    this->position.normalize();
+  }
+
   double geodesicDistance(const SpatialVector& other) {
     // Compute the geodesic distance between two quaternions
     Eigen::Quaterniond q1 = this->orientation;
