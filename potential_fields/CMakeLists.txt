@@ -12,10 +12,12 @@ enable_testing()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(ament_cmake_gtest REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(Doxygen)
 find_package(geometry_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
-find_package(ament_cmake_gtest REQUIRED)
+find_package(Eigen3 REQUIRED)
 
 add_library(potential_fields
   src/pfield.cpp

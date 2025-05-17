@@ -17,6 +17,7 @@
 #include <cmath>
 #include <stdexcept>
 #include <algorithm>
+#include <eigen3/Eigen/Eigen>
 
 class SpatialVector {
 public:
