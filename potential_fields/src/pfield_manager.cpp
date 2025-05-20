@@ -21,15 +21,31 @@ PotentialFieldManager::PotentialFieldManager()
   this->maxForce = this->get_parameter("max_force").as_double();
   this->influenceRadiusScalar = this->get_parameter("influence_radius_scale").as_double();
 
+  // Setup marker publisher
+  this->markerPub = this->create_publisher<MarkerArray>("visualization_marker_array", 10);
+  std::cout << "Markers publishing on: " << this->markerPub->get_topic_name() << std::endl;
+
+  // Setup goal pose subscriber
+  this->goalPoseSub = this->create_subscription<geometry_msgs::msg::PoseStamped>(
+    "goal_pose",
+    10,
+    [this](const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
+    RCLCPP_INFO(this->get_logger(), "Received goal pose");
+    // Update the goal pose in the potential field
+    this->pField.updateGoalPosition(Eigen::Vector3d(
+      msg->pose.position.x,
+      msg->pose.position.y,
+      msg->pose.position.z
+    ));
+  }
+  );
+
   // Initialize the potential field
   this->pField = PotentialField(SpatialVector{}, this->attractiveGain, this->rotationalAttractiveGain);
   this->pField.addObstacle(SphereObstacle(0, Eigen::Vector3d(3, 3, 0), 1.0f, 2.0f, this->repulsiveGain));
   this->pField.addObstacle(SphereObstacle(1, Eigen::Vector3d(-5, -5, 0), 1.5f, 2.5f, this->repulsiveGain));
 
-  // Setup marker publisher
-  this->markerPub = this->create_publisher<MarkerArray>("visualization_marker_array", 10);
-  std::cout << "Markers publishing on: " << this->markerPub->get_topic_name() << std::endl;
-
+  // Run the timer for visualizing the potential field
   this->timer = this->create_wall_timer(
     std::chrono::seconds(static_cast<int>(1.0f / this->timerFreq)),
     std::bind(&PotentialFieldManager::timerCallback, this)
@@ -42,7 +58,9 @@ void PotentialFieldManager::timerCallback() {
 
 void PotentialFieldManager::visualizePF() {
   MarkerArray markerArray;
-  markerArray.markers.push_back(this->createGoalMarker());
+  // markerArray.markers.push_back(this->createGoalMarker());
+  MarkerArray goalMarkerArray = this->createGoalMarker();
+  markerArray.markers.insert(markerArray.markers.cend(), goalMarkerArray.markers.cbegin(), goalMarkerArray.markers.cend());
   auto obstacleMarkers = this->createObstacleMarkers();
   markerArray.markers.insert(markerArray.markers.cend(), obstacleMarkers.markers.cbegin(),
     obstacleMarkers.markers.cend());
@@ -61,7 +79,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers() {
     obstacleMarker.header.frame_id = "map";
     obstacleMarker.header.stamp = this->now();
     obstacleMarker.ns = "obstacle";
-    obstacleMarker.id = id++;
+    obstacleMarker.id = id;
     obstacleMarker.type = Marker::SPHERE;
     obstacleMarker.action = Marker::ADD;
     SpatialVector position = obstacle.getPosition();
@@ -87,7 +105,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers() {
     influenceMarker.header.frame_id = "map";
     influenceMarker.header.stamp = this->now();
     influenceMarker.ns = "obstacle_influence";
-    influenceMarker.id = id++;
+    influenceMarker.id = id;
     influenceMarker.type = Marker::SPHERE;
     influenceMarker.action = Marker::ADD;
     influenceMarker.pose.position.x = position.getPosition().x();
@@ -104,11 +122,12 @@ MarkerArray PotentialFieldManager::createObstacleMarkers() {
     influenceMarker.color.a = 0.5f; // Semi-transparent
     influenceMarker.lifetime = rclcpp::Duration(0, 0); // No lifetime
     markerArray.markers.push_back(influenceMarker);
+    id++;
   }
   return markerArray;
 }
 
-Marker PotentialFieldManager::createGoalMarker() {
+MarkerArray PotentialFieldManager::createGoalMarker() {
   // Create a green sphere marker
   Marker goalMarker;
   goalMarker.header.frame_id = "map";
@@ -133,7 +152,47 @@ Marker PotentialFieldManager::createGoalMarker() {
   goalMarker.color.b = 0.0f;
   goalMarker.color.a = 1.0f; // Opaque
   goalMarker.lifetime = rclcpp::Duration(0, 0); // No lifetime
-  return goalMarker;
+  std::vector<Marker> goalAxes;
+  goalAxes.reserve(3);
+  for (int i = 0; i < 3; i++) {
+    Marker axis;
+    axis.header.frame_id = "map";
+    axis.header.stamp = this->now();
+    axis.ns = "goal";
+    axis.id = i + 1;
+    axis.type = Marker::CYLINDER;
+    axis.action = Marker::ADD;
+    axis.pose.position.x = goalPose.getPosition().x();
+    axis.pose.position.y = goalPose.getPosition().y();
+    axis.pose.position.z = goalPose.getPosition().z();
+    Eigen::AngleAxisd axisRotation;
+    if (i == 0) { // X-axis (red cylinder)
+      axis.color.r = 1.0f;
+      axisRotation = Eigen::AngleAxisd(M_PI / 2, Eigen::Vector3d::UnitY());
+    } else if (i == 1) { // Y-axis (green cylinder)
+      axis.color.g = 1.0f;
+      axisRotation = Eigen::AngleAxisd(-M_PI / 2, Eigen::Vector3d::UnitX());
+    } else if (i == 2) { // Z-axis (blue cylinder)
+      axis.color.b = 1.0f;
+      axisRotation = Eigen::AngleAxisd(0, Eigen::Vector3d::UnitZ());
+    }
+    Eigen::Quaterniond Q = goalPose.getOrientation() * axisRotation;
+    axis.pose.orientation.x = Q.x();
+    axis.pose.orientation.y = Q.y();
+    axis.pose.orientation.z = Q.z();
+    axis.pose.orientation.w = Q.w();
+    axis.scale.x = 0.075f; // Diameter
+    axis.scale.y = 0.075f; // Diameter
+    axis.scale.z = 1.0f;  // Length of the cylinder
+    axis.color.a = 0.75f; // Semi-transparent
+    axis.lifetime = rclcpp::Duration(0, 0); // No lifetime
+    goalAxes.push_back(axis);
+  }
+  MarkerArray goalMarkerArray;
+  goalMarkerArray.markers.push_back(goalMarker);
+  goalMarkerArray.markers.insert(
+    goalMarkerArray.markers.cend(), goalAxes.cbegin(), goalAxes.cend());
+  return goalMarkerArray;
 }
 
 MarkerArray PotentialFieldManager::createPotentialVectorMarkers() {

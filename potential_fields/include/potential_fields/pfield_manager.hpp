@@ -4,6 +4,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include <vector>
 #include "geometry_msgs/msg/pose.hpp"
+#include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/point.hpp"
 #include "geometry_msgs/msg/quaternion.hpp"
 #include "visualization_msgs/msg/marker.hpp"
@@ -47,9 +48,12 @@ private:
   // Publisher for visualization markers
   rclcpp::Publisher<MarkerArray>::SharedPtr markerPub;
 
+  // Subscriber for the goal pose
+  rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goalPoseSub;
+
   void visualizePF();
   MarkerArray createObstacleMarkers();
-  Marker createGoalMarker();
+  MarkerArray createGoalMarker();
   MarkerArray createPotentialVectorMarkers();
 
   void timerCallback();
