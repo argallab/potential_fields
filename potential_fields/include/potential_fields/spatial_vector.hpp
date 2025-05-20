@@ -45,19 +45,38 @@ public:
 
   const Eigen::Vector3d& getPosition() const { return this->position; }
   const Eigen::Quaterniond& getOrientation() const { return this->orientation; }
+
+  /**
+   * @brief Returns the internal quaternion converted to euler angles [yaw, pitch, roll]
+   *
+   * @return Eigen::Vector3d The euler angles representing the orientation as [yaw, pitch, roll]
+   */
   Eigen::Vector3d getOrientationEuler() const {
-    // Returns the Euler angles (roll, pitch, yaw) from the quaternion
-    return this->orientation.toRotationMatrix().eulerAngles(0, 1, 2);
+    // Returns the Euler angles (yaw, pitch, roll) from the quaternion
+    return this->orientation.toRotationMatrix().eulerAngles(2, 1, 0);
   }
 
   void setPosition(const Eigen::Vector3d& position) { this->position = position; }
-  void setOrientation(const Eigen::Quaterniond& orientation) { this->orientation = orientation; }
-  void setOrientationEuler(double roll, double pitch, double yaw) {
-    // extrinsic X→Y→Z: roll, then pitch, then yaw
+
+  void setOrientation(const Eigen::Quaterniond& orientation) {
+    this->orientation = orientation;
+    this->orientation.normalize();
+  }
+
+  /**
+   * @brief Sets the internal quaternion rotation given an euler angle representation
+   *
+   * @note That euler angles are represented with the intrinsic order [Z→Y→X] = [yaw, pitch, roll]
+   *
+   * @param yaw The rotation around the Z-axis [rad]
+   * @param pitch The rotation around the Y-axis [rad]
+   * @param roll The rotation around the X-axis [rad]
+   */
+  void setOrientationEuler(double yaw, double pitch, double roll) {
     this->orientation =
-      Eigen::AngleAxisd(roll, Eigen::Vector3d::UnitX()) *
+      Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()) *
       Eigen::AngleAxisd(pitch, Eigen::Vector3d::UnitY()) *
-      Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ());
+      Eigen::AngleAxisd(roll, Eigen::Vector3d::UnitX());
     this->orientation.normalize();
   }
 
@@ -69,15 +88,13 @@ public:
   }
 
   void normalizePosition() {
-    // Normalize the position vector
     this->position.normalize();
   }
 
   double geodesicDistance(const SpatialVector& other) {
-    // Compute the geodesic distance between two quaternions
+    // Normalize the quaternions
     Eigen::Quaterniond q1 = this->orientation;
     Eigen::Quaterniond q2 = other.orientation;
-    // Normalize the quaternions
     q1.normalize();
     q2.normalize();
     // Compute the quaternion difference
