@@ -122,30 +122,13 @@ Where:
 - $\alpha_i$ is a step-size (learning rate) to progress towards the gradient (specific to each iteration)
 
 ## Rotational Potential
-Geodesic distance is the distance between two unit quaternions $q_1$ and $q_2$ (shortest angle of rotation required to align one orientation with the other on the 3-sphere $\mathcal{S}^3$):
-
-$$
-\begin{align*}
-q_1 &= \left[x_1, y_1, z_1, w_1\right]\\
-q_2 &= \left[x_2, y_2, z_2, w_2\right]
-\end{align*}
-$$
-
-Then geodesic distance ($\theta \in [0, \pi]$) is:
-
-$$
-\theta = 2 \arccos\left(\lvert\langle q_1, q_2\rangle\rvert\right)
-$$
-
-Where:
-- $\langle q_1, q_2\rangle = x_1 x_2 + y_1 y_2 + z_1 z_2 + w_1 w_2$
-- The absolute value ensures shortest path (since $q$ and $-q$ represent the same rotation)
+Geodesic distance $\theta$ is the distance between two unit quaternions $q_1$ and $q_2$ (shortest angle of rotation required to align one orientation with the other on $\mathcal{S}^3$), bound to $\theta \in [0, \pi]$ is.
 
 We can use the geodesic distance $\theta$ and a rotational attractive gain parameter $\omega$ ($0.7$ in original implementation) to scale the quaternion representing the difference $q_{diff}$ to act as a rotational attraction force:
 
 $$
 \begin{align}
-q_{diff} &= \langle(q_1)^{-1} , q_2\rangle \\
+q_{diff} &= \underbrace{\langle(q_1)^{-1} , q_2\rangle}_{Quaternion Product} \\
 q_{diff} &= q_{diff} \cdot \omega
 \end{align}
 $$
@@ -157,15 +140,12 @@ Robot Arms the Argallab uses:
 - Kinova Mico 6-DOF
 
 # Meeting Notes
-- Eigen/Armadillo for matrix library
 - Use C++ data for Python graphs
 - Edit RViz visuals
-- Implement Tests for verifying forces and testing runtime
-- Implement orientation -> angular velocity
 - Dynamic Obstacles
 - Connect to planning with robot (Franka first, Kinova)
 - Only need simulation for planning
-- Different types of obstacles (rectangular prisms)
+- Different types of obstacles (rectangular prisms, cylinders, etc.)
 
 
 # References
