@@ -12,17 +12,12 @@ enable_testing()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(ament_cmake_gtest REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(Doxygen)
 find_package(geometry_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
-find_package(ament_cmake_gtest REQUIRED)
-
-add_library(potential_fields
-  src/pfield.cpp
-)
-target_include_directories(potential_fields PUBLIC
-  include/potential_fields
-)
+find_package(Eigen3 REQUIRED)
 
 # Setup testing files
 ament_add_gtest(test_spatial_vector
@@ -32,12 +27,10 @@ ament_add_gtest(test_pfields
   test/test_pfields.cpp
 )
 
-target_link_libraries(test_pfields potential_fields)
-
 include_directories(
   include/potential_fields
 )
-add_executable(pfield_manager src/pfield_manager.cpp src/pfield.cpp)
+add_executable(pfield_manager src/pfield_manager.cpp)
 ament_target_dependencies(
   pfield_manager
   rclcpp

@@ -23,10 +23,8 @@ PotentialFieldManager::PotentialFieldManager()
 
   // Initialize the potential field
   this->pField = PotentialField(SpatialVector{}, this->attractiveGain, this->rotationalAttractiveGain);
-  this->pField.addObstacle(SphereObstacle(0, SpatialVector{3, 3, 0}, 1.0f, 2.0f,
-    this->repulsiveGain));
-  this->pField.addObstacle(SphereObstacle(1, SpatialVector{-5, -5, 0}, 1.5f, 2.5f,
-    this->repulsiveGain));
+  this->pField.addObstacle(SphereObstacle(0, Eigen::Vector3d(3, 3, 0), 1.0f, 2.0f, this->repulsiveGain));
+  this->pField.addObstacle(SphereObstacle(1, Eigen::Vector3d(-5, -5, 0), 1.5f, 2.5f, this->repulsiveGain));
 
   // Setup marker publisher
   this->markerPub = this->create_publisher<MarkerArray>("visualization_marker_array", 10);
@@ -67,13 +65,13 @@ MarkerArray PotentialFieldManager::createObstacleMarkers() {
     obstacleMarker.type = Marker::SPHERE;
     obstacleMarker.action = Marker::ADD;
     SpatialVector position = obstacle.getPosition();
-    obstacleMarker.pose.position.x = position.getX();
-    obstacleMarker.pose.position.y = position.getY();
-    obstacleMarker.pose.position.z = position.getZ();
-    obstacleMarker.pose.orientation.x = position.getQX();
-    obstacleMarker.pose.orientation.y = position.getQY();
-    obstacleMarker.pose.orientation.z = position.getQZ();
-    obstacleMarker.pose.orientation.w = position.getQW();
+    obstacleMarker.pose.position.x = position.getPosition().x();
+    obstacleMarker.pose.position.y = position.getPosition().y();
+    obstacleMarker.pose.position.z = position.getPosition().z();
+    obstacleMarker.pose.orientation.x = position.getOrientation().x();
+    obstacleMarker.pose.orientation.y = position.getOrientation().y();
+    obstacleMarker.pose.orientation.z = position.getOrientation().z();
+    obstacleMarker.pose.orientation.w = position.getOrientation().w();
     // Scale is the Diameter of the Sphere
     obstacleMarker.scale.x = obstacle.getRadius() * 2.0f;
     obstacleMarker.scale.y = obstacle.getRadius() * 2.0f;
@@ -92,9 +90,9 @@ MarkerArray PotentialFieldManager::createObstacleMarkers() {
     influenceMarker.id = id++;
     influenceMarker.type = Marker::SPHERE;
     influenceMarker.action = Marker::ADD;
-    influenceMarker.pose.position.x = position.getX();
-    influenceMarker.pose.position.y = position.getY();
-    influenceMarker.pose.position.z = position.getZ();
+    influenceMarker.pose.position.x = position.getPosition().x();
+    influenceMarker.pose.position.y = position.getPosition().y();
+    influenceMarker.pose.position.z = position.getPosition().z();
     influenceMarker.pose.orientation.w = 1.0;
     // Scale is the Diameter of the Sphere
     influenceMarker.scale.x = obstacle.getInfluenceRadius() * 2.0f;
@@ -119,11 +117,14 @@ Marker PotentialFieldManager::createGoalMarker() {
   goalMarker.id = 0;
   goalMarker.type = Marker::SPHERE;
   goalMarker.action = Marker::ADD;
-  SpatialVector goalPosition = this->pField.getGoalPosition();
-  goalMarker.pose.position.x = goalPosition.getX();
-  goalMarker.pose.position.y = goalPosition.getY();
-  goalMarker.pose.position.z = goalPosition.getZ();
-  goalMarker.pose.orientation.w = goalPosition.getQW();
+  SpatialVector goalPose = this->pField.getGoalPose();
+  goalMarker.pose.position.x = goalPose.getPosition().x();
+  goalMarker.pose.position.y = goalPose.getPosition().y();
+  goalMarker.pose.position.z = goalPose.getPosition().z();
+  goalMarker.pose.orientation.x = goalPose.getOrientation().x();
+  goalMarker.pose.orientation.y = goalPose.getOrientation().y();
+  goalMarker.pose.orientation.z = goalPose.getOrientation().z();
+  goalMarker.pose.orientation.w = goalPose.getOrientation().w();
   goalMarker.scale.x = 0.5;
   goalMarker.scale.y = 0.5;
   goalMarker.scale.z = 0.5;
@@ -140,35 +141,33 @@ MarkerArray PotentialFieldManager::createPotentialVectorMarkers() {
   int id = 0;
   // Discretize the space around the goal till the farthest obstacle
   // For now, let's hard-code 10x10 grid at a single Z-height
-  float Z = this->pField.getGoalPosition().getZ();
-  for (float x = -5.0f; x <= 5.0f; x += 1.0f) {
-    for (float y = -5.0f; y <= 5.0f; y += 1.0f) {
+  double Z = this->pField.getGoalPose().getPosition().z();
+  for (double x = -5.0f; x <= 5.0f; x += 1.0f) {
+    for (double y = -5.0f; y <= 5.0f; y += 1.0f) {
       Marker vectorMarker;
-      SpatialVector position{x, y, Z};
-      SpatialVector velocity = this->pField.computeVelocityAtPosition(position);
+      SpatialVector position{Eigen::Vector3d(x, y, Z)};
+      SpatialVector velocity = this->pField.evaluateVelocityAtPose(position);
+      double magnitude = velocity.getPosition().norm();
       // Normalize the velocity vector since we want to show direction
-      float magnitude = std::hypot(velocity.getX(), velocity.getY(), velocity.getZ());
-      if (magnitude > 0.0f) {
-        velocity /= magnitude; // Normalize
-      }
+      velocity.normalizePosition();
       vectorMarker.header.frame_id = "map";
       vectorMarker.header.stamp = this->now();
       vectorMarker.ns = "potential_vectors";
       vectorMarker.id = id++;
       vectorMarker.type = Marker::ARROW;
       vectorMarker.action = Marker::ADD;
-      vectorMarker.pose.position.x = position.getX();
-      vectorMarker.pose.position.y = position.getY();
-      vectorMarker.pose.position.z = position.getZ();
+      vectorMarker.pose.position.x = position.getPosition().x();
+      vectorMarker.pose.position.y = position.getPosition().y();
+      vectorMarker.pose.position.z = position.getPosition().z();
       // Set the orientation of the arrow to point in the direction of the velocity vector
-      float yaw = std::atan2(velocity.getY(), velocity.getX());
+      double yaw = std::atan2(velocity.getPosition().y(), velocity.getPosition().x());
       vectorMarker.pose.orientation = PotentialFieldManager::getQuaternionFromYaw(yaw);
       vectorMarker.scale.x = 0.15f; // Shaft diameter
       vectorMarker.scale.y = 0.3f; // Head diameter
       vectorMarker.scale.z = 0.75f; // Length of the arrow
       // Color the arrows using a gradient depending on
       // the magnitude of the velocity vector
-      float colorScale = std::min(magnitude / this->maxForce, 1.0f);
+      double colorScale = std::min<double>(magnitude / this->maxForce, 1.0f);
       vectorMarker.color.r = 1.0f - colorScale; // Red to yellow
       vectorMarker.color.g = colorScale; // Yellow to green
       vectorMarker.color.b = 0.0f; // No blue

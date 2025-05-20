@@ -19,6 +19,7 @@
 #include <math.h>
 #include "spatial_vector.hpp"
 #include "sphere_obstacle.hpp"
+#include <eigen3/Eigen/Dense>
 
  // Functionality to support:
  // 1. Track a Goal Position (Initialization and Update)
@@ -27,15 +28,24 @@
 
 class PotentialField {
 public:
+
   PotentialField() = default;
-  PotentialField(SpatialVector goalPosition)
-    : goalPosition(goalPosition) {
+
+  /**
+   * @brief Constructs a PotentialField with the specified goal position.
+   *        The attractive gain and rotational attractive gain are set to default values.
+   *
+   * @param goalPose The pose in 3D space that will generate an attractive force.
+   */
+  PotentialField(SpatialVector goalPose) :
+    goalPose(goalPose) {
   }
-  PotentialField(SpatialVector goalPosition, float attractiveGain, float rotationalAttractiveGain)
-    : attractiveGain(attractiveGain),
+
+  PotentialField(SpatialVector goalPose, double attractiveGain, double rotationalAttractiveGain) : attractiveGain(attractiveGain),
     rotationalAttractiveGain(rotationalAttractiveGain),
-    goalPosition(goalPosition) {
+    goalPose(goalPose) {
   }
+
   ~PotentialField() = default;
 
   /**
@@ -43,9 +53,11 @@ public:
  *
  * @note The Goal Position creates an attractive force towards it
  *
- * @param newGoalPosition The new goal position to be set.
+ * @param newGoalPose The new goal position to be set.
  */
-  void updateGoalPosition(SpatialVector newGoalPosition);
+  void updateGoalPosition(SpatialVector newGoalPose) {
+    this->goalPose = newGoalPose;
+  }
 
   /**
    * @brief Updates the attractive gain, scaling the force
@@ -53,14 +65,28 @@ public:
    *
    * @param newAttractiveGain The new attractive gain to be set.
    */
-  void updateAttractiveGain(float newAttractiveGain);
+  void updateAttractiveGain(double newAttractiveGain) {
+    this->attractiveGain = newAttractiveGain;
+  }
 
   /**
    * @brief Adds a new obstacle to the potential field.
    *
    * @param obstacle The obstacle to be added.
    */
-  void addObstacle(SphereObstacle obstacle);
+  void addObstacle(SphereObstacle obstacle) {
+    int id = obstacle.getID();
+    const auto it = std::find_if(this->obstacles.begin(), this->obstacles.end(),
+      [id](const SphereObstacle& obs) {return obs.getID() == id;});
+    if (it != this->obstacles.end()) {
+      // Obstacle with the same ID already exists, update it
+      *it = obstacle;
+      return;
+    } else {
+      // New obstacle, add it to the list
+      this->obstacles.push_back(obstacle);
+    }
+  }
 
   /**
    * @brief Attempts to remove an obstacle by ID.
@@ -69,41 +95,94 @@ public:
    * @param obstacleID  the ID of the obstacle obtained on obstacle creation.
    * @return true if the obstacle was removed successfully.
    */
-  bool removeObstacle(int obstacleID);
+  bool removeObstacle(int obstacleID) {
+    const auto it = std::remove_if(this->obstacles.begin(), this->obstacles.end(),
+      [obstacleID](const SphereObstacle& obs) {return obs.getID() == obstacleID;});
+    if (it != obstacles.end()) {
+      obstacles.erase(it, obstacles.end());
+      return true;
+    }
+    return false;
+  }
 
   /**
    * @brief Clears all obstacles from the potential field.
    */
-  void clearObstacles();
+  void clearObstacles() { this->obstacles.clear(); }
 
   /**
    * @brief Given a 3D position, computes the velocity vector
    *        by combining attractive and repulsive forces.
    *
-   * @param position The position in 3D space to compute the velocity vector.
-   * @return Vector The resultant velocity vector.
+   * @param queryPose The pose in 3D space to compute the velocity vector.
+   * @return SpatialVector The resultant velocity vector.
    */
-  SpatialVector computeVelocityAtPosition(SpatialVector position);
+  SpatialVector evaluateVelocityAtPose(SpatialVector queryPose) {
+    SpatialVector attractiveForce = this->computeAttractiveForces(queryPose);
+    SpatialVector repulsiveForce = this->computeRepulsiveForces(queryPose);
+    Eigen::Vector3d totalForce = attractiveForce.getPosition() + repulsiveForce.getPosition();
+    Eigen::Quaterniond totalOrientation = attractiveForce.getOrientation() * repulsiveForce.getOrientation();
+    // Normalize the total orientation quaternion
+    totalOrientation.normalize();
+    return SpatialVector(totalForce, totalOrientation);
+  }
 
-  SpatialVector getGoalPosition() const { return goalPosition; }
-  std::vector<SphereObstacle> getObstacles() const { return obstacles; }
+  SpatialVector getGoalPose() const { return this->goalPose; }
+  std::vector<SphereObstacle> getObstacles() const { return this->obstacles; }
 
 private:
-  float attractiveGain = 1.0f; // Gain for attractive force
-  float rotationalAttractiveGain = 0.7f; // Gain for rotational attractive force
-  SpatialVector goalPosition;
+  double attractiveGain = 1.0f; // Gain for attractive force
+  double rotationalAttractiveGain = 0.7f; // Gain for rotational attractive force
+  double translationalTolerance = 1e-3f; // Threshold for distances to the goal and obstacles
+  double rotationalThreshold = 0.06f; // Threshold for rotational geodesic distance
+  SpatialVector goalPose;
   std::vector<SphereObstacle> obstacles;
 
   /**
-   * @brief Computes the attractive force towards the goal position.
+   * @brief Computes the attractive force towards the goal pose. Also computes the
+   * rotational force to align the query pose with the goal pose.
    *
    * @note Equation: F = attractiveGain * (distace * direction)
    *       where direction is a unit vector pointing towards the goal.
    *
-   * @param position The position in 3D space to compute the force from.
-   * @return Vector The attractive force vector.
+   * @param queryPose The pose in 3D space to compute the force from.
+   * @return SpatialVector The attractive force vector.
    */
-  SpatialVector computeAttractiveForces(SpatialVector position);
+  SpatialVector computeAttractiveForces(SpatialVector queryPose) {
+    SpatialVector attractiveForce;
+    // Attractive force towards the goal position (pos - goal)
+    Eigen::Vector3d direction = queryPose.getPosition() - this->goalPose.getPosition();
+    // Normalize the direction vector
+    double distance = direction.norm();
+    // If distance is (near) zero, the translational force is zero
+    if (distance > this->translationalTolerance) {
+      direction /= distance; // Normalize
+      // Attractive force is negative
+      double magnitude = -this->attractiveGain * distance;
+      Eigen::Vector3d forceVector = direction * magnitude;
+      attractiveForce.setPosition(forceVector);
+    }
+    // Determine the orientation attraction to "rotate" the position towards the goal orientation
+    // We want to rotate the position towards the goal orientation
+    // So we can apply a rotational force proportional to the geodesic distance
+    Eigen::Quaterniond orientationDiff = queryPose.getOrientation().inverse() * this->goalPose.getOrientation();
+    double angularDistance = queryPose.angularDistance(this->goalPose);
+    // If geodesic distance is (near) zero, don't apply rotational force
+    if (angularDistance < this->rotationalThreshold) {
+      return attractiveForce;
+    } else {
+      // Apply a rotational force proportional to the geodesic distance and the gain
+      double rotationalMagnitude = -this->rotationalAttractiveGain * angularDistance;
+      // Apply the rotational force
+      orientationDiff.x() *= rotationalMagnitude;
+      orientationDiff.y() *= rotationalMagnitude;
+      orientationDiff.z() *= rotationalMagnitude;
+      orientationDiff.w() *= rotationalMagnitude;
+      orientationDiff.normalize();
+      attractiveForce.setOrientation(orientationDiff);
+    }
+    return attractiveForce;
+  }
 
   /**
    * @brief Computes the repulsive forces from all obstacles
@@ -112,10 +191,35 @@ private:
    * @note Equation: F = repulsiveGain * (1/distance - 1/influence) * (1 / distance^2) * direction
    *       where direction is a unit vector pointing away from the obstacle.
    *
-   * @param position The position in 3D space to compute the force from.
-   * @return Vector The repulsive force vector.
+   * @param queryPose The position in 3D space to compute the force from.
+   * @return SpatialVector The repulsive force vector.
    */
-  SpatialVector computeRepulsiveForces(SpatialVector position);
+  SpatialVector computeRepulsiveForces(SpatialVector queryPose) {
+    SpatialVector repulsiveForce;
+    // Copy the orientation from the query
+    repulsiveForce.setOrientation(queryPose.getOrientation());
+    Eigen::Vector3d repulsiveForceVector = Eigen::Vector3d::Zero();
+    for (const auto& obst : this->obstacles) {
+      // Each obstacle is a sphere
+      // Only calculate repulsive force if within influence radius
+      if (obst.withinInfluenceRadius(queryPose.getPosition())) {
+        Eigen::Vector3d obstPosition = obst.getPosition();
+        Eigen::Vector3d direction = queryPose.getPosition() - obstPosition;
+        // Normalize the direction vector
+        double distance = direction.norm();
+        // If distance is (near) zero, don't apply force
+        if (distance < this->translationalTolerance) { continue; }
+        direction /= distance; // Normalize the direction
+        // Calculate the repulsive force magnitude
+        double magnitude = obst.getRepulsiveGain() *
+          ((1 / distance) - (1 / obst.getInfluenceRadius())) * (1.0f / (distance * distance));
+        // Add the repulsive forces together
+        repulsiveForceVector += (direction * magnitude);
+      }
+    }
+    repulsiveForce.setPosition(repulsiveForceVector);
+    return repulsiveForce;
+  }
 };
 
 #endif // PFIELDS_HPP
