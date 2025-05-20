@@ -53,17 +53,17 @@ TEST(SpatialVectorTest, SetAndGetEulerAngles) {
   }
 }
 
-TEST(SpatialVectorTest, GeodesicDistance) {
+TEST(SpatialVectorTest, AngularDistance) {
   SpatialVector a;
   SpatialVector b;
   a.setOrientationEuler(0, 0, 0);
   b.setOrientationEuler(M_PI_2, 0, 0); // Yaw 90 degrees
-  EXPECT_NEAR(a.geodesicDistance(b), M_PI_2, 1e-5);
+  EXPECT_NEAR(a.angularDistance(b), M_PI_2, 1e-5);
   // Check the reverse operation since angles should be bounded by [0, pi]
-  EXPECT_NEAR(b.geodesicDistance(a), M_PI_2, 1e-5);
+  EXPECT_NEAR(b.angularDistance(a), M_PI_2, 1e-5);
   a.setOrientationEuler(0, 0, 0);
   b.setOrientationEuler(0, 0, 0);
-  EXPECT_NEAR(a.geodesicDistance(b), 0.0f, 1e-5);
+  EXPECT_NEAR(a.angularDistance(b), 0.0f, 1e-5);
 }
 
 TEST(SpatialVectorTest, OrientationNormalization) {

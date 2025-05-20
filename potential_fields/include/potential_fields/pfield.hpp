@@ -166,13 +166,13 @@ private:
     // We want to rotate the position towards the goal orientation
     // So we can apply a rotational force proportional to the geodesic distance
     Eigen::Quaterniond orientationDiff = queryPose.getOrientation().inverse() * this->goalPose.getOrientation();
-    double geodesicDistance = queryPose.geodesicDistance(this->goalPose);
+    double angularDistance = queryPose.angularDistance(this->goalPose);
     // If geodesic distance is (near) zero, don't apply rotational force
-    if (geodesicDistance < this->rotationalThreshold) {
+    if (angularDistance < this->rotationalThreshold) {
       return attractiveForce;
     } else {
       // Apply a rotational force proportional to the geodesic distance and the gain
-      double rotationalMagnitude = -this->rotationalAttractiveGain * geodesicDistance;
+      double rotationalMagnitude = -this->rotationalAttractiveGain * angularDistance;
       // Apply the rotational force
       orientationDiff.x() *= rotationalMagnitude;
       orientationDiff.y() *= rotationalMagnitude;

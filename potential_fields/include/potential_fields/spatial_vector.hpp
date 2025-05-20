@@ -91,26 +91,8 @@ public:
     this->position.normalize();
   }
 
-  double geodesicDistance(const SpatialVector& other) {
-    // Normalize the quaternions
-    Eigen::Quaterniond q1 = this->orientation;
-    Eigen::Quaterniond q2 = other.orientation;
-    q1.normalize();
-    q2.normalize();
-    // Compute the quaternion difference
-    Eigen::Quaterniond q_diff = q1.inverse() * q2;
-    // Compute the angle of rotation
-    double angle = 2.0f * std::acos(q_diff.w());
-    // Wrap to [0, pi]
-    if (angle > M_PI) {
-      angle -= (2.0f * M_PI);
-      angle = std::abs(angle);
-      q_diff.x() = -q_diff.x();
-      q_diff.y() = -q_diff.y();
-      q_diff.z() = -q_diff.z();
-      q_diff.w() = -q_diff.w();
-    }
-    return angle;
+  double angularDistance(const SpatialVector& other) {
+    return this->orientation.angularDistance(other.getOrientation());
   }
 
 public:
