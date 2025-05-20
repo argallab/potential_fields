@@ -64,6 +64,13 @@ TEST(SpatialVectorTest, AngularDistance) {
   a.setOrientationEuler(0, 0, 0);
   b.setOrientationEuler(0, 0, 0);
   EXPECT_NEAR(a.angularDistance(b), 0.0f, 1e-5);
+  b.setOrientationEuler(0, M_PI, 0); // Pitch 180 degrees
+  EXPECT_NEAR(a.angularDistance(b), M_PI, 1e-5);
+  a.setOrientationEuler(0, 0, M_PI_2); // Roll 90 degrees
+  b.setOrientationEuler(0, M_PI_2, M_PI_2); // Roll and Pitch 90 degrees
+  // Check both directions (should be the same)
+  EXPECT_NEAR(a.angularDistance(b), M_PI_2, 1e-5);
+  EXPECT_NEAR(b.angularDistance(a), M_PI_2, 1e-5);
 }
 
 TEST(SpatialVectorTest, OrientationNormalization) {
