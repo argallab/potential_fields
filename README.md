@@ -121,7 +121,7 @@ Where:
 - $\epsilon$ parameterizes when to stop gradient descent
 - $\alpha_i$ is a step-size (learning rate) to progress towards the gradient (specific to each iteration)
 
-## Rotational Potential
+## Rotational Attraction
 Geodesic distance $\theta$ is the distance between two unit quaternions $q_1$ and $q_2$ (shortest angle of rotation required to align one orientation with the other on $\mathcal{S}^3$), bound to $\theta \in [0, \pi]$ is.
 
 We can use the geodesic distance $\theta$ and a rotational attractive gain parameter $\omega$ ($0.7$ in original implementation) to scale the quaternion representing the difference $q_{diff}$ to act as a rotational attraction force:
@@ -129,9 +129,11 @@ We can use the geodesic distance $\theta$ and a rotational attractive gain param
 $$
 \begin{align}
 q_{diff} &= \underbrace{\langle(q_1)^{-1} , q_2\rangle}_{Quaternion Product} \\
-q_{diff} &= q_{diff} \cdot \omega
+q_{attr} &= q_{diff} \cdot \omega
 \end{align}
 $$
+
+$q_{attr}$ is the rotational attraction to orient the query pose towards the goal orientation.
 
 # Robots to test
 Robot Arms the Argallab uses:
