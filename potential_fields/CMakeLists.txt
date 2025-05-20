@@ -14,6 +14,7 @@ enable_testing()
 find_package(ament_cmake REQUIRED)
 find_package(ament_cmake_gtest REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(potential_fields_interfaces REQUIRED)
 find_package(Doxygen)
 find_package(geometry_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
@@ -29,14 +30,17 @@ ament_add_gtest(test_pfields
 
 include_directories(
   include/potential_fields
+  ${deltarobot_interfaces_INCLUDE_DIRS}
 )
 add_executable(pfield_manager src/pfield_manager.cpp)
 ament_target_dependencies(
   pfield_manager
   rclcpp
+  potential_fields_interfaces
   geometry_msgs
   visualization_msgs
 )
+target_link_libraries(pfield_manager ${deltarobot_interfaces_LIBRARIES})
 
 install(TARGETS
   pfield_manager
