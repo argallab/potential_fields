@@ -47,12 +47,22 @@ TEST(PotentialFieldTest, VelocityAtGoalIsZero) {
 
 TEST(PotentialFieldTest, AttractiveFieldPullsTowardGoal) {
   SpatialVector goal;
-  PotentialField pf(goal, 2.0f, 0.0f);
+  PotentialField pf(goal, 1.0f, 0.0f);
   SpatialVector query(Eigen::Vector3d(1.0f, 0.0f, 0.0f));
   SpatialVector vel = pf.evaluateVelocityAtPose(query);
   EXPECT_LT(vel.getPosition().x(), 0);  // should pull toward origin
   EXPECT_NEAR(vel.getPosition().y(), 0.0f, 1e-5);
   EXPECT_NEAR(vel.getPosition().z(), 0.0f, 1e-5);
+}
+
+TEST(PotentialFieldTest, AttractiveGainScaling) {
+  SpatialVector goal(Eigen::Vector3d::Zero());
+  PotentialField pf(goal, 3.0, 0.0);
+  SpatialVector query(Eigen::Vector3d(2.0, 0.0, 0.0));
+  SpatialVector vel = pf.evaluateVelocityAtPose(query);
+  // magnitude = gain * distance = 3 * 2 = 6, direction toward goal: negative x
+  EXPECT_NEAR(vel.getPosition().x(), -6.0, 1e-6);
+  EXPECT_NEAR(vel.getPosition().y(), 0.0, 1e-6);
 }
 
 TEST(PotentialFieldTest, RepulsiveFieldPushesAwayFromObstacle) {
@@ -90,6 +100,31 @@ TEST(PotentialFieldTest, RepulsionAtSurfaceBoundary) {
   EXPECT_GT(v3.getPosition().x(), 0.0f);  // Should be pushing away from obstacle
 }
 
+TEST(PotentialFieldTest, RepulsionMonotonicity) {
+  SpatialVector goal; // Default goal at origin
+  PotentialField pf(goal, 0.0, 0.0);
+  SphereObstacle obs(1, Eigen::Vector3d::Zero(), 0.5, 4.0, 2.0);
+  pf.addObstacle(obs);
+  SpatialVector q1(Eigen::Vector3d(1.0, 0.0, 0.0));
+  SpatialVector q2(Eigen::Vector3d(2.0, 0.0, 0.0));
+  auto v1 = pf.evaluateVelocityAtPose(q1);
+  auto v2 = pf.evaluateVelocityAtPose(q2);
+  // both push along +x; closer point should see stronger force
+  EXPECT_GT(v1.getPosition().x(), v2.getPosition().x());
+}
+
+TEST(PotentialExtensiveTest, SymmetricObstaclesCancelAxes) {
+  SpatialVector goal; // Default goal at origin
+  PotentialField pf(goal, 0.0, 0.0);
+  pf.addObstacle(SphereObstacle(1, Eigen::Vector3d(-1, 0, 0), 0.5, 3.0, 5.0));
+  pf.addObstacle(SphereObstacle(2, Eigen::Vector3d(1, 0, 0), 0.5, 3.0, 5.0));
+  SpatialVector q(Eigen::Vector3d(0, 2.0, 0));  // directly above both
+  auto vel = pf.evaluateVelocityAtPose(q);
+  // x‐components should cancel, only y‐component remains
+  EXPECT_NEAR(vel.getPosition().x(), 0.0, 1e-5);
+  EXPECT_GT(vel.getPosition().y(), 0.0);
+}
+
 
 TEST(PotentialFieldTest, RotationalAttraction) {
   SpatialVector goal;
@@ -106,6 +141,18 @@ TEST(PotentialFieldTest, RotationalAttraction) {
   EXPECT_NEAR(vel.getOrientation().y(), 0.0f, 1e-3);
   EXPECT_NEAR(vel.getOrientation().z(), 0.0f, 1e-3);
   EXPECT_NEAR(vel.getOrientation().w(), -1.0f, 1e-3);  // Should be rotating towards goal
+}
+
+TEST(PotentialFieldTest, TranslationAndRotation) {
+  SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
+  SpatialVector query(Eigen::Vector3d(1.0, 0.0, 0.0));
+  query.setOrientationEuler(0, 0, M_PI_2);
+  PotentialField pf(goal, 1.0, 10.0);
+  auto vel = pf.evaluateVelocityAtPose(query);
+  // translational: pulls toward origin (x < 0)
+  EXPECT_LT(vel.getPosition().x(), 0.0);
+  // rotational: orients toward identity, so quaternion should have a negative w‐component after multiplication
+  EXPECT_LT(vel.getOrientation().w(), 0.0);
 }
 
 
