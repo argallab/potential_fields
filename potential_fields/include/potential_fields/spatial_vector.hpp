@@ -21,8 +21,6 @@
 
 class SpatialVector {
 public:
-  // Constructors and Destructor
-
   SpatialVector() :
     position(Eigen::Vector3d::Zero()),
     orientation(Eigen::Quaterniond::Identity()) {
@@ -55,6 +53,13 @@ public:
 
   void setPosition(const Eigen::Vector3d& position) { this->position = position; }
 
+  /**
+   * @brief Set the orientation of the spatial vector using an Eigen::Quaterniond
+   *
+   * @note The quaternion is normalized upon setting to maintain validity.
+   *
+   * @param orientation The Eigen::Quaterniond representing the orientation
+   */
   void setOrientation(const Eigen::Quaterniond& orientation) {
     this->orientation = orientation;
     this->orientation.normalize();
@@ -77,14 +82,28 @@ public:
     this->orientation.normalize();
   }
 
+  /**
+   * @brief Computes the euclidean distance between this spatial vector's position
+   *        and the other spatial vector's position.
+   *
+   * @param other the other spatial vector to compare its position
+   * @return double  the euclidean distance in the same units as the position vector [m]
+   */
   double euclideanDistance(const SpatialVector& other) const {
     return (this->position - other.position).norm();
   }
 
-  void normalizePosition() {
-    this->position.normalize();
-  }
+  void normalizePosition() { this->position.normalize(); }
 
+  /**
+   * @brief Returns the geodesic (angular) distance between this spatial vector's orientation
+   *        and the other spatial vector's orientation.
+   *
+   * @note The distance is in radians and bounded by [0, pi]
+   *
+   * @param other the other spatial vector to compare its orientation
+   * @return double the geodesic distance [rad]
+   */
   double angularDistance(const SpatialVector& other) {
     return this->orientation.angularDistance(other.getOrientation());
   }
