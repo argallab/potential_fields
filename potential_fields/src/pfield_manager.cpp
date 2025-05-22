@@ -13,14 +13,12 @@ PotentialFieldManager::PotentialFieldManager()
   this->rotationalAttractiveGain = this->declare_parameter("rotational_attractive_gain", 0.7f); // [N]
   this->repulsiveGain = this->declare_parameter("repulsive_gain", 1.0f); // [N]
   this->maxForce = this->declare_parameter("max_force", 10.0f); // [N]
-  this->influenceRadiusScalar = this->declare_parameter("influence_radius_scale", 2.0f); // Scale for influence radius
   // Get parameters from yaml file
   this->timerFreq = this->get_parameter("timer_frequency").as_double();
   this->attractiveGain = this->get_parameter("attractive_gain").as_double();
   this->rotationalAttractiveGain = this->get_parameter("rotational_attractive_gain").as_double();
   this->repulsiveGain = this->get_parameter("repulsive_gain").as_double();
   this->maxForce = this->get_parameter("max_force").as_double();
-  this->influenceRadiusScalar = this->get_parameter("influence_radius_scale").as_double();
 
   // Setup marker publisher
   this->markerPub = this->create_publisher<MarkerArray>("visualization_marker_array", 10);

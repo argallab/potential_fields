@@ -37,7 +37,6 @@ private:
   double rotationalAttractiveGain; // Rotational attractive gain [N]
   double repulsiveGain; // Repulsive gain [N]
   double maxForce; // Maximum force [N]
-  double influenceRadiusScalar; // Scale for influence radius
   SpatialVector queryPoint; // Query point for the potential field to "animate"
 
   // Potential field object
