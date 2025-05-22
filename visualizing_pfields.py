@@ -33,9 +33,10 @@ def create_basic_field():
 
 
 class Obstacle:
-    def __init__(self, position, radius):
+    def __init__(self, position, radius, influence_radius=None):
         self.position = position
         self.radius = radius
+        self.influence_radius = influence_radius if influence_radius else 2 * radius
 
     def is_inside(self, point):
         return np.linalg.norm(point - self.position) < self.radius
@@ -44,9 +45,9 @@ class Obstacle:
         # Calculate the distance from the point to the edge of the obstacle
         return np.linalg.norm(point - self.position) - self.radius
 
-    def within_influence(self, point, influence_radius):
+    def within_influence(self, point):
         # Check if the point is within the influence radius of the obstacle
-        return np.linalg.norm(point - self.position) <= (self.radius + influence_radius)
+        return np.linalg.norm(point - self.position) <= (self.radius + self.influence_radius)
 
 
 def getAttractiveVector(point, goalPoint, attractive_gain=2.0, max_force=5.0):
@@ -271,8 +272,56 @@ def graph_forces():
     # plt.show()
 
 
+def draw_pfield_from_csv(pfield_vectors, pfield_obstacles):
+    # Read the csv files
+    pfield_data = np.genfromtxt(pfield_vectors, delimiter=',', skip_header=1)
+    obstacle_data = np.genfromtxt(
+        pfield_obstacles, delimiter=',', skip_header=1)
+    # pfield_data -> grid_x,grid_y,grid_z,vel_x,vel_y,vel_z
+    # obstacle_data -> obstacle_x,obstacle_y,obstacle_z,radius,influence
+    obstacles = []
+    for obst in obstacle_data:
+        obstacles.append(
+            Obstacle(np.array([obst[0], obst[1]]), obst[3], obst[4]))
+    X = pfield_data[:, 0]
+    Y = pfield_data[:, 1]
+    # Z = pfield_data[:, 2]
+    U = pfield_data[:, 3]
+    V = pfield_data[:, 4]
+    # W = pfield_data[:, 5]
+    # Create a 2D plot since Z is always 0
+    fig, ax = plt.subplots()
+    magnitude = np.sqrt(U**2 + V**2)
+    q = ax.quiver(X, Y, U, V, magnitude, cmap='viridis')
+    plt.colorbar(q, ax=ax, label='Magnitude')
+    # Plot the obstacles
+    for obs in obstacles:
+        # circle = plt.Circle((obs[0], obs[1]), obs[3], color='r', alpha=0.5)
+        circle = plt.Circle(obs.position, obs.radius, color='r', alpha=1.0)
+        ax.add_artist(circle)
+        # Plot influence radius
+        # influence_circle = plt.Circle(
+        #     (obs[0], obs[1]), color='y', alpha=0.2)
+        influence_circle = plt.Circle(
+            obs.position, obs.influence_radius, color='y', alpha=0.4)
+        ax.add_artist(influence_circle)
+    # Set the limits and labels
+    ax.set_xlim(-5, 5)
+    ax.set_ylim(-5, 5)
+    ax.set_xlabel('X-axis')
+    ax.set_ylabel('Y-axis')
+    ax.set_title('Vector Field from CSV')
+    ax.set_aspect('equal', adjustable='box')
+    # Show the plot
+    plt.grid()
+    plt.show()
+    # plt.savefig("pfield_from_csv.png")
+
+
 if __name__ == "__main__":
-    create_basic_field()
-    graph_forces()
-    create_2D_vector_field_with_obstacles()
-    create_3D_vector_field_with_obstacles()
+    draw_pfield_from_csv("pfield_data_vectors.csv",
+                         "pfield_data_obstacles.csv")
+    # create_basic_field()
+    # graph_forces()
+    # create_2D_vector_field_with_obstacles()
+    # create_3D_vector_field_with_obstacles()

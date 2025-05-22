@@ -1,6 +1,7 @@
 #include "rclcpp/rclcpp.hpp"
 #include "pfield_manager.hpp"
 #include "pfield.hpp"
+#include <fstream>
 
 PotentialFieldManager::PotentialFieldManager()
   : Node("potential_field_manager") {
@@ -41,9 +42,15 @@ PotentialFieldManager::PotentialFieldManager()
   );
 
   // Initialize the potential field
-  this->pField = PotentialField(SpatialVector{}, this->attractiveGain, this->rotationalAttractiveGain);
+  this->pField = PotentialField(SpatialVector{Eigen::Vector3d::Zero()}, this->attractiveGain, this->rotationalAttractiveGain);
   this->pField.addObstacle(SphereObstacle(0, Eigen::Vector3d(3, 3, 0), 1.0f, 2.0f, this->repulsiveGain));
-  this->pField.addObstacle(SphereObstacle(1, Eigen::Vector3d(-5, -5, 0), 1.5f, 2.5f, this->repulsiveGain));
+  this->pField.addObstacle(SphereObstacle(1, Eigen::Vector3d(-1.5, -1, 0), 1.5f, 2.5f, this->repulsiveGain));
+
+  // Create a CSV file to store the potential field data for python to plot
+  std::string filename = "pfield_data";
+  this->createCSV(filename);
+
+  this->queryPoint = SpatialVector(Eigen::Vector3d(8, 4, 0));
 
   // Run the timer for visualizing the potential field
   this->timer = this->create_wall_timer(
@@ -54,6 +61,24 @@ PotentialFieldManager::PotentialFieldManager()
 
 void PotentialFieldManager::timerCallback() {
   this->visualizePF();
+  this->updateQueryPoint();
+}
+
+void PotentialFieldManager::updateQueryPoint() {
+  // If the query point is near the goal, reset it to a random position
+  double distanceToGoal = this->queryPoint.euclideanDistance(this->pField.getGoalPose());
+  if (distanceToGoal < 0.5) {
+    // Reset the query point to a random position
+    double x = static_cast<double>(rand()) / RAND_MAX * 10.0 - 5.0; // Random x between -5 and 5
+    double y = static_cast<double>(rand()) / RAND_MAX * 10.0 - 5.0; // Random y between -5 and 5
+    this->queryPoint.setPosition(Eigen::Vector3d(x, y, 0));
+  }
+  double period = (1.0f / this->timerFreq); // Period of the timer
+  SpatialVector velocity = this->pField.evaluateVelocityAtPose(queryPoint);
+  // Determine the new position of the query point depending on the velocity and the period
+  double scale = 0.1; // Scale factor for the velocity so it's not too fast
+  Eigen::Vector3d newPosition = queryPoint.getPosition() + (velocity.getPosition() * period * scale);
+  this->queryPoint.setPosition(newPosition);
 }
 
 void PotentialFieldManager::visualizePF() {
@@ -67,6 +92,9 @@ void PotentialFieldManager::visualizePF() {
   auto potentialVectorMarkers = this->createPotentialVectorMarkers();
   markerArray.markers.insert(markerArray.markers.cend(), potentialVectorMarkers.markers.cbegin(),
     potentialVectorMarkers.markers.cend());
+  auto queryPointMarker = this->createQueryPointMarker();
+  markerArray.markers.insert(markerArray.markers.cend(), queryPointMarker.markers.cbegin(),
+    queryPointMarker.markers.cend());
   // Publish the marker array
   this->markerPub->publish(markerArray);
 }
@@ -200,42 +228,121 @@ MarkerArray PotentialFieldManager::createPotentialVectorMarkers() {
   int id = 0;
   // Discretize the space around the goal till the farthest obstacle
   // For now, let's hard-code 10x10 grid at a single Z-height
-  double Z = this->pField.getGoalPose().getPosition().z();
-  for (double x = -5.0f; x <= 5.0f; x += 1.0f) {
-    for (double y = -5.0f; y <= 5.0f; y += 1.0f) {
-      Marker vectorMarker;
-      SpatialVector position{Eigen::Vector3d(x, y, Z)};
-      SpatialVector velocity = this->pField.evaluateVelocityAtPose(position);
-      double magnitude = velocity.getPosition().norm();
-      // Normalize the velocity vector since we want to show direction
-      velocity.normalizePosition();
-      vectorMarker.header.frame_id = "map";
-      vectorMarker.header.stamp = this->now();
-      vectorMarker.ns = "potential_vectors";
-      vectorMarker.id = id++;
-      vectorMarker.type = Marker::ARROW;
-      vectorMarker.action = Marker::ADD;
-      vectorMarker.pose.position.x = position.getPosition().x();
-      vectorMarker.pose.position.y = position.getPosition().y();
-      vectorMarker.pose.position.z = position.getPosition().z();
-      // Set the orientation of the arrow to point in the direction of the velocity vector
-      double yaw = std::atan2(velocity.getPosition().y(), velocity.getPosition().x());
-      vectorMarker.pose.orientation = PotentialFieldManager::getQuaternionFromYaw(yaw);
-      vectorMarker.scale.x = 0.15f; // Shaft diameter
-      vectorMarker.scale.y = 0.3f; // Head diameter
-      vectorMarker.scale.z = 0.75f; // Length of the arrow
-      // Color the arrows using a gradient depending on
-      // the magnitude of the velocity vector
-      double colorScale = std::min<double>(magnitude / this->maxForce, 1.0f);
-      vectorMarker.color.r = 1.0f - colorScale; // Red to yellow
-      vectorMarker.color.g = colorScale; // Yellow to green
-      vectorMarker.color.b = 0.0f; // No blue
-      vectorMarker.color.a = 0.75f; // Semi-transparent
-      vectorMarker.lifetime = rclcpp::Duration(0, 0); // No lifetime
-      markerArray.markers.push_back(vectorMarker);
+  const double Z = this->pField.getGoalPose().getPosition().z();
+  const double res = 0.5f; // Resolution of the grid
+  for (double x = -5.0f; x <= 5.0f; x += res) {
+    for (double y = -5.0f; y <= 5.0f; y += res) {
+      for (double z = -5.0f; z <= 5.0f; z += res) {
+        // Skip the Z-axis since we are only interested in the XY plane for now
+        if (z != Z) { continue; }
+        // Skip any points that are inside obstacle radius
+        Eigen::Vector3d point(x, y, z);
+        if (this->pField.isPointInsideObstacle(point)) {
+          continue;
+        }
+        Marker vectorMarker;
+        SpatialVector position{point};
+        SpatialVector velocity = this->pField.evaluateVelocityAtPose(position);
+        double magnitude = velocity.getPosition().norm();
+        // Normalize the velocity vector since we want to show direction
+        velocity.normalizePosition();
+        vectorMarker.header.frame_id = "map";
+        vectorMarker.header.stamp = this->now();
+        vectorMarker.ns = "potential_vectors";
+        vectorMarker.id = id++;
+        vectorMarker.type = Marker::ARROW;
+        vectorMarker.action = Marker::ADD;
+        vectorMarker.pose.position.x = position.getPosition().x();
+        vectorMarker.pose.position.y = position.getPosition().y();
+        vectorMarker.pose.position.z = position.getPosition().z();
+        // Set the orientation of the arrow to point in the direction of the velocity vector
+        double yaw = std::atan2(velocity.getPosition().y(), velocity.getPosition().x());
+        vectorMarker.pose.orientation = PotentialFieldManager::getQuaternionFromYaw(yaw);
+        vectorMarker.scale.x = 0.2f; // Length of the arrow
+        vectorMarker.scale.y = 0.1f; // Shaft diameter
+        vectorMarker.scale.z = 0.15f;// Head diameter
+        // Color the arrows using a gradient depending on
+        // the magnitude of the velocity vector
+        // maxForce is red and 0 is blue
+        double colorScale = std::min<double>(magnitude / this->maxForce, 1.0f);
+        vectorMarker.color.r = 1.0f - colorScale;
+        vectorMarker.color.g = 0.0f;
+        vectorMarker.color.b = colorScale;
+        vectorMarker.color.a = 0.75f; // Semi-transparent
+        vectorMarker.lifetime = rclcpp::Duration(0, 0); // No lifetime
+        markerArray.markers.push_back(vectorMarker);
+      }
     }
   }
   return markerArray;
+}
+
+MarkerArray PotentialFieldManager::createQueryPointMarker() {
+  MarkerArray markerArray;
+  Marker queryPointMarker;
+  queryPointMarker.header.frame_id = "map";
+  queryPointMarker.header.stamp = this->now();
+  queryPointMarker.ns = "query_point";
+  queryPointMarker.id = 0;
+  queryPointMarker.type = Marker::SPHERE;
+  queryPointMarker.action = Marker::ADD;
+  queryPointMarker.pose.position.x = this->queryPoint.getPosition().x();
+  queryPointMarker.pose.position.y = this->queryPoint.getPosition().y();
+  queryPointMarker.pose.position.z = this->queryPoint.getPosition().z();
+  queryPointMarker.scale.x = 0.4f; // Diameter
+  queryPointMarker.scale.y = 0.4f; // Diameter
+  queryPointMarker.scale.z = 0.4f; // Diameter
+  queryPointMarker.color.r = 0.0f;
+  queryPointMarker.color.g = 0.0f;
+  queryPointMarker.color.b = 1.0f;
+  queryPointMarker.color.a = 1.0f; // Opaque
+  queryPointMarker.lifetime = rclcpp::Duration(0, 0); // No lifetime
+  markerArray.markers.push_back(queryPointMarker);
+  return markerArray;
+}
+
+
+void PotentialFieldManager::createCSV(const std::string& base_filename) {
+  // Write obstacle positions to a CSV file
+  std::string obstacles_filename = base_filename + "_obstacles.csv";
+  std::ofstream obstacles_file(obstacles_filename);
+  if (obstacles_file.is_open()) {
+    obstacles_file << "obstacle_x,obstacle_y,obstacle_z,radius,influence\n";
+    for (const auto& obstacle : this->pField.getObstacles()) {
+      const Eigen::Vector3d& position = obstacle.getPosition();
+      obstacles_file << position.x() << "," << position.y() << "," << position.z() << ","
+        << obstacle.getRadius() << "," << obstacle.getInfluenceRadius() << "\n";
+    }
+    obstacles_file.close();
+  } else {
+    RCLCPP_ERROR(this->get_logger(), "Unable to open file: %s", obstacles_filename.c_str());
+  }
+
+  // Write velocity vectors in a 10x10 grid at Z = 0 to a separate CSV file
+  std::string vectors_filename = base_filename + "_vectors.csv";
+  std::ofstream vectors_file(vectors_filename);
+  if (vectors_file.is_open()) {
+    vectors_file << "grid_x,grid_y,grid_z,vel_x,vel_y,vel_z\n";
+    const double z = 0.0;
+    const double res = 1.0; // 10x10 grid from -5 to 5
+    for (double x = -5.0; x <= 5.0; x += res) {
+      for (double y = -5.0; y <= 5.0; y += res) {
+        Eigen::Vector3d point(x, y, z);
+        if (this->pField.isPointInsideObstacle(point)) {
+          continue;
+        }
+        SpatialVector position{point};
+        SpatialVector velocity = this->pField.evaluateVelocityAtPose(position);
+        vectors_file << x << "," << y << "," << z << ","
+          << velocity.getPosition().x() << ","
+          << velocity.getPosition().y() << ","
+          << velocity.getPosition().z() << "\n";
+      }
+    }
+    vectors_file.close();
+  } else {
+    RCLCPP_ERROR(this->get_logger(), "Unable to open file: %s", vectors_filename.c_str());
+  }
 }
 
 int main(int argc, char* argv[]) {

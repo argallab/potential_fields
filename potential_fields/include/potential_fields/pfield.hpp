@@ -122,13 +122,21 @@ public:
     SpatialVector repulsiveForce = this->computeRepulsiveForces(queryPose);
     Eigen::Vector3d totalForce = attractiveForce.getPosition() + repulsiveForce.getPosition();
     Eigen::Quaterniond totalOrientation = attractiveForce.getOrientation() * repulsiveForce.getOrientation();
-    // Normalize the total orientation quaternion
     totalOrientation.normalize();
     return SpatialVector(totalForce, totalOrientation);
   }
 
   SpatialVector getGoalPose() const { return this->goalPose; }
   std::vector<SphereObstacle> getObstacles() const { return this->obstacles; }
+
+  bool isPointInsideObstacle(Eigen::Vector3d point) const {
+    for (const auto& obst : this->obstacles) {
+      if (obst.withinRadius(point)) {
+        return true;
+      }
+    }
+    return false;
+  }
 
 private:
   double attractiveGain = 1.0f; // Gain for attractive force
@@ -152,11 +160,10 @@ private:
     SpatialVector attractiveForce;
     // Attractive force towards the goal position (pos - goal)
     Eigen::Vector3d direction = queryPose.getPosition() - this->goalPose.getPosition();
-    // Normalize the direction vector
     double distance = direction.norm();
     // If distance is (near) zero, the translational force is zero
     if (distance > this->translationalTolerance) {
-      direction /= distance; // Normalize
+      direction.normalize();
       // Attractive force is negative
       double magnitude = -this->attractiveGain * distance;
       Eigen::Vector3d forceVector = direction * magnitude;
@@ -209,7 +216,7 @@ private:
         double distance = direction.norm();
         // If distance is (near) zero, don't apply force
         if (distance < this->translationalTolerance) { continue; }
-        direction /= distance; // Normalize the direction
+        direction.normalize();
         // Calculate the repulsive force magnitude
         double magnitude = obst.getRepulsiveGain() *
           ((1 / distance) - (1 / obst.getInfluenceRadius())) * (1.0f / (distance * distance));
