@@ -128,12 +128,14 @@ We can use the geodesic distance $\theta$ and a rotational attractive gain param
 
 $$
 \begin{align}
-q_{diff} &= \underbrace{\langle(q_1)^{-1} , q_2\rangle}_{Quaternion Product} \\
+q_{diff} &= \langle\left(q_1\right)^{-1} , q_2 \rangle \\
 q_{attr} &= q_{diff} \cdot \omega
 \end{align}
 $$
 
-$q_{attr}$ is the rotational attraction to orient the query pose towards the goal orientation.
+Where:
+- $\langle q_1, q_2 \rangle$ is the quaternion product of $q_1$ and $q_2$.
+- $q_{attr}$ is the rotational attraction to orient the query pose towards the goal orientation.
 
 # Robots to test
 Robot Arms the Argallab uses:
