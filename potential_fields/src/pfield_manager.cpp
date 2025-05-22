@@ -289,9 +289,9 @@ MarkerArray PotentialFieldManager::createQueryPointMarker() {
   queryPointMarker.pose.position.x = this->queryPoint.getPosition().x();
   queryPointMarker.pose.position.y = this->queryPoint.getPosition().y();
   queryPointMarker.pose.position.z = this->queryPoint.getPosition().z();
-  queryPointMarker.scale.x = 0.4f; // Diameter
-  queryPointMarker.scale.y = 0.4f; // Diameter
-  queryPointMarker.scale.z = 0.4f; // Diameter
+  queryPointMarker.scale.x = 0.3f; // Diameter
+  queryPointMarker.scale.y = 0.3f; // Diameter
+  queryPointMarker.scale.z = 0.3f; // Diameter
   queryPointMarker.color.r = 0.0f;
   queryPointMarker.color.g = 0.0f;
   queryPointMarker.color.b = 1.0f;
