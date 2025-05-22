@@ -6,7 +6,6 @@
 
 class SphereObstacle {
 public:
-  // Constructors and Destructor
   SphereObstacle() = default;
   SphereObstacle(int id, Eigen::Vector3d position, double radius, double influenceRadius, double repulsiveGain)
     : id(id),
@@ -17,16 +16,11 @@ public:
   }
   ~SphereObstacle() = default;
 
-public:
-  // Getters and Setters
   Eigen::Vector3d getPosition() const { return this->position; }
   double getRadius() const { return this->radius; }
   int getID() const { return this->id; }
   double getInfluenceRadius() const { return this->influenceRadius; }
   double getRepulsiveGain() const { return this->repulsiveGain; }
-
-public:
-  // Class Methods
 
   bool withinInfluenceRadius(Eigen::Vector3d pos) const {
     double euclideanDistance = (pos - this->position).norm();
@@ -37,9 +31,6 @@ public:
     double euclideanDistance = (pos - this->position).norm();
     return euclideanDistance <= this->radius;
   }
-
-public:
-  // Operator Overloads
 
   bool operator==(const SphereObstacle& other) const {
     return  this->position == other.position && this->radius == other.radius;

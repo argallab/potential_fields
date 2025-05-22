@@ -40,9 +40,6 @@ public:
 
   ~SpatialVector() = default;
 
-public:
-  // Getters and Setters
-
   const Eigen::Vector3d& getPosition() const { return this->position; }
   const Eigen::Quaterniond& getOrientation() const { return this->orientation; }
 
@@ -80,9 +77,6 @@ public:
     this->orientation.normalize();
   }
 
-public:
-  // Vector Operations
-
   double euclideanDistance(const SpatialVector& other) const {
     return (this->position - other.position).norm();
   }
@@ -95,8 +89,6 @@ public:
     return this->orientation.angularDistance(other.getOrientation());
   }
 
-public:
-  // Operator Overloads
   bool operator==(const SpatialVector& other) const {
     return  this->position == other.position && this->orientation == other.orientation;
   }
