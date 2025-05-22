@@ -6,7 +6,7 @@
 
 class SphereObstacle {
 public:
-  SphereObstacle() = default;
+  SphereObstacle() = delete;
   SphereObstacle(int id, Eigen::Vector3d position, double radius, double influenceRadius, double repulsiveGain)
     : id(id),
     position(position),
