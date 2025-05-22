@@ -33,6 +33,11 @@ public:
     return euclideanDistance <= this->influenceRadius;
   }
 
+  bool withinRadius(Eigen::Vector3d pos) const {
+    double euclideanDistance = (pos - this->position).norm();
+    return euclideanDistance <= this->radius;
+  }
+
 public:
   // Operator Overloads
 

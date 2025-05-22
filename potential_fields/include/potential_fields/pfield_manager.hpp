@@ -38,6 +38,7 @@ private:
   double repulsiveGain; // Repulsive gain [N]
   double maxForce; // Maximum force [N]
   double influenceRadiusScalar; // Scale for influence radius
+  SpatialVector queryPoint; // Query point for the potential field to "animate"
 
   // Potential field object
   PotentialField pField;
@@ -51,10 +52,15 @@ private:
   // Subscriber for the goal pose
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goalPoseSub;
 
+  void updateQueryPoint();
+
   void visualizePF();
   MarkerArray createObstacleMarkers();
   MarkerArray createGoalMarker();
   MarkerArray createPotentialVectorMarkers();
+  MarkerArray createQueryPointMarker();
+
+  void createCSV(const std::string& filename);
 
   void timerCallback();
 };

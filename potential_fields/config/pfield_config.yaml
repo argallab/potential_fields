@@ -3,6 +3,6 @@ pfield_manager:
     timer_frequency: 10.0 # [Hz]
     attractive_gain: 1.0 # [N]
     rotational_attractive_gain: 0.7 # [N]
-    repulsive_gain: 1.0 # [N]
+    repulsive_gain: 20.0 # [N]
     max_force: 10.0 # [N]
     influence_radius_scale: 1.5 # Scale factor of obstacle's radius to calculate influence radius
