@@ -56,6 +56,7 @@ These nodes will be reimplemented in ROS 2 written in C++. The project proposal 
 These equations were obtained from a [Columbia Presentation on Potential Field Path Planning](https://www.cs.columbia.edu/~allen/F17/NOTES/potentialfield.pdf). The paper: [Real-Time Obstacle Avoidance for Manipulators and Mobile Robots](https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=1087247) is the original reference for these equations and describe the derivation of the potential equations, how to obtain the gradients, and how to obtain a velocity from the gradients.
 
 The potential functions are scalar fields representing potential energy (Newton-meters [Nm]). The gradient of the potential is represented as a force (Newtons [N]). To obtain velocity vectors, we use some parameter ($\zeta$ and $\eta$) that acts as an inverse damping coefficient (Newton-seconds / meter [Ns/m]) to convert the force into a velocity (meters / second [m/s]).
+
 ## Attractive Potential
 Attractive Potential is computed using a continuously differentiable function (quadratic function of distance)
 
@@ -71,6 +72,22 @@ $$
 Where:
 - $\zeta$ is the *attractive gain* parameter 
 - $D\left(q, q_{goal}\right)$ is the euclidean distance between vector $q$ and $q_{goal}$
+
+## Rotational Attraction
+Geodesic distance $\theta$ is the distance between two unit quaternions $q_1$ and $q_2$ (shortest angle of rotation required to align one orientation with the other on $\mathcal{S}^3$), bound to $\theta \in [0, \pi]$ is.
+
+We can use the geodesic distance $\theta$ and a rotational attractive gain parameter $\omega$ ($0.7$ in original implementation) to scale the quaternion representing the difference $q_{diff}$ to act as a rotational attraction force:
+
+$$
+\begin{align}
+q_{diff} &= \langle\left(q_1\right)^{-1} , q_2 \rangle \\
+q_{attr} &= q_{diff} \cdot \omega
+\end{align}
+$$
+
+Where:
+- $\langle q_1, q_2 \rangle$ is the quaternion product of $q_1$ and $q_2$.
+- $q_{attr}$ is the rotational attraction to orient the query pose towards the goal orientation.
 
 ## Repulsive Potential
 Repulsive force increases with proximity to obstacle. Multiple obstacles create commutative forces.
@@ -121,35 +138,18 @@ Where:
 - $\epsilon$ parameterizes when to stop gradient descent
 - $\alpha_i$ is a step-size (learning rate) to progress towards the gradient (specific to each iteration)
 
-## Rotational Attraction
-Geodesic distance $\theta$ is the distance between two unit quaternions $q_1$ and $q_2$ (shortest angle of rotation required to align one orientation with the other on $\mathcal{S}^3$), bound to $\theta \in [0, \pi]$ is.
-
-We can use the geodesic distance $\theta$ and a rotational attractive gain parameter $\omega$ ($0.7$ in original implementation) to scale the quaternion representing the difference $q_{diff}$ to act as a rotational attraction force:
-
-$$
-\begin{align}
-q_{diff} &= \langle\left(q_1\right)^{-1} , q_2 \rangle \\
-q_{attr} &= q_{diff} \cdot \omega
-\end{align}
-$$
-
-Where:
-- $\langle q_1, q_2 \rangle$ is the quaternion product of $q_1$ and $q_2$.
-- $q_{attr}$ is the rotational attraction to orient the query pose towards the goal orientation.
-
 # Robots to test
 Robot Arms the Argallab uses:
 - Ufactory X Arm 7-DOF
 - Kinova Gen2 Jaco
 - Kinova Mico 6-DOF
 
-# Meeting Notes
-- Use C++ data for Python graphs
-- Edit RViz visuals
+# Project Notes and TODO items
+- Verify Units for all equations (demonstrate dimensional analysis for entire potential function)
+- Different types of obstacles (rectangular prisms, cylinders, etc.)
 - Dynamic Obstacles
 - Connect to planning with robot (Franka first, Kinova)
 - Only need simulation for planning
-- Different types of obstacles (rectangular prisms, cylinders, etc.)
 
 
 # References

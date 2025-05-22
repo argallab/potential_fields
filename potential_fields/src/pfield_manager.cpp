@@ -22,7 +22,7 @@ PotentialFieldManager::PotentialFieldManager()
 
   // Setup marker publisher
   this->markerPub = this->create_publisher<MarkerArray>("visualization_marker_array", 10);
-  std::cout << "Markers publishing on: " << this->markerPub->get_topic_name() << std::endl;
+  RCLCPP_INFO(this->get_logger(), "Markers publishing on: %s", this->markerPub->get_topic_name());
 
   // Setup goal pose subscriber
   this->goalPoseSub = this->create_subscription<geometry_msgs::msg::PoseStamped>(

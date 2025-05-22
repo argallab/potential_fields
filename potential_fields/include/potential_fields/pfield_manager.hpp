@@ -33,9 +33,9 @@ public:
 
 private:
   double timerFreq; // Timer frequency [Hz]
-  double attractiveGain; // Attractive gain [N]
-  double rotationalAttractiveGain; // Rotational attractive gain [N]
-  double repulsiveGain; // Repulsive gain [N]
+  double attractiveGain; // Attractive gain [Ns/m]
+  double rotationalAttractiveGain; // Rotational attractive gain [Ns/m]
+  double repulsiveGain; // Repulsive gain [Ns/m]
   double maxForce; // Maximum force [N]
   SpatialVector queryPoint; // Query point for the potential field to "animate"
 
