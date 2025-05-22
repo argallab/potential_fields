@@ -6,8 +6,6 @@
  * @version 1.0
  * @date 2025-05-14
  *
- * TODO: Utilize Eigen/Armadillo for vector operations.
- * TODO: Split functionality into a PositionVector and OrientationVector and pack both into SpatialVector
  *
  * @copyright Copyright (c) 2025
  *
