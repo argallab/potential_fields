@@ -77,8 +77,8 @@ Repulsive force increases with proximity to obstacle. Multiple obstacles create 
 
 $$
 \begin{align}
-U_{rep}(q) &= \begin{cases}\frac{1}{2}\eta\left(\frac{1}{D(q)} - \frac{1}{Q^*}\right)^2 & \text{if } D(q) \leq Q^* \\ 0 & \text{if } D(q) > Q^*\end{cases} \\
-\nabla U_{rep}(q) &= \begin{cases} \eta \left(\frac{1}{D(q)} - \frac{1}{Q^*}\right) \frac{1}{D^2(q)} \nabla D(q)& \text{if } D(q) \leq Q^* \\ 0 & \text{if } D(q) > Q^*\end{cases}
+U_{rep}(q) &= \begin{cases}\frac{1}{2}\eta\left(\frac{1}{D(q)} - \frac{1}{Q^{*}}\right)^2 & \text{if } D(q) \leq Q_{IR} \\ 0 & \text{if } D(q) > Q_{IR}\end{cases} \\
+\nabla U_{rep}(q) &= \begin{cases} \eta \left(\frac{1}{D(q)} - \frac{1}{Q_{IR}}\right) \frac{1}{D^2(q)} \nabla D(q)& \text{if } D(q) \leq Q_{IR} \\ 0 & \text{if } D(q) > Q_{IR}\end{cases}
 \end{align}
 $$
 
@@ -86,7 +86,7 @@ $$
 
 Where:
 - $\eta$ is the repulsive gain parameter
-- $Q^*$ is the influence radius of the obstacle
+- $Q_{IR}$ is the influence radius of the obstacle
 - $D(q)$ is the euclidean distance between the vector $q$ and the obstacle
 
 ## Total Potential Function
