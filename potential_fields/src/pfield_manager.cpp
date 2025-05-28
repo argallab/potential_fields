@@ -41,8 +41,8 @@ PotentialFieldManager::PotentialFieldManager()
 
   // Initialize the potential field
   this->pField = PotentialField(SpatialVector{Eigen::Vector3d::Zero()}, this->attractiveGain, this->rotationalAttractiveGain);
-  this->pField.addObstacle(SphereObstacle(0, Eigen::Vector3d(3, 3, 0), 1.0f, 2.0f, this->repulsiveGain));
-  this->pField.addObstacle(SphereObstacle(1, Eigen::Vector3d(-1.5, -1, 0), 1.5f, 2.5f, this->repulsiveGain));
+  this->pField.addObstacle(PotentialFieldObstacle(0, Eigen::Vector3d(3, 3, 0), 1.0f, 2.0f, this->repulsiveGain));
+  this->pField.addObstacle(PotentialFieldObstacle(1, Eigen::Vector3d(-1.5, -1, 0), 1.5f, 2.5f, this->repulsiveGain));
 
   // Create a CSV file to store the potential field data for python to plot
   std::string filename = "pfield_data";

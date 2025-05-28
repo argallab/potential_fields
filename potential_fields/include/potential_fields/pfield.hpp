@@ -18,7 +18,7 @@
 #include <stdexcept>
 #include <math.h>
 #include "spatial_vector.hpp"
-#include "sphere_obstacle.hpp"
+#include "potential_field_obstacle.hpp"
 #include <eigen3/Eigen/Dense>
 
  // Functionality to support:
@@ -74,10 +74,10 @@ public:
    *
    * @param obstacle The obstacle to be added.
    */
-  void addObstacle(SphereObstacle obstacle) {
+  void addObstacle(PotentialFieldObstacle obstacle) {
     int id = obstacle.getID();
     const auto it = std::find_if(this->obstacles.begin(), this->obstacles.end(),
-      [id](const SphereObstacle& obs) {return obs.getID() == id;});
+      [id](const PotentialFieldObstacle& obs) {return obs.getID() == id;});
     if (it != this->obstacles.end()) {
       // Obstacle with the same ID already exists, update it
       *it = obstacle;
@@ -97,7 +97,7 @@ public:
    */
   bool removeObstacle(int obstacleID) {
     const auto it = std::remove_if(this->obstacles.begin(), this->obstacles.end(),
-      [obstacleID](const SphereObstacle& obs) {return obs.getID() == obstacleID;});
+      [obstacleID](const PotentialFieldObstacle& obs) {return obs.getID() == obstacleID;});
     if (it != obstacles.end()) {
       obstacles.erase(it, obstacles.end());
       return true;
@@ -127,11 +127,11 @@ public:
   }
 
   SpatialVector getGoalPose() const { return this->goalPose; }
-  std::vector<SphereObstacle> getObstacles() const { return this->obstacles; }
+  std::vector<PotentialFieldObstacle> getObstacles() const { return this->obstacles; }
 
   bool isPointInsideObstacle(Eigen::Vector3d point) const {
     for (const auto& obst : this->obstacles) {
-      if (obst.withinRadius(point)) {
+      if (obst.withinObstacle(point)) {
         return true;
       }
     }
@@ -144,7 +144,7 @@ private:
   double translationalTolerance = 1e-3f; // Threshold for distances to the goal and obstacles
   double rotationalThreshold = 0.06f; // Threshold for rotational geodesic distance
   SpatialVector goalPose;
-  std::vector<SphereObstacle> obstacles;
+  std::vector<PotentialFieldObstacle> obstacles;
 
   /**
    * @brief Computes the attractive force towards the goal pose. Also computes the
@@ -209,7 +209,7 @@ private:
     for (const auto& obst : this->obstacles) {
       // Each obstacle is a sphere
       // Only calculate repulsive force if within influence radius
-      if (obst.withinInfluenceRadius(queryPose.getPosition())) {
+      if (obst.withinInfluenceZone(queryPose.getPosition())) {
         Eigen::Vector3d obstPosition = obst.getPosition();
         Eigen::Vector3d direction = queryPose.getPosition() - obstPosition;
         // Normalize the direction vector
@@ -219,7 +219,7 @@ private:
         direction.normalize();
         // Calculate the repulsive force magnitude
         double magnitude = obst.getRepulsiveGain() *
-          ((1 / distance) - (1 / obst.getInfluenceRadius())) * (1.0f / (distance * distance));
+          ((1 / distance) - (1 / obst.getInfluenceZoneScale())) * (1.0f / (distance * distance));
         // Add the repulsive forces together
         repulsiveForceVector += (direction * magnitude);
       }
