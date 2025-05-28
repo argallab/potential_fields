@@ -65,6 +65,9 @@ public:
       return distance <= (this->geometry.radius * this->influenceZoneScale) &&
         std::abs(pos.z() - this->position.z()) <= (this->geometry.height * this->influenceZoneScale / 2.0);
     }
+    default:
+      // return false;
+      throw std::invalid_argument("Unknown obstacle type");
     }
   }
 
