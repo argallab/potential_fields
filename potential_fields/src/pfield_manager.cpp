@@ -93,7 +93,7 @@ PotentialFieldManager::PotentialFieldManager()
           link.second->collision->origin.rotation.z
         );
         auto obst = this->obstacleFromCollisionObject(
-          obstacleID,
+          obstacleID++,
           *link.second->collision,
           obstCenter,
           obstOrientation,
