@@ -14,6 +14,8 @@
 #include "pfield.hpp"
 #include "tf2_ros/static_transform_broadcaster.h"
 #include "tf2_ros/transform_broadcaster.h"
+#include "urdf/model.h"
+#include "urdf_parser/urdf_parser.h"
 
 using Marker = visualization_msgs::msg::Marker;
 using MarkerArray = visualization_msgs::msg::MarkerArray;
@@ -44,6 +46,7 @@ private:
   double rotationalAttractiveGain; // Rotational attractive gain [Ns/m]
   double repulsiveGain; // Repulsive gain [Ns/m]
   double maxForce; // Maximum force [N]
+  std::string urdfFilePath; // Path to the URDF file describing the robot and scene
   SpatialVector queryPoint; // Query point for the potential field to "animate"
   Path queryPath; // History of query points for visualization of path
 
@@ -68,10 +71,17 @@ private:
   void updateQueryPoint();
   void visualizePF();
   void updateTransforms();
+  void transformsFromURDF();
+
   MarkerArray createObstacleMarkers();
   MarkerArray createGoalMarker();
   MarkerArray createPotentialVectorMarkers();
   MarkerArray createQueryPointMarker();
+
+  PotentialFieldObstacle obstacleFromCollisionObject(int id,
+    const urdf::Collision& collisionObject,
+    const Eigen::Vector3d& position, const Eigen::Quaterniond& orientation,
+    double influenceZoneScale = 2.0, double repulsiveGain = 5.0);
 
   void createCSV(const std::string& filename);
 

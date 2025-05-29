@@ -1,8 +1,8 @@
 #include "rclcpp/rclcpp.hpp"
 #include "pfield_manager.hpp"
 #include "pfield.hpp"
-#include <fstream>
 #include "tf2_ros/static_transform_broadcaster.h"
+#include <fstream>
 
 PotentialFieldManager::PotentialFieldManager()
   : Node("potential_field_manager") {
@@ -14,12 +14,14 @@ PotentialFieldManager::PotentialFieldManager()
   this->rotationalAttractiveGain = this->declare_parameter("rotational_attractive_gain", 0.7f); // [N]
   this->repulsiveGain = this->declare_parameter("repulsive_gain", 1.0f); // [N]
   this->maxForce = this->declare_parameter("max_force", 10.0f); // [N]
+  this->urdfFilePath = this->declare_parameter("urdf_file_path", "robot.urdf"); // Path to the URDF file
   // Get parameters from yaml file
   this->timerFreq = this->get_parameter("timer_frequency").as_double();
   this->attractiveGain = this->get_parameter("attractive_gain").as_double();
   this->rotationalAttractiveGain = this->get_parameter("rotational_attractive_gain").as_double();
   this->repulsiveGain = this->get_parameter("repulsive_gain").as_double();
   this->maxForce = this->get_parameter("max_force").as_double();
+  this->urdfFilePath = this->get_parameter("urdf_file_path").as_string();
 
   // Setup marker publisher
   this->markerPub = this->create_publisher<MarkerArray>("visualization_marker_array", 10);
@@ -62,27 +64,63 @@ PotentialFieldManager::PotentialFieldManager()
   worldTransform.transform.rotation.w = 1.0;
   staticBroadcaster.sendTransform(worldTransform);
 
-  Eigen::Quaterniond yaw45Quat = Eigen::Quaterniond(
-    Eigen::AngleAxisd(M_PI / 4.0, Eigen::Vector3d::UnitZ())
-  );
-
   // Initialize the potential field
   this->pField = PotentialField(SpatialVector{Eigen::Vector3d::Zero()}, this->attractiveGain, this->rotationalAttractiveGain);
-  this->pField.addObstacle(
-    PotentialFieldObstacle(0, Eigen::Vector3d(3, 3, 0), Eigen::Quaterniond::Identity(), ObstacleType::SPHERE, ObstacleGeometry{1.0, 0.0, 0.0, 0.0}, 2.0, this->repulsiveGain)
-  );
-  this->pField.addObstacle(
-    PotentialFieldObstacle(1, Eigen::Vector3d(-1.5, -1, 0), Eigen::Quaterniond::Identity(), ObstacleType::SPHERE, ObstacleGeometry{1.5, 0.0, 0.0, 0.0}, 2.0, this->repulsiveGain)
-  );
-  this->pField.addObstacle(
-    PotentialFieldObstacle(2, Eigen::Vector3d(-2, 3, 1.0 / 2.0), Eigen::Quaterniond::Identity(), ObstacleType::BOX, ObstacleGeometry{0.0, 1.0, 1.0, 1.0}, 2.0, this->repulsiveGain)
-  );
-  this->pField.addObstacle(
-    PotentialFieldObstacle(3, Eigen::Vector3d(2, -3.5, 1.5 / 2.0), Eigen::Quaterniond::Identity(), ObstacleType::CYLINDER, ObstacleGeometry{1.0, 0.0, 0.0, 1.5}, 2.0, this->repulsiveGain)
-  );
-  this->pField.addObstacle(
-    PotentialFieldObstacle(4, Eigen::Vector3d(4, -0.5, 1.5 / 2.0), yaw45Quat, ObstacleType::BOX, ObstacleGeometry{0.0, 2.0, 1.0, 1.5}, 2.0, this->repulsiveGain)
-  );
+
+  // Load the URDF model
+  urdf::ModelInterfaceSharedPtr robotModel = urdf::parseURDF(this->urdfFilePath);
+  if (!robotModel) {
+    RCLCPP_ERROR(this->get_logger(), "Failed to parse URDF model from %s", this->urdfFilePath.c_str());
+  } else {
+    RCLCPP_INFO(this->get_logger(), "Successfully loaded URDF model from %s", this->urdfFilePath.c_str());
+    // Extract collision geometries from the URDF model and add them as obstacles
+    int obstacleID = 0;
+    for (const auto& link : robotModel->links_) {
+      if (link.second->collision) {
+        // Create a potential field obstacle from the collision geometry
+        auto obstCenter = Eigen::Vector3d(
+          link.second->collision->origin.position.x,
+          link.second->collision->origin.position.y,
+          link.second->collision->origin.position.z
+        );
+        auto obstOrientation = Eigen::Quaterniond(
+          link.second->collision->origin.rotation.w,
+          link.second->collision->origin.rotation.x,
+          link.second->collision->origin.rotation.y,
+          link.second->collision->origin.rotation.z
+        );
+        auto obst = this->obstacleFromCollisionObject(
+          obstacleID,
+          *link.second->collision,
+          obstCenter,
+          obstOrientation,
+          2.0, // InfluenDefaultce zone scale
+          this->repulsiveGain // Repulsive gain
+        );
+        this->pField.addObstacle(obst);
+      }
+    }
+  }
+
+
+  // Eigen::Quaterniond yaw45Quat = Eigen::Quaterniond(
+  //   Eigen::AngleAxisd(M_PI / 4.0, Eigen::Vector3d::UnitZ())
+  // );
+  // this->pField.addObstacle(
+  //   PotentialFieldObstacle(0, Eigen::Vector3d(3, 3, 0), Eigen::Quaterniond::Identity(), ObstacleType::SPHERE, ObstacleGeometry{1.0, 0.0, 0.0, 0.0}, 2.0, this->repulsiveGain)
+  // );
+  // this->pField.addObstacle(
+  //   PotentialFieldObstacle(1, Eigen::Vector3d(-1.5, -1, 0), Eigen::Quaterniond::Identity(), ObstacleType::SPHERE, ObstacleGeometry{1.5, 0.0, 0.0, 0.0}, 2.0, this->repulsiveGain)
+  // );
+  // this->pField.addObstacle(
+  //   PotentialFieldObstacle(2, Eigen::Vector3d(-2, 3, 1.0 / 2.0), Eigen::Quaterniond::Identity(), ObstacleType::BOX, ObstacleGeometry{0.0, 1.0, 1.0, 1.0}, 2.0, this->repulsiveGain)
+  // );
+  // this->pField.addObstacle(
+  //   PotentialFieldObstacle(3, Eigen::Vector3d(2, -3.5, 1.5 / 2.0), Eigen::Quaterniond::Identity(), ObstacleType::CYLINDER, ObstacleGeometry{1.0, 0.0, 0.0, 1.5}, 2.0, this->repulsiveGain)
+  // );
+  // this->pField.addObstacle(
+  //   PotentialFieldObstacle(4, Eigen::Vector3d(4, -0.5, 1.5 / 2.0), yaw45Quat, ObstacleType::BOX, ObstacleGeometry{0.0, 2.0, 1.0, 1.5}, 2.0, this->repulsiveGain)
+  // );
 
   // Create a CSV file to store the potential field data for python to plot
   std::string filename = "pfield_data";
@@ -121,6 +159,24 @@ void PotentialFieldManager::updateTransforms() {
   }
 }
 
+void PotentialFieldManager::visualizePF() {
+  MarkerArray markerArray;
+  // markerArray.markers.push_back(this->createGoalMarker());
+  MarkerArray goalMarkerArray = this->createGoalMarker();
+  markerArray.markers.insert(markerArray.markers.cend(), goalMarkerArray.markers.cbegin(), goalMarkerArray.markers.cend());
+  auto obstacleMarkers = this->createObstacleMarkers();
+  markerArray.markers.insert(markerArray.markers.cend(), obstacleMarkers.markers.cbegin(),
+    obstacleMarkers.markers.cend());
+  auto potentialVectorMarkers = this->createPotentialVectorMarkers();
+  markerArray.markers.insert(markerArray.markers.cend(), potentialVectorMarkers.markers.cbegin(),
+    potentialVectorMarkers.markers.cend());
+  auto queryPointMarker = this->createQueryPointMarker();
+  markerArray.markers.insert(markerArray.markers.cend(), queryPointMarker.markers.cbegin(),
+    queryPointMarker.markers.cend());
+  // Publish the marker array
+  this->markerPub->publish(markerArray);
+}
+
 void PotentialFieldManager::updateQueryPoint() {
   // If the query point is near the goal, reset it to a random position
   double distanceToGoal = this->queryPoint.euclideanDistance(this->pField.getGoalPose());
@@ -150,24 +206,6 @@ void PotentialFieldManager::updateQueryPoint() {
   this->queryPath.header.stamp = this->now();
   this->queryPath.poses.push_back(pstamped);
   this->pathPub->publish(this->queryPath);
-}
-
-void PotentialFieldManager::visualizePF() {
-  MarkerArray markerArray;
-  // markerArray.markers.push_back(this->createGoalMarker());
-  MarkerArray goalMarkerArray = this->createGoalMarker();
-  markerArray.markers.insert(markerArray.markers.cend(), goalMarkerArray.markers.cbegin(), goalMarkerArray.markers.cend());
-  auto obstacleMarkers = this->createObstacleMarkers();
-  markerArray.markers.insert(markerArray.markers.cend(), obstacleMarkers.markers.cbegin(),
-    obstacleMarkers.markers.cend());
-  auto potentialVectorMarkers = this->createPotentialVectorMarkers();
-  markerArray.markers.insert(markerArray.markers.cend(), potentialVectorMarkers.markers.cbegin(),
-    potentialVectorMarkers.markers.cend());
-  auto queryPointMarker = this->createQueryPointMarker();
-  markerArray.markers.insert(markerArray.markers.cend(), queryPointMarker.markers.cbegin(),
-    queryPointMarker.markers.cend());
-  // Publish the marker array
-  this->markerPub->publish(markerArray);
 }
 
 MarkerArray PotentialFieldManager::createObstacleMarkers() {
@@ -420,7 +458,6 @@ MarkerArray PotentialFieldManager::createQueryPointMarker() {
   return markerArray;
 }
 
-
 void PotentialFieldManager::createCSV(const std::string& base_filename) {
   // Write obstacle positions to a CSV file
   std::string obstacles_filename = base_filename + "_obstacles.csv";
@@ -466,6 +503,41 @@ void PotentialFieldManager::createCSV(const std::string& base_filename) {
   } else {
     RCLCPP_ERROR(this->get_logger(), "Unable to open file: %s", vectors_filename.c_str());
   }
+}
+
+PotentialFieldObstacle PotentialFieldManager::obstacleFromCollisionObject(
+  int id,
+  const urdf::Collision& collisionObject,
+  const Eigen::Vector3d& position,
+  const Eigen::Quaterniond& orientation,
+  double influenceZoneScale,
+  double repulsiveGain) {
+  ObstacleType type;
+  ObstacleGeometry geom{};
+
+  if (auto b = dynamic_cast<urdf::Box*>(collisionObject.geometry.get())) {
+    type = ObstacleType::BOX;
+    geom.length = b->dim.x;
+    geom.width = b->dim.y;
+    geom.height = b->dim.z;
+  } else if (auto s = dynamic_cast<urdf::Sphere*>(collisionObject.geometry.get())) {
+    type = ObstacleType::SPHERE;
+    geom.radius = s->radius;
+  } else if (auto c = dynamic_cast<urdf::Cylinder*>(collisionObject.geometry.get())) {
+    type = ObstacleType::CYLINDER;
+    geom.radius = c->radius;
+    geom.height = c->length;
+  } else if (auto m = dynamic_cast<urdf::Mesh*>(collisionObject.geometry.get())) {
+    // approximate by bounding box or skip
+    type = ObstacleType::BOX;
+    // fill geom from mesh bounds or user‐provided params
+  } else {
+    throw std::runtime_error("Unhandled URDF geometry type");
+  }
+
+  return PotentialFieldObstacle{
+    id, position, orientation, type, geom, influenceZoneScale, repulsiveGain
+  };
 }
 
 int main(int argc, char* argv[]) {
