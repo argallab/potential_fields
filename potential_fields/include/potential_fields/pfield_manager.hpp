@@ -79,9 +79,6 @@ private:
   // Subscriber for the goal pose
   rclcpp::Subscription<PoseStamped>::SharedPtr goalPoseSub;
 
-  Eigen::Affine3d computeLinkTransform(const urdf::LinkConstSharedPtr& link,
-    std::map<std::string, Eigen::Affine3d>& transforms);
-
   void updateQueryPoint();
   void visualizePF();
   void updateTransforms();

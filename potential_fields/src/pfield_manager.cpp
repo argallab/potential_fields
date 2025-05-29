@@ -64,12 +64,26 @@ PotentialFieldManager::PotentialFieldManager()
   worldTransform.transform.rotation.w = 1.0;
   staticBroadcaster.sendTransform(worldTransform);
 
+  // Publish a static transform from world to base_link
+  geometry_msgs::msg::TransformStamped baseLinkTransform;
+  baseLinkTransform.header.stamp = this->now();
+  baseLinkTransform.header.frame_id = "world";
+  baseLinkTransform.child_frame_id = "base_link";
+  baseLinkTransform.transform.translation.x = 0.0;
+  baseLinkTransform.transform.translation.y = 0.0;
+  baseLinkTransform.transform.translation.z = 0.0;
+  baseLinkTransform.transform.rotation.x = 0.0;
+  baseLinkTransform.transform.rotation.y = 0.0;
+  baseLinkTransform.transform.rotation.z = 0.0;
+  baseLinkTransform.transform.rotation.w = 1.0;
+  staticBroadcaster.sendTransform(baseLinkTransform);
+
   // Initialize the potential field
   this->pField = PotentialField(SpatialVector{Eigen::Vector3d::Zero()}, this->attractiveGain, this->rotationalAttractiveGain);
-
+  // Delay for the TF2 listener to populate the buffer
+  rclcpp::sleep_for(std::chrono::milliseconds(100)); // TODO: Put this logic into a timer, this is just to visualize the robot for now
   // Load the URDF model
   RCLCPP_INFO(this->get_logger(), "Loading URDF model from %s", this->urdfFilePath.c_str());
-  // auto robotModel = urdf::parseURDFFile(this->urdfFilePath);
   urdf::Model robotModel;
   if (!robotModel.initFile(this->urdfFilePath)) {
     RCLCPP_ERROR(this->get_logger(), "Failed to load URDF model from %s", this->urdfFilePath.c_str());
@@ -79,44 +93,53 @@ PotentialFieldManager::PotentialFieldManager()
     // Extract collision geometries from the URDF model and add them as obstacles
     int obstacleID = 0;
     for (const auto& link : robotModel.links_) {
-      if (link.second->collision) {
-        // Create a potential field obstacle from the collision geometry
-        // Get the link's transform in the world frame
-        std::string link_name = link.second->name;
-        // geometry_msgs::msg::TransformStamped linkTf =
-        //   this->tfBuffer->lookupTransform("world", link_name, tf2::TimePointZero);
-        std::map<std::string, Eigen::Affine3d> transform_map;
-        // Compute the transform from the link to the world frame
-        transform_map[link_name] = Eigen::Affine3d::Identity();
-        // Compute the transform from the link to the world frame recursively
-        for (const auto& link_pair : robotModel.links_) {
-          transform_map[link_pair.first] = this->computeLinkTransform(link_pair.second, transform_map);
-        }
-        Eigen::Affine3d world_T_link = computeLinkTransform(link.second, transform_map);
-        // Get the collision transform in the link frame
-        Eigen::Affine3d link_T_col =
-          Eigen::Translation3d(link.second->collision->origin.position.x,
-            link.second->collision->origin.position.y,
-            link.second->collision->origin.position.z) *
-          Eigen::Quaterniond(link.second->collision->origin.rotation.w,
-            link.second->collision->origin.rotation.x,
-            link.second->collision->origin.rotation.y,
-            link.second->collision->origin.rotation.z);
-
-        // Total transform of collision geometry in world frame
-        Eigen::Affine3d world_T_col = world_T_link * link_T_col;
-        Eigen::Vector3d obstCenter = world_T_col.translation();
-        Eigen::Quaterniond obstOrientation(world_T_col.rotation());
-        auto obst = this->obstacleFromCollisionObject(
-          obstacleID++,
-          *link.second->collision,
-          obstCenter,
-          obstOrientation,
-          2.0, // InfluenDefaultce zone scale
-          this->repulsiveGain // Repulsive gain
-        );
-        this->pField.addObstacle(obst);
+      // Create a potential field obstacle from the collision geometry
+      // Get the link's transform in the world frame
+      std::string link_name = link.second->name;
+      if (!link.second->collision) {
+        RCLCPP_WARN(this->get_logger(), "Link '%s' has no collision geometry, skipping", link_name.c_str());
+        continue;
       }
+      // Get the transform from the world frame to the link's frame
+      // Since robot_state_publisher should be publishing transforms
+      TransformStamped linkTransform;
+      try {
+        linkTransform = this->tfBuffer->lookupTransform("world", link_name, tf2::TimePointZero);
+      }
+      catch (const tf2::TransformException& ex) {
+        RCLCPP_ERROR(this->get_logger(), "Failed to get transform for link '%s': %s", link_name.c_str(), ex.what());
+      }
+      const urdf::Pose& collisionOrigin = link.second->collision->origin;
+      // Convert TF to Eigen::Affine3d
+      Eigen::Affine3d world_T_link = tf2::transformToEigen(linkTransform.transform);
+      // Construct link_T_collision from URDF collision origin
+      Eigen::Affine3d link_T_col =
+        Eigen::Translation3d(
+          collisionOrigin.position.x,
+          collisionOrigin.position.y,
+          collisionOrigin.position.z) *
+        Eigen::Quaterniond(
+          collisionOrigin.rotation.w,
+          collisionOrigin.rotation.x,
+          collisionOrigin.rotation.y,
+          collisionOrigin.rotation.z);
+
+      // Compose to get world_T_collision
+      Eigen::Affine3d world_T_col = world_T_link * link_T_col;
+
+      // Extract final obstacle pose
+      Eigen::Vector3d obstCenter = world_T_col.translation();
+      Eigen::Quaterniond obstOrientation(world_T_col.rotation());
+
+      auto obst = this->obstacleFromCollisionObject(
+        obstacleID++,
+        *link.second->collision,
+        obstCenter,
+        obstOrientation,
+        2.0, // Influence zone scale
+        this->repulsiveGain // Repulsive gain
+      );
+      this->pField.addObstacle(obst);
     }
   }
 
@@ -134,32 +157,10 @@ PotentialFieldManager::PotentialFieldManager()
   );
 }
 
-// Recursive FK from base link
-Eigen::Affine3d PotentialFieldManager::computeLinkTransform(const urdf::LinkConstSharedPtr& link,
-  std::map<std::string, Eigen::Affine3d>& transforms) {
-  if (transforms.find(link->name) != transforms.end())
-    return transforms[link->name];
-
-  if (!link->parent_joint)
-    return transforms[link->name] = Eigen::Affine3d::Identity();
-
-  auto parent = link->getParent();
-  Eigen::Affine3d parent_tf = computeLinkTransform(parent, transforms);
-
-  const urdf::Pose& joint_origin = link->parent_joint->parent_to_joint_origin_transform;
-  Eigen::Affine3d joint_tf =
-    Eigen::Translation3d(joint_origin.position.x, joint_origin.position.y, joint_origin.position.z) *
-    Eigen::Quaterniond(joint_origin.rotation.w, joint_origin.rotation.x,
-      joint_origin.rotation.y, joint_origin.rotation.z);
-
-  return transforms[link->name] = parent_tf * joint_tf;
-}
-
-
 void PotentialFieldManager::timerCallback() {
   this->visualizePF();
   this->updateQueryPoint();
-  this->updateTransforms();
+  // this->updateTransforms();
 }
 
 void PotentialFieldManager::updateTransforms() {
@@ -536,24 +537,27 @@ PotentialFieldObstacle PotentialFieldManager::obstacleFromCollisionObject(
   ObstacleType type;
   ObstacleGeometry geom{};
 
-  if (auto b = dynamic_cast<urdf::Box*>(collisionObject.geometry.get())) {
+  auto* geometry = collisionObject.geometry.get();
+  if (urdf::Box* b = dynamic_cast<urdf::Box*>(geometry)) {
     type = ObstacleType::BOX;
     geom.length = b->dim.x;
     geom.width = b->dim.y;
     geom.height = b->dim.z;
-  } else if (auto s = dynamic_cast<urdf::Sphere*>(collisionObject.geometry.get())) {
+  } else if (urdf::Sphere* s = dynamic_cast<urdf::Sphere*>(geometry)) {
     type = ObstacleType::SPHERE;
     geom.radius = s->radius;
-  } else if (auto c = dynamic_cast<urdf::Cylinder*>(collisionObject.geometry.get())) {
+  } else if (urdf::Cylinder* c = dynamic_cast<urdf::Cylinder*>(geometry)) {
     type = ObstacleType::CYLINDER;
     geom.radius = c->radius;
     geom.height = c->length;
-  } else if (auto m = dynamic_cast<urdf::Mesh*>(collisionObject.geometry.get())) {
-    // approximate by bounding box or skip
+  } else if (urdf::Mesh* m = dynamic_cast<urdf::Mesh*>(geometry)) {
+    // Approximate mesh as a box for now
     type = ObstacleType::BOX;
-    // fill geom from mesh bounds or user‐provided params
+    // TODO: Handle mesh geometry to assign Box size
   } else {
-    throw std::runtime_error("Unhandled URDF geometry type");
+    // throw std::runtime_error("Unhandled URDF geometry type");
+    RCLCPP_ERROR(this->get_logger(),
+      "Unhandled URDF geometry type for collision object with id %d", id);
   }
 
   return PotentialFieldObstacle{
