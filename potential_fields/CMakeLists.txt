@@ -18,6 +18,8 @@ find_package(potential_fields_interfaces REQUIRED)
 find_package(Doxygen)
 find_package(geometry_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
+find_package(nav_msgs REQUIRED)
+find_package(tf2_ros REQUIRED)
 find_package(Eigen3 REQUIRED)
 
 # Setup testing files
@@ -33,12 +35,14 @@ include_directories(
   ${deltarobot_interfaces_INCLUDE_DIRS}
 )
 add_executable(pfield_manager src/pfield_manager.cpp)
-ament_target_dependencies(
-  pfield_manager
+ament_target_dependencies(pfield_manager
   rclcpp
+  Eigen3
   potential_fields_interfaces
   geometry_msgs
   visualization_msgs
+  nav_msgs
+  tf2_ros
 )
 target_link_libraries(pfield_manager ${deltarobot_interfaces_LIBRARIES})
 

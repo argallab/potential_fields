@@ -2,6 +2,7 @@
 #include "pfield_manager.hpp"
 #include "pfield.hpp"
 #include <fstream>
+#include "tf2_ros/static_transform_broadcaster.h"
 
 PotentialFieldManager::PotentialFieldManager()
   : Node("potential_field_manager") {
@@ -20,9 +21,28 @@ PotentialFieldManager::PotentialFieldManager()
   this->repulsiveGain = this->get_parameter("repulsive_gain").as_double();
   this->maxForce = this->get_parameter("max_force").as_double();
 
+  // Publish a static transform at the origin of the world frame
+  static tf2_ros::StaticTransformBroadcaster static_broadcaster(this);
+  geometry_msgs::msg::TransformStamped static_transform;
+  static_transform.header.stamp = this->now();
+  static_transform.header.frame_id = "world";
+  static_transform.child_frame_id = "map";
+  static_transform.transform.translation.x = 0.0;
+  static_transform.transform.translation.y = 0.0;
+  static_transform.transform.translation.z = 0.0;
+  static_transform.transform.rotation.x = 0.0;
+  static_transform.transform.rotation.y = 0.0;
+  static_transform.transform.rotation.z = 0.0;
+  static_transform.transform.rotation.w = 1.0;
+  static_broadcaster.sendTransform(static_transform);
+
   // Setup marker publisher
   this->markerPub = this->create_publisher<MarkerArray>("visualization_marker_array", 10);
   RCLCPP_INFO(this->get_logger(), "Markers publishing on: %s", this->markerPub->get_topic_name());
+
+  // Setup path publisher
+  this->pathPub = this->create_publisher<Path>("nav_msgs/msg/Path", 10);
+  RCLCPP_INFO(this->get_logger(), "Query point path publishing on: %s", this->pathPub->get_topic_name());
 
   // Setup goal pose subscriber
   this->goalPoseSub = this->create_subscription<geometry_msgs::msg::PoseStamped>(
@@ -84,6 +104,7 @@ void PotentialFieldManager::updateQueryPoint() {
   double distanceToGoal = this->queryPoint.euclideanDistance(this->pField.getGoalPose());
   if (distanceToGoal < 0.5) {
     // Reset the query point to a random position
+    this->queryPath.poses.clear();
     double x = static_cast<double>(rand()) / RAND_MAX * 10.0 - 5.0; // Random x between -5 and 5
     double y = static_cast<double>(rand()) / RAND_MAX * 10.0 - 5.0; // Random y between -5 and 5
     this->queryPoint.setPosition(Eigen::Vector3d(x, y, 0));
@@ -93,6 +114,20 @@ void PotentialFieldManager::updateQueryPoint() {
   // Determine the new position of the query point depending on the velocity and the period
   Eigen::Vector3d newPosition = queryPoint.getPosition() + (velocity.getPosition() * period);
   this->queryPoint.setPosition(newPosition);
+  PoseStamped pstamped;
+  pstamped.header.frame_id = "map";
+  pstamped.header.stamp = this->now();
+  pstamped.pose.position.x = this->queryPoint.getPosition().x();
+  pstamped.pose.position.y = this->queryPoint.getPosition().y();
+  pstamped.pose.position.z = this->queryPoint.getPosition().z();
+  pstamped.pose.orientation.x = this->queryPoint.getOrientation().x();
+  pstamped.pose.orientation.y = this->queryPoint.getOrientation().y();
+  pstamped.pose.orientation.z = this->queryPoint.getOrientation().z();
+  pstamped.pose.orientation.w = this->queryPoint.getOrientation().w();
+  this->queryPath.header.frame_id = "map";
+  this->queryPath.header.stamp = this->now();
+  this->queryPath.poses.push_back(pstamped);
+  this->pathPub->publish(this->queryPath);
 }
 
 void PotentialFieldManager::visualizePF() {

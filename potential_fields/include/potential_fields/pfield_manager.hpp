@@ -9,13 +9,16 @@
 #include "geometry_msgs/msg/quaternion.hpp"
 #include "visualization_msgs/msg/marker.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
+#include "nav_msgs/msg/path.hpp"
 #include "pfield.hpp"
 
 using Marker = visualization_msgs::msg::Marker;
 using MarkerArray = visualization_msgs::msg::MarkerArray;
 using Pose = geometry_msgs::msg::Pose;
+using PoseStamped = geometry_msgs::msg::PoseStamped;
 using Point = geometry_msgs::msg::Point;
 using Quaternion = geometry_msgs::msg::Quaternion;
+using Path = nav_msgs::msg::Path;
 
 class PotentialFieldManager : public rclcpp::Node {
 public:
@@ -38,6 +41,7 @@ private:
   double repulsiveGain; // Repulsive gain [Ns/m]
   double maxForce; // Maximum force [N]
   SpatialVector queryPoint; // Query point for the potential field to "animate"
+  Path queryPath; // History of query points for visualization of path
 
   // Potential field object
   PotentialField pField;
@@ -47,6 +51,9 @@ private:
 
   // Publisher for visualization markers
   rclcpp::Publisher<MarkerArray>::SharedPtr markerPub;
+
+  // Publisher for the path of the query point to visualize its trajectory
+  rclcpp::Publisher<Path>::SharedPtr pathPub;
 
   // Subscriber for the goal pose
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goalPoseSub;
