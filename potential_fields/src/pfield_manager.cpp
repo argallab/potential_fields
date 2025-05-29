@@ -1,8 +1,6 @@
 #include "rclcpp/rclcpp.hpp"
 #include "pfield_manager.hpp"
 #include "pfield.hpp"
-#include "tf2_ros/static_transform_broadcaster.h"
-#include <fstream>
 
 PotentialFieldManager::PotentialFieldManager()
   : Node("potential_field_manager") {
@@ -85,11 +83,16 @@ PotentialFieldManager::PotentialFieldManager()
         // Create a potential field obstacle from the collision geometry
         // Get the link's transform in the world frame
         std::string link_name = link.second->name;
-        geometry_msgs::msg::TransformStamped linkTf =
-          this->tfBuffer->lookupTransform("world", link_name, tf2::TimePointZero);
-        Eigen::Affine3d world_T_link;
-        tf2::fromMsg(linkTf.transform, world_T_link);
-
+        // geometry_msgs::msg::TransformStamped linkTf =
+        //   this->tfBuffer->lookupTransform("world", link_name, tf2::TimePointZero);
+        std::map<std::string, Eigen::Affine3d> transform_map;
+        // Compute the transform from the link to the world frame
+        transform_map[link_name] = Eigen::Affine3d::Identity();
+        // Compute the transform from the link to the world frame recursively
+        for (const auto& link_pair : robotModel.links_) {
+          transform_map[link_pair.first] = this->computeLinkTransform(link_pair.second, transform_map);
+        }
+        Eigen::Affine3d world_T_link = computeLinkTransform(link.second, transform_map);
         // Get the collision transform in the link frame
         Eigen::Affine3d link_T_col =
           Eigen::Translation3d(link.second->collision->origin.position.x,
@@ -102,7 +105,6 @@ PotentialFieldManager::PotentialFieldManager()
 
         // Total transform of collision geometry in world frame
         Eigen::Affine3d world_T_col = world_T_link * link_T_col;
-
         Eigen::Vector3d obstCenter = world_T_col.translation();
         Eigen::Quaterniond obstOrientation(world_T_col.rotation());
         auto obst = this->obstacleFromCollisionObject(
@@ -131,6 +133,28 @@ PotentialFieldManager::PotentialFieldManager()
     std::bind(&PotentialFieldManager::timerCallback, this)
   );
 }
+
+// Recursive FK from base link
+Eigen::Affine3d PotentialFieldManager::computeLinkTransform(const urdf::LinkConstSharedPtr& link,
+  std::map<std::string, Eigen::Affine3d>& transforms) {
+  if (transforms.find(link->name) != transforms.end())
+    return transforms[link->name];
+
+  if (!link->parent_joint)
+    return transforms[link->name] = Eigen::Affine3d::Identity();
+
+  auto parent = link->getParent();
+  Eigen::Affine3d parent_tf = computeLinkTransform(parent, transforms);
+
+  const urdf::Pose& joint_origin = link->parent_joint->parent_to_joint_origin_transform;
+  Eigen::Affine3d joint_tf =
+    Eigen::Translation3d(joint_origin.position.x, joint_origin.position.y, joint_origin.position.z) *
+    Eigen::Quaterniond(joint_origin.rotation.w, joint_origin.rotation.x,
+      joint_origin.rotation.y, joint_origin.rotation.z);
+
+  return transforms[link->name] = parent_tf * joint_tf;
+}
+
 
 void PotentialFieldManager::timerCallback() {
   this->visualizePF();

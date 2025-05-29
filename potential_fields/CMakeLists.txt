@@ -20,6 +20,7 @@ find_package(geometry_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
+find_package(tf2_eigen REQUIRED)
 find_package(urdf REQUIRED)
 find_package(Eigen3 REQUIRED)
 
@@ -44,6 +45,7 @@ ament_target_dependencies(pfield_manager
   visualization_msgs
   nav_msgs
   tf2_ros
+  tf2_eigen
   urdf
 )
 target_link_libraries(pfield_manager ${deltarobot_interfaces_LIBRARIES})

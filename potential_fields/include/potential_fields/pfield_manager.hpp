@@ -16,8 +16,11 @@
 #include "tf2_ros/transform_broadcaster.h"
 #include "tf2_ros/buffer.h"
 #include "tf2_ros/transform_listener.h"
+#include "tf2_ros/static_transform_broadcaster.h"
+#include "tf2_eigen/tf2_eigen.hpp"
 #include "urdf/model.h"
 #include "urdf_parser/urdf_parser.h"
+#include <fstream>
 
 using Marker = visualization_msgs::msg::Marker;
 using MarkerArray = visualization_msgs::msg::MarkerArray;
@@ -75,6 +78,9 @@ private:
 
   // Subscriber for the goal pose
   rclcpp::Subscription<PoseStamped>::SharedPtr goalPoseSub;
+
+  Eigen::Affine3d computeLinkTransform(const urdf::LinkConstSharedPtr& link,
+    std::map<std::string, Eigen::Affine3d>& transforms);
 
   void updateQueryPoint();
   void visualizePF();
