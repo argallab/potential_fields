@@ -5,4 +5,3 @@ pfield_manager:
     rotational_attractive_gain: 0.7 # [Ns/m]
     repulsive_gain: 20.0 # [Ns/m]
     max_force: 10.0 # [N]
-    urdf_file_path: ""
