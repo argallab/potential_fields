@@ -1,1 +1,2 @@
 obstacle_x,obstacle_y,obstacle_z,type,influence,repulsive_gain,radius,length,width,height
+0,0,0,Cylinder,2,20,0.0225,0.2775,5.19874e-3101.63042e-322

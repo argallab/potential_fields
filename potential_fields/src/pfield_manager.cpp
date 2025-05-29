@@ -7,14 +7,13 @@
 PotentialFieldManager::PotentialFieldManager()
   : Node("potential_field_manager") {
   RCLCPP_INFO(this->get_logger(), "PotentialFieldManager Initialized");
-
   // Declare parameters
   this->timerFreq = this->declare_parameter("timer_frequency", 100.0f); // [Hz]
   this->attractiveGain = this->declare_parameter("attractive_gain", 1.0f); // [N]
   this->rotationalAttractiveGain = this->declare_parameter("rotational_attractive_gain", 0.7f); // [N]
   this->repulsiveGain = this->declare_parameter("repulsive_gain", 1.0f); // [N]
   this->maxForce = this->declare_parameter("max_force", 10.0f); // [N]
-  this->urdfFilePath = this->declare_parameter("robot_description", "urdf/robot.urdf.xacro"); // Path to the URDF file
+  this->urdfFilePath = this->declare_parameter("robot_description", "urdf/robot.urdf"); // Path to the URDF file
   // Get parameters from yaml file
   this->timerFreq = this->get_parameter("timer_frequency").as_double();
   this->attractiveGain = this->get_parameter("attractive_gain").as_double();
@@ -68,14 +67,18 @@ PotentialFieldManager::PotentialFieldManager()
   this->pField = PotentialField(SpatialVector{Eigen::Vector3d::Zero()}, this->attractiveGain, this->rotationalAttractiveGain);
 
   // Load the URDF model
-  urdf::ModelInterfaceSharedPtr robotModel = urdf::parseURDF(this->urdfFilePath);
-  if (!robotModel) {
-    RCLCPP_ERROR(this->get_logger(), "Failed to parse URDF model from %s", this->urdfFilePath.c_str());
+  // std::string urdfXML = this->readFile(this->urdfFilePath);
+  RCLCPP_INFO(this->get_logger(), "Loading URDF model from %s", this->urdfFilePath.c_str());
+  // auto robotModel = urdf::parseURDFFile(this->urdfFilePath);
+  urdf::Model robotModel;
+  if (!robotModel.initFile(this->urdfFilePath)) {
+    RCLCPP_ERROR(this->get_logger(), "Failed to load URDF model from %s", this->urdfFilePath.c_str());
   } else {
-    RCLCPP_INFO(this->get_logger(), "Successfully loaded URDF model from %s", this->urdfFilePath.c_str());
+    RCLCPP_INFO(this->get_logger(),
+      "Successfully parsed URDF: robot name = '%s'", robotModel.getName().c_str());
     // Extract collision geometries from the URDF model and add them as obstacles
     int obstacleID = 0;
-    for (const auto& link : robotModel->links_) {
+    for (const auto& link : robotModel.links_) {
       if (link.second->collision) {
         // Create a potential field obstacle from the collision geometry
         auto obstCenter = Eigen::Vector3d(
@@ -101,6 +104,7 @@ PotentialFieldManager::PotentialFieldManager()
       }
     }
   }
+
 
   // Create a CSV file to store the potential field data for python to plot
   std::string filename = "pfield_data";

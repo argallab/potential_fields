@@ -48,31 +48,34 @@ ament_target_dependencies(pfield_manager
 )
 target_link_libraries(pfield_manager ${deltarobot_interfaces_LIBRARIES})
 
-install(TARGETS
-  pfield_manager
+install(
+  TARGETS pfield_manager
   DESTINATION lib/${PROJECT_NAME}
 )
 
-install(DIRECTORY
-  launch
+install(
+  DIRECTORY launch
   DESTINATION share/${PROJECT_NAME}/
 )
 
-install(DIRECTORY
-  config
+install(
+  DIRECTORY config
   DESTINATION share/${PROJECT_NAME}/
 )
 
-install(DIRECTORY
-  urdf
-  DESTINATION share/${PROJECT_NAME}/
+install(
+  DIRECTORY urdf
+  DESTINATION share/${PROJECT_NAME}
 )
 
-install(TARGETS test_spatial_vector
+
+install(
+  TARGETS test_spatial_vector
   DESTINATION lib/${PROJECT_NAME}
 )
 
-install(TARGETS test_pfields
+install(
+  TARGETS test_pfields
   DESTINATION lib/${PROJECT_NAME}
 )
 

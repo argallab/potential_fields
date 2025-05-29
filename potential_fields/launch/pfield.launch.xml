@@ -2,7 +2,7 @@
 <arg name="rviz_config" default="$(find-pkg-share potential_fields)/config/view_pfield.rviz" description="The RVIZ config file (.rviz)"/>
   <node pkg="potential_fields" exec="pfield_manager" name="pfield_manager" output="screen">
     <param from="$(find-pkg-share potential_fields)/config/pfield_config.yaml"/>
-    <param name="robot_description" value="$(find-pkg-share potential_fields)/urdf/robot.urdf)"/>
+    <param name="robot_description" value="$(find-pkg-share potential_fields)/urdf/robot.urdf"/>
   </node>
   <node pkg="rviz2" exec="rviz2" args="-d $(var rviz_config)" />
 </launch>
