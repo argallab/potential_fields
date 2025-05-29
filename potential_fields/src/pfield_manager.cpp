@@ -30,9 +30,6 @@ PotentialFieldManager::PotentialFieldManager()
   this->pathPub = this->create_publisher<Path>("nav_msgs/msg/Path", 10);
   RCLCPP_INFO(this->get_logger(), "Query point path publishing on: %s", this->pathPub->get_topic_name());
 
-  // Setup TF2 broadcaster
-  this->dynamicTfBroadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(this);
-
   // Setup goal pose subscriber
   this->goalPoseSub = this->create_subscription<geometry_msgs::msg::PoseStamped>(
     "goal_pose",
@@ -48,8 +45,14 @@ PotentialFieldManager::PotentialFieldManager()
   }
   );
 
-  // Publish a static transform at the origin of the world frame
+  // Setup TF2 broadcaster, buffer, and listener
+  this->dynamicTfBroadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(this);
+  this->tfBuffer = std::make_shared<tf2_ros::Buffer>(this->get_clock());
+  this->tfListener = std::make_shared<tf2_ros::TransformListener>(*this->tfBuffer, this);
   static tf2_ros::StaticTransformBroadcaster staticBroadcaster = tf2_ros::StaticTransformBroadcaster(this);
+  RCLCPP_INFO(this->get_logger(), "TF2 broadcaster, buffer, and listener initialized");
+
+  // Publish a static transform at the origin of the world frame
   geometry_msgs::msg::TransformStamped worldTransform;
   worldTransform.header.stamp = this->now();
   worldTransform.header.frame_id = "world";
@@ -67,7 +70,6 @@ PotentialFieldManager::PotentialFieldManager()
   this->pField = PotentialField(SpatialVector{Eigen::Vector3d::Zero()}, this->attractiveGain, this->rotationalAttractiveGain);
 
   // Load the URDF model
-  // std::string urdfXML = this->readFile(this->urdfFilePath);
   RCLCPP_INFO(this->get_logger(), "Loading URDF model from %s", this->urdfFilePath.c_str());
   // auto robotModel = urdf::parseURDFFile(this->urdfFilePath);
   urdf::Model robotModel;
@@ -81,17 +83,28 @@ PotentialFieldManager::PotentialFieldManager()
     for (const auto& link : robotModel.links_) {
       if (link.second->collision) {
         // Create a potential field obstacle from the collision geometry
-        auto obstCenter = Eigen::Vector3d(
-          link.second->collision->origin.position.x,
-          link.second->collision->origin.position.y,
-          link.second->collision->origin.position.z
-        );
-        auto obstOrientation = Eigen::Quaterniond(
-          link.second->collision->origin.rotation.w,
-          link.second->collision->origin.rotation.x,
-          link.second->collision->origin.rotation.y,
-          link.second->collision->origin.rotation.z
-        );
+        // Get the link's transform in the world frame
+        std::string link_name = link.second->name;
+        geometry_msgs::msg::TransformStamped linkTf =
+          this->tfBuffer->lookupTransform("world", link_name, tf2::TimePointZero);
+        Eigen::Affine3d world_T_link;
+        tf2::fromMsg(linkTf.transform, world_T_link);
+
+        // Get the collision transform in the link frame
+        Eigen::Affine3d link_T_col =
+          Eigen::Translation3d(link.second->collision->origin.position.x,
+            link.second->collision->origin.position.y,
+            link.second->collision->origin.position.z) *
+          Eigen::Quaterniond(link.second->collision->origin.rotation.w,
+            link.second->collision->origin.rotation.x,
+            link.second->collision->origin.rotation.y,
+            link.second->collision->origin.rotation.z);
+
+        // Total transform of collision geometry in world frame
+        Eigen::Affine3d world_T_col = world_T_link * link_T_col;
+
+        Eigen::Vector3d obstCenter = world_T_col.translation();
+        Eigen::Quaterniond obstOrientation(world_T_col.rotation());
         auto obst = this->obstacleFromCollisionObject(
           obstacleID++,
           *link.second->collision,
