@@ -39,6 +39,10 @@ PotentialFieldManager::PotentialFieldManager()
   }
   );
 
+  Eigen::Quaterniond yaw45Quat = Eigen::Quaterniond(
+    Eigen::AngleAxisd(M_PI / 4.0, Eigen::Vector3d::UnitZ())
+  );
+
   // Initialize the potential field
   this->pField = PotentialField(SpatialVector{Eigen::Vector3d::Zero()}, this->attractiveGain, this->rotationalAttractiveGain);
   this->pField.addObstacle(
@@ -52,6 +56,9 @@ PotentialFieldManager::PotentialFieldManager()
   );
   this->pField.addObstacle(
     PotentialFieldObstacle(3, Eigen::Vector3d(2, -3.5, 1.5 / 2.0), Eigen::Quaterniond::Identity(), ObstacleType::CYLINDER, ObstacleGeometry{1.0, 0.0, 0.0, 1.5}, 2.0, this->repulsiveGain)
+  );
+  this->pField.addObstacle(
+    PotentialFieldObstacle(4, Eigen::Vector3d(4, -0.5, 1.5 / 2.0), yaw45Quat, ObstacleType::BOX, ObstacleGeometry{0.0, 2.0, 1.0, 1.5}, 2.0, this->repulsiveGain)
   );
 
   // Create a CSV file to store the potential field data for python to plot
@@ -116,14 +123,15 @@ MarkerArray PotentialFieldManager::createObstacleMarkers() {
     obstacleMarker.ns = "obstacle";
     obstacleMarker.id = id;
     obstacleMarker.action = Marker::ADD;
-    SpatialVector position = obstacle.getPosition();
-    obstacleMarker.pose.position.x = position.getPosition().x();
-    obstacleMarker.pose.position.y = position.getPosition().y();
-    obstacleMarker.pose.position.z = position.getPosition().z();
-    obstacleMarker.pose.orientation.x = position.getOrientation().x();
-    obstacleMarker.pose.orientation.y = position.getOrientation().y();
-    obstacleMarker.pose.orientation.z = position.getOrientation().z();
-    obstacleMarker.pose.orientation.w = position.getOrientation().w();
+    auto position = obstacle.getPosition();
+    auto orientation = obstacle.getOrientation();
+    obstacleMarker.pose.position.x = position.x();
+    obstacleMarker.pose.position.y = position.y();
+    obstacleMarker.pose.position.z = position.z();
+    obstacleMarker.pose.orientation.x = orientation.x();
+    obstacleMarker.pose.orientation.y = orientation.y();
+    obstacleMarker.pose.orientation.z = orientation.z();
+    obstacleMarker.pose.orientation.w = orientation.w();
     switch (obstacle.getType()) {
     case ObstacleType::SPHERE: {
       // Scale is the Diameter of the Sphere
@@ -161,13 +169,13 @@ MarkerArray PotentialFieldManager::createObstacleMarkers() {
     influenceMarker.ns = "obstacle_influence";
     influenceMarker.id = id;
     influenceMarker.action = Marker::ADD;
-    influenceMarker.pose.position.x = position.getPosition().x();
-    influenceMarker.pose.position.y = position.getPosition().y();
-    influenceMarker.pose.position.z = position.getPosition().z();
-    influenceMarker.pose.orientation.x = position.getOrientation().x();
-    influenceMarker.pose.orientation.y = position.getOrientation().y();
-    influenceMarker.pose.orientation.z = position.getOrientation().z();
-    influenceMarker.pose.orientation.w = position.getOrientation().w();
+    influenceMarker.pose.position.x = position.x();
+    influenceMarker.pose.position.y = position.y();
+    influenceMarker.pose.position.z = position.z();
+    influenceMarker.pose.orientation.x = orientation.x();
+    influenceMarker.pose.orientation.y = orientation.y();
+    influenceMarker.pose.orientation.z = orientation.z();
+    influenceMarker.pose.orientation.w = orientation.w();
     switch (obstacle.getType()) {
     case ObstacleType::SPHERE: {
       influenceMarker.type = Marker::SPHERE;

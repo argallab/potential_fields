@@ -3,3 +3,4 @@ obstacle_x,obstacle_y,obstacle_z,type,influence,repulsive_gain,radius,length,wid
 -1.5,-1,0,Sphere,2,20,1.5,0,5.68175e-3227.95446e-322
 -2,3,0.5,Box,2,20,1,1,17.95446e-322
 2,-3.5,0.75,Cylinder,2,20,1,1.5,17.95446e-322
+4,-0.5,0.75,Box,2,20,2,1,1.57.95446e-322
