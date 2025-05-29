@@ -70,24 +70,6 @@ PotentialFieldManager::PotentialFieldManager()
 void PotentialFieldManager::timerCallback() {
   this->visualizePF();
   this->updateQueryPoint();
-  // A = [0, 3] -> B = [-4, 3]
-  // Linearly interpolate a position between A and B
-  // Assign that position to the BOX obstacle (ID 2)
-  // in the timer callback, so it moves along the line
-  // Update the position of the BOX obstacle (ID 2) along the line
-  Eigen::Vector3d A(0, 3, 0);
-  Eigen::Vector3d B(-4, 3, 0);
-  const double period = (1.0f / this->timerFreq); // Period of the timer
-  const double step = period / 16.0; // Step size for the linear interpolation
-  if (this->lerpT <= 1.0) {
-    this->lerpT += step; // Increment the parameter
-  } else {
-    this->lerpT = 0.0; // Reset the parameter
-  }
-  Eigen::Vector3d newPosition = A + this->lerpT * (B - A);
-  auto boxObst = this->pField.getObstacleByID(2);
-  boxObst.setPosition(newPosition);
-  this->pField.addObstacle(boxObst); // Update the obstacle in the potential field
 }
 
 void PotentialFieldManager::updateQueryPoint() {
