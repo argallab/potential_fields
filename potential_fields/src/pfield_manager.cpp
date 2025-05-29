@@ -45,21 +45,6 @@ PotentialFieldManager::PotentialFieldManager()
 
   // Initialize the potential field
   this->pField = PotentialField(SpatialVector{Eigen::Vector3d::Zero()}, this->attractiveGain, this->rotationalAttractiveGain);
-  this->pField.addObstacle(
-    PotentialFieldObstacle(0, Eigen::Vector3d(3, 3, 0), Eigen::Quaterniond::Identity(), ObstacleType::SPHERE, ObstacleGeometry{1.0, 0.0, 0.0, 0.0}, 2.0, this->repulsiveGain)
-  );
-  this->pField.addObstacle(
-    PotentialFieldObstacle(1, Eigen::Vector3d(-1.5, -1, 0), Eigen::Quaterniond::Identity(), ObstacleType::SPHERE, ObstacleGeometry{1.5, 0.0, 0.0, 0.0}, 2.0, this->repulsiveGain)
-  );
-  this->pField.addObstacle(
-    PotentialFieldObstacle(2, Eigen::Vector3d(-2, 3, 1.0 / 2.0), Eigen::Quaterniond::Identity(), ObstacleType::BOX, ObstacleGeometry{0.0, 1.0, 1.0, 1.0}, 2.0, this->repulsiveGain)
-  );
-  this->pField.addObstacle(
-    PotentialFieldObstacle(3, Eigen::Vector3d(2, -3.5, 1.5 / 2.0), Eigen::Quaterniond::Identity(), ObstacleType::CYLINDER, ObstacleGeometry{1.0, 0.0, 0.0, 1.5}, 2.0, this->repulsiveGain)
-  );
-  this->pField.addObstacle(
-    PotentialFieldObstacle(4, Eigen::Vector3d(4, -0.5, 1.5 / 2.0), yaw45Quat, ObstacleType::BOX, ObstacleGeometry{0.0, 2.0, 1.0, 1.5}, 2.0, this->repulsiveGain)
-  );
 
   // Create a CSV file to store the potential field data for python to plot
   std::string filename = "pfield_data";
@@ -76,7 +61,7 @@ PotentialFieldManager::PotentialFieldManager()
 
 void PotentialFieldManager::timerCallback() {
   this->visualizePF();
-  this->updateQueryPoint();
+  // this->updateQueryPoint();
 }
 
 void PotentialFieldManager::updateQueryPoint() {
@@ -106,9 +91,9 @@ void PotentialFieldManager::visualizePF() {
   auto potentialVectorMarkers = this->createPotentialVectorMarkers();
   markerArray.markers.insert(markerArray.markers.cend(), potentialVectorMarkers.markers.cbegin(),
     potentialVectorMarkers.markers.cend());
-  auto queryPointMarker = this->createQueryPointMarker();
-  markerArray.markers.insert(markerArray.markers.cend(), queryPointMarker.markers.cbegin(),
-    queryPointMarker.markers.cend());
+  // auto queryPointMarker = this->createQueryPointMarker();
+  // markerArray.markers.insert(markerArray.markers.cend(), queryPointMarker.markers.cbegin(),
+  //   queryPointMarker.markers.cend());
   // Publish the marker array
   this->markerPub->publish(markerArray);
 }
