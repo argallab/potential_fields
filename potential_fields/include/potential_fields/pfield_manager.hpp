@@ -38,6 +38,7 @@ private:
   double repulsiveGain; // Repulsive gain [Ns/m]
   double maxForce; // Maximum force [N]
   SpatialVector queryPoint; // Query point for the potential field to "animate"
+  double lerpT = 0.0;
 
   // Potential field object
   PotentialField pField;

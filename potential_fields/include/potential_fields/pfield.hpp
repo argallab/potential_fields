@@ -110,6 +110,16 @@ public:
    */
   void clearObstacles() { this->obstacles.clear(); }
 
+  PotentialFieldObstacle getObstacleByID(int obstacleID) const {
+    const auto it = std::find_if(this->obstacles.cbegin(), this->obstacles.cend(),
+      [obstacleID](const PotentialFieldObstacle& obs) {return obs.getID() == obstacleID;});
+    if (it != this->obstacles.cend()) {
+      return *it;
+    } else {
+      throw std::invalid_argument("Obstacle with the given ID does not exist.");
+    }
+  }
+
   /**
    * @brief Given a 3D position, computes the velocity vector
    *        by combining attractive and repulsive forces.
@@ -131,9 +141,14 @@ public:
 
   bool isPointInsideObstacle(Eigen::Vector3d point) const {
     for (const auto& obst : this->obstacles) {
-      if (obst.withinObstacle(point)) {
-        return true;
-      }
+      if (obst.withinObstacle(point)) { return true; }
+    }
+    return false;
+  }
+
+  bool isPointWithinInfluenceZone(Eigen::Vector3d point) const {
+    for (const auto& obst : this->obstacles) {
+      if (obst.withinInfluenceZone(point)) { return true; }
     }
     return false;
   }

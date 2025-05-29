@@ -41,8 +41,18 @@ PotentialFieldManager::PotentialFieldManager()
 
   // Initialize the potential field
   this->pField = PotentialField(SpatialVector{Eigen::Vector3d::Zero()}, this->attractiveGain, this->rotationalAttractiveGain);
-  this->pField.addObstacle(PotentialFieldObstacle(0, Eigen::Vector3d(3, 3, 0), 1.0f, 2.0f, this->repulsiveGain));
-  this->pField.addObstacle(PotentialFieldObstacle(1, Eigen::Vector3d(-1.5, -1, 0), 1.5f, 2.5f, this->repulsiveGain));
+  this->pField.addObstacle(
+    PotentialFieldObstacle(0, Eigen::Vector3d(3, 3, 0), Eigen::Quaterniond::Identity(), ObstacleType::SPHERE, ObstacleGeometry{1.0, 0.0, 0.0, 0.0}, 2.0, this->repulsiveGain)
+  );
+  this->pField.addObstacle(
+    PotentialFieldObstacle(1, Eigen::Vector3d(-1.5, -1, 0), Eigen::Quaterniond::Identity(), ObstacleType::SPHERE, ObstacleGeometry{1.5, 0.0, 0.0, 0.0}, 2.0, this->repulsiveGain)
+  );
+  this->pField.addObstacle(
+    PotentialFieldObstacle(2, Eigen::Vector3d(-2, 3, 1.0 / 2.0), Eigen::Quaterniond::Identity(), ObstacleType::BOX, ObstacleGeometry{0.0, 1.0, 1.0, 1.0}, 2.0, this->repulsiveGain)
+  );
+  this->pField.addObstacle(
+    PotentialFieldObstacle(3, Eigen::Vector3d(2, -3.5, 1.5 / 2.0), Eigen::Quaterniond::Identity(), ObstacleType::CYLINDER, ObstacleGeometry{1.0, 0.0, 0.0, 1.5}, 2.0, this->repulsiveGain)
+  );
 
   // Create a CSV file to store the potential field data for python to plot
   std::string filename = "pfield_data";
@@ -60,6 +70,24 @@ PotentialFieldManager::PotentialFieldManager()
 void PotentialFieldManager::timerCallback() {
   this->visualizePF();
   this->updateQueryPoint();
+  // A = [0, 3] -> B = [-4, 3]
+  // Linearly interpolate a position between A and B
+  // Assign that position to the BOX obstacle (ID 2)
+  // in the timer callback, so it moves along the line
+  // Update the position of the BOX obstacle (ID 2) along the line
+  Eigen::Vector3d A(0, 3, 0);
+  Eigen::Vector3d B(-4, 3, 0);
+  const double period = (1.0f / this->timerFreq); // Period of the timer
+  const double step = period / 16.0; // Step size for the linear interpolation
+  if (this->lerpT <= 1.0) {
+    this->lerpT += step; // Increment the parameter
+  } else {
+    this->lerpT = 0.0; // Reset the parameter
+  }
+  Eigen::Vector3d newPosition = A + this->lerpT * (B - A);
+  auto boxObst = this->pField.getObstacleByID(2);
+  boxObst.setPosition(newPosition);
+  this->pField.addObstacle(boxObst); // Update the obstacle in the potential field
 }
 
 void PotentialFieldManager::updateQueryPoint() {
@@ -106,7 +134,6 @@ MarkerArray PotentialFieldManager::createObstacleMarkers() {
     obstacleMarker.header.stamp = this->now();
     obstacleMarker.ns = "obstacle";
     obstacleMarker.id = id;
-    obstacleMarker.type = Marker::SPHERE;
     obstacleMarker.action = Marker::ADD;
     SpatialVector position = obstacle.getPosition();
     obstacleMarker.pose.position.x = position.getPosition().x();
@@ -116,32 +143,73 @@ MarkerArray PotentialFieldManager::createObstacleMarkers() {
     obstacleMarker.pose.orientation.y = position.getOrientation().y();
     obstacleMarker.pose.orientation.z = position.getOrientation().z();
     obstacleMarker.pose.orientation.w = position.getOrientation().w();
-    // Scale is the Diameter of the Sphere
-    obstacleMarker.scale.x = obstacle.getRadius() * 2.0f;
-    obstacleMarker.scale.y = obstacle.getRadius() * 2.0f;
-    obstacleMarker.scale.z = obstacle.getRadius() * 2.0f;
+    switch (obstacle.getType()) {
+    case ObstacleType::SPHERE: {
+      // Scale is the Diameter of the Sphere
+      obstacleMarker.type = Marker::SPHERE;
+      obstacleMarker.scale.x = obstacle.getGeometry().radius * 2.0f;
+      obstacleMarker.scale.y = obstacle.getGeometry().radius * 2.0f;
+      obstacleMarker.scale.z = obstacle.getGeometry().radius * 2.0f;
+      break;
+    }
+    case ObstacleType::BOX: {
+      obstacleMarker.type = Marker::CUBE;
+      obstacleMarker.scale.x = obstacle.getGeometry().length;
+      obstacleMarker.scale.y = obstacle.getGeometry().width;
+      obstacleMarker.scale.z = obstacle.getGeometry().height;
+      break;
+    }
+    case ObstacleType::CYLINDER: {
+      obstacleMarker.type = Marker::CYLINDER;
+      obstacleMarker.scale.x = obstacle.getGeometry().radius * 2.0f; // Diameter
+      obstacleMarker.scale.y = obstacle.getGeometry().radius * 2.0f; // Diameter
+      obstacleMarker.scale.z = obstacle.getGeometry().height; // Height
+      break;
+    }
+    }
     obstacleMarker.color.r = 1.0f;
     obstacleMarker.color.g = 0.0f;
     obstacleMarker.color.b = 0.0f;
     obstacleMarker.color.a = 1.0f; // Opaque
     obstacleMarker.lifetime = rclcpp::Duration(0, 0); // No lifetime
     markerArray.markers.push_back(obstacleMarker);
-    // Create a transparent sphere representing the influence radius
+    // Create a transparent volume representing the influence zone
     Marker influenceMarker;
     influenceMarker.header.frame_id = "map";
     influenceMarker.header.stamp = this->now();
     influenceMarker.ns = "obstacle_influence";
     influenceMarker.id = id;
-    influenceMarker.type = Marker::SPHERE;
     influenceMarker.action = Marker::ADD;
     influenceMarker.pose.position.x = position.getPosition().x();
     influenceMarker.pose.position.y = position.getPosition().y();
     influenceMarker.pose.position.z = position.getPosition().z();
-    influenceMarker.pose.orientation.w = 1.0;
-    // Scale is the Diameter of the Sphere
-    influenceMarker.scale.x = obstacle.getInfluenceRadius() * 2.0f;
-    influenceMarker.scale.y = obstacle.getInfluenceRadius() * 2.0f;
-    influenceMarker.scale.z = obstacle.getInfluenceRadius() * 2.0f;
+    influenceMarker.pose.orientation.x = position.getOrientation().x();
+    influenceMarker.pose.orientation.y = position.getOrientation().y();
+    influenceMarker.pose.orientation.z = position.getOrientation().z();
+    influenceMarker.pose.orientation.w = position.getOrientation().w();
+    switch (obstacle.getType()) {
+    case ObstacleType::SPHERE: {
+      influenceMarker.type = Marker::SPHERE;
+      influenceMarker.scale.x = obstacle.getInfluenceZoneScale() * obstacle.getGeometry().radius * 2.0f; // Diameter
+      influenceMarker.scale.y = obstacle.getInfluenceZoneScale() * obstacle.getGeometry().radius * 2.0f; // Diameter
+      influenceMarker.scale.z = obstacle.getInfluenceZoneScale() * obstacle.getGeometry().radius * 2.0f; // Diameter
+      break;
+    }
+    case ObstacleType::BOX: {
+      influenceMarker.type = Marker::CUBE;
+      influenceMarker.scale.x = obstacle.getInfluenceZoneScale() * obstacle.getGeometry().length;
+      influenceMarker.scale.y = obstacle.getInfluenceZoneScale() * obstacle.getGeometry().width;
+      influenceMarker.scale.z = obstacle.getInfluenceZoneScale() * obstacle.getGeometry().height;
+      break;
+    }
+    case ObstacleType::CYLINDER: {
+      influenceMarker.type = Marker::CYLINDER;
+      influenceMarker.scale.x = obstacle.getInfluenceZoneScale() * obstacle.getGeometry().radius * 2.0f; // Diameter
+      influenceMarker.scale.y = obstacle.getInfluenceZoneScale() * obstacle.getGeometry().radius * 2.0f; // Diameter
+      influenceMarker.scale.z = obstacle.getInfluenceZoneScale() * obstacle.getGeometry().height; // Height
+      break;
+    }
+    }
     influenceMarker.color.r = 1.0f;
     influenceMarker.color.g = 1.0f;
     influenceMarker.color.b = 0.0f;
@@ -290,9 +358,16 @@ MarkerArray PotentialFieldManager::createQueryPointMarker() {
   queryPointMarker.scale.x = 0.3f; // Diameter
   queryPointMarker.scale.y = 0.3f; // Diameter
   queryPointMarker.scale.z = 0.3f; // Diameter
-  queryPointMarker.color.r = 0.0f;
-  queryPointMarker.color.g = 0.0f;
-  queryPointMarker.color.b = 1.0f;
+  bool isInfluenced = this->pField.isPointWithinInfluenceZone(this->queryPoint.getPosition());
+  if (isInfluenced) {
+    queryPointMarker.color.r = 1.0f; // Red if inside an obstacle
+    queryPointMarker.color.g = 0.0f;
+    queryPointMarker.color.b = 0.0f;
+  } else {
+    queryPointMarker.color.r = 0.0f; // Blue if outside obstacles
+    queryPointMarker.color.g = 0.0f;
+    queryPointMarker.color.b = 1.0f;
+  }
   queryPointMarker.color.a = 1.0f; // Opaque
   queryPointMarker.lifetime = rclcpp::Duration(0, 0); // No lifetime
   markerArray.markers.push_back(queryPointMarker);
@@ -305,11 +380,15 @@ void PotentialFieldManager::createCSV(const std::string& base_filename) {
   std::string obstacles_filename = base_filename + "_obstacles.csv";
   std::ofstream obstacles_file(obstacles_filename);
   if (obstacles_file.is_open()) {
-    obstacles_file << "obstacle_x,obstacle_y,obstacle_z,radius,influence\n";
+    obstacles_file << "obstacle_x,obstacle_y,obstacle_z,type,influence,repulsive_gain,radius,length,width,height\n";
     for (const auto& obstacle : this->pField.getObstacles()) {
       const Eigen::Vector3d& position = obstacle.getPosition();
+      std::vector<double> obstGeomVector = obstacle.getGeometry().asVector(obstacle.getType());
       obstacles_file << position.x() << "," << position.y() << "," << position.z() << ","
-        << obstacle.getRadius() << "," << obstacle.getInfluenceRadius() << "\n";
+        << obstacleTypeToString(obstacle.getType()) << "," << obstacle.getInfluenceZoneScale() << ","
+        << obstacle.getRepulsiveGain() << ","
+        << obstGeomVector[0] << "," << obstGeomVector[1] << "," << obstGeomVector[2] << obstGeomVector[3]
+        << "\n";
     }
     obstacles_file.close();
   } else {
