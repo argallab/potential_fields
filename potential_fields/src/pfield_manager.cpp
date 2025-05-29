@@ -21,21 +21,6 @@ PotentialFieldManager::PotentialFieldManager()
   this->repulsiveGain = this->get_parameter("repulsive_gain").as_double();
   this->maxForce = this->get_parameter("max_force").as_double();
 
-  // Publish a static transform at the origin of the world frame
-  static tf2_ros::StaticTransformBroadcaster static_broadcaster(this);
-  geometry_msgs::msg::TransformStamped static_transform;
-  static_transform.header.stamp = this->now();
-  static_transform.header.frame_id = "world";
-  static_transform.child_frame_id = "map";
-  static_transform.transform.translation.x = 0.0;
-  static_transform.transform.translation.y = 0.0;
-  static_transform.transform.translation.z = 0.0;
-  static_transform.transform.rotation.x = 0.0;
-  static_transform.transform.rotation.y = 0.0;
-  static_transform.transform.rotation.z = 0.0;
-  static_transform.transform.rotation.w = 1.0;
-  static_broadcaster.sendTransform(static_transform);
-
   // Setup marker publisher
   this->markerPub = this->create_publisher<MarkerArray>("visualization_marker_array", 10);
   RCLCPP_INFO(this->get_logger(), "Markers publishing on: %s", this->markerPub->get_topic_name());
@@ -43,6 +28,9 @@ PotentialFieldManager::PotentialFieldManager()
   // Setup path publisher
   this->pathPub = this->create_publisher<Path>("nav_msgs/msg/Path", 10);
   RCLCPP_INFO(this->get_logger(), "Query point path publishing on: %s", this->pathPub->get_topic_name());
+
+  // Setup TF2 broadcaster
+  this->dynamicTfBroadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(this);
 
   // Setup goal pose subscriber
   this->goalPoseSub = this->create_subscription<geometry_msgs::msg::PoseStamped>(
@@ -58,6 +46,21 @@ PotentialFieldManager::PotentialFieldManager()
     ));
   }
   );
+
+  // Publish a static transform at the origin of the world frame
+  static tf2_ros::StaticTransformBroadcaster staticBroadcaster = tf2_ros::StaticTransformBroadcaster(this);
+  geometry_msgs::msg::TransformStamped worldTransform;
+  worldTransform.header.stamp = this->now();
+  worldTransform.header.frame_id = "world";
+  worldTransform.child_frame_id = "map";
+  worldTransform.transform.translation.x = 0.0;
+  worldTransform.transform.translation.y = 0.0;
+  worldTransform.transform.translation.z = 0.0;
+  worldTransform.transform.rotation.x = 0.0;
+  worldTransform.transform.rotation.y = 0.0;
+  worldTransform.transform.rotation.z = 0.0;
+  worldTransform.transform.rotation.w = 1.0;
+  staticBroadcaster.sendTransform(worldTransform);
 
   Eigen::Quaterniond yaw45Quat = Eigen::Quaterniond(
     Eigen::AngleAxisd(M_PI / 4.0, Eigen::Vector3d::UnitZ())
@@ -97,6 +100,25 @@ PotentialFieldManager::PotentialFieldManager()
 void PotentialFieldManager::timerCallback() {
   this->visualizePF();
   this->updateQueryPoint();
+  this->updateTransforms();
+}
+
+void PotentialFieldManager::updateTransforms() {
+  for (const auto& obst : this->pField.getObstacles()) {
+    // Publish a TF from world to obstacle frame
+    geometry_msgs::msg::TransformStamped obstacleTransform;
+    obstacleTransform.header.stamp = this->now();
+    obstacleTransform.header.frame_id = "world";
+    obstacleTransform.child_frame_id = "obstacle_" + std::to_string(obst.getID());
+    obstacleTransform.transform.translation.x = obst.getPosition().x();
+    obstacleTransform.transform.translation.y = obst.getPosition().y();
+    obstacleTransform.transform.translation.z = obst.getPosition().z();
+    obstacleTransform.transform.rotation.x = obst.getOrientation().x();
+    obstacleTransform.transform.rotation.y = obst.getOrientation().y();
+    obstacleTransform.transform.rotation.z = obst.getOrientation().z();
+    obstacleTransform.transform.rotation.w = obst.getOrientation().w();
+    this->dynamicTfBroadcaster->sendTransform(obstacleTransform);
+  }
 }
 
 void PotentialFieldManager::updateQueryPoint() {
@@ -115,7 +137,7 @@ void PotentialFieldManager::updateQueryPoint() {
   Eigen::Vector3d newPosition = queryPoint.getPosition() + (velocity.getPosition() * period);
   this->queryPoint.setPosition(newPosition);
   PoseStamped pstamped;
-  pstamped.header.frame_id = "map";
+  pstamped.header.frame_id = "world";
   pstamped.header.stamp = this->now();
   pstamped.pose.position.x = this->queryPoint.getPosition().x();
   pstamped.pose.position.y = this->queryPoint.getPosition().y();
@@ -124,7 +146,7 @@ void PotentialFieldManager::updateQueryPoint() {
   pstamped.pose.orientation.y = this->queryPoint.getOrientation().y();
   pstamped.pose.orientation.z = this->queryPoint.getOrientation().z();
   pstamped.pose.orientation.w = this->queryPoint.getOrientation().w();
-  this->queryPath.header.frame_id = "map";
+  this->queryPath.header.frame_id = "world";
   this->queryPath.header.stamp = this->now();
   this->queryPath.poses.push_back(pstamped);
   this->pathPub->publish(this->queryPath);
@@ -153,7 +175,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers() {
   int id = 0;
   for (const auto& obstacle : this->pField.getObstacles()) {
     Marker obstacleMarker;
-    obstacleMarker.header.frame_id = "map";
+    obstacleMarker.header.frame_id = "world";
     obstacleMarker.header.stamp = this->now();
     obstacleMarker.ns = "obstacle";
     obstacleMarker.id = id;
@@ -199,7 +221,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers() {
     markerArray.markers.push_back(obstacleMarker);
     // Create a transparent volume representing the influence zone
     Marker influenceMarker;
-    influenceMarker.header.frame_id = "map";
+    influenceMarker.header.frame_id = "world";
     influenceMarker.header.stamp = this->now();
     influenceMarker.ns = "obstacle_influence";
     influenceMarker.id = id;
@@ -248,7 +270,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers() {
 MarkerArray PotentialFieldManager::createGoalMarker() {
   // Create a green sphere marker
   Marker goalMarker;
-  goalMarker.header.frame_id = "map";
+  goalMarker.header.frame_id = "world";
   goalMarker.header.stamp = this->now();
   goalMarker.ns = "goal";
   goalMarker.id = 0;
@@ -274,7 +296,7 @@ MarkerArray PotentialFieldManager::createGoalMarker() {
   goalAxes.reserve(3);
   for (int i = 0; i < 3; i++) {
     Marker axis;
-    axis.header.frame_id = "map";
+    axis.header.frame_id = "world";
     axis.header.stamp = this->now();
     axis.ns = "goal";
     axis.id = i + 1;
@@ -336,7 +358,7 @@ MarkerArray PotentialFieldManager::createPotentialVectorMarkers() {
         double magnitude = velocity.getPosition().norm();
         // Normalize the velocity vector since we want to show direction
         velocity.normalizePosition();
-        vectorMarker.header.frame_id = "map";
+        vectorMarker.header.frame_id = "world";
         vectorMarker.header.stamp = this->now();
         vectorMarker.ns = "potential_vectors";
         vectorMarker.id = id++;
@@ -370,7 +392,7 @@ MarkerArray PotentialFieldManager::createPotentialVectorMarkers() {
 MarkerArray PotentialFieldManager::createQueryPointMarker() {
   MarkerArray markerArray;
   Marker queryPointMarker;
-  queryPointMarker.header.frame_id = "map";
+  queryPointMarker.header.frame_id = "world";
   queryPointMarker.header.stamp = this->now();
   queryPointMarker.ns = "query_point";
   queryPointMarker.id = 0;

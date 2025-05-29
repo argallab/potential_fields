@@ -7,10 +7,13 @@
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/point.hpp"
 #include "geometry_msgs/msg/quaternion.hpp"
+#include "geometry_msgs/msg/transform_stamped.hpp"
 #include "visualization_msgs/msg/marker.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
 #include "nav_msgs/msg/path.hpp"
 #include "pfield.hpp"
+#include "tf2_ros/static_transform_broadcaster.h"
+#include "tf2_ros/transform_broadcaster.h"
 
 using Marker = visualization_msgs::msg::Marker;
 using MarkerArray = visualization_msgs::msg::MarkerArray;
@@ -19,6 +22,7 @@ using PoseStamped = geometry_msgs::msg::PoseStamped;
 using Point = geometry_msgs::msg::Point;
 using Quaternion = geometry_msgs::msg::Quaternion;
 using Path = nav_msgs::msg::Path;
+using TransformStamped = geometry_msgs::msg::TransformStamped;
 
 class PotentialFieldManager : public rclcpp::Node {
 public:
@@ -49,6 +53,9 @@ private:
   // Timer to perodically update the potential field
   rclcpp::TimerBase::SharedPtr timer;
 
+  // Dynamic transform broadcaster
+  std::shared_ptr<tf2_ros::TransformBroadcaster> dynamicTfBroadcaster;
+
   // Publisher for visualization markers
   rclcpp::Publisher<MarkerArray>::SharedPtr markerPub;
 
@@ -56,11 +63,11 @@ private:
   rclcpp::Publisher<Path>::SharedPtr pathPub;
 
   // Subscriber for the goal pose
-  rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goalPoseSub;
+  rclcpp::Subscription<PoseStamped>::SharedPtr goalPoseSub;
 
   void updateQueryPoint();
-
   void visualizePF();
+  void updateTransforms();
   MarkerArray createObstacleMarkers();
   MarkerArray createGoalMarker();
   MarkerArray createPotentialVectorMarkers();
