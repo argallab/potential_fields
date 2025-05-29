@@ -64,62 +64,26 @@ PotentialFieldManager::PotentialFieldManager()
   worldTransform.transform.rotation.w = 1.0;
   staticBroadcaster.sendTransform(worldTransform);
 
+  auto yaw45Quat = Eigen::Quaterniond(
+    Eigen::AngleAxisd(M_PI / 4.0, Eigen::Vector3d::UnitZ())
+  );
   // Initialize the potential field
   this->pField = PotentialField(SpatialVector{Eigen::Vector3d::Zero()}, this->attractiveGain, this->rotationalAttractiveGain);
-
-  // Load the URDF model
-  RCLCPP_INFO(this->get_logger(), "Loading URDF model from %s", this->urdfFilePath.c_str());
-  // auto robotModel = urdf::parseURDFFile(this->urdfFilePath);
-  urdf::Model robotModel;
-  if (!robotModel.initFile(this->urdfFilePath)) {
-    RCLCPP_ERROR(this->get_logger(), "Failed to load URDF model from %s", this->urdfFilePath.c_str());
-  } else {
-    RCLCPP_INFO(this->get_logger(),
-      "Successfully parsed URDF: robot name = '%s'", robotModel.getName().c_str());
-    // Extract collision geometries from the URDF model and add them as obstacles
-    int obstacleID = 0;
-    for (const auto& link : robotModel.links_) {
-      if (link.second->collision) {
-        // Create a potential field obstacle from the collision geometry
-        // Get the link's transform in the world frame
-        std::string link_name = link.second->name;
-        // geometry_msgs::msg::TransformStamped linkTf =
-        //   this->tfBuffer->lookupTransform("world", link_name, tf2::TimePointZero);
-        std::map<std::string, Eigen::Affine3d> transform_map;
-        // Compute the transform from the link to the world frame
-        transform_map[link_name] = Eigen::Affine3d::Identity();
-        // Compute the transform from the link to the world frame recursively
-        for (const auto& link_pair : robotModel.links_) {
-          transform_map[link_pair.first] = this->computeLinkTransform(link_pair.second, transform_map);
-        }
-        Eigen::Affine3d world_T_link = computeLinkTransform(link.second, transform_map);
-        // Get the collision transform in the link frame
-        Eigen::Affine3d link_T_col =
-          Eigen::Translation3d(link.second->collision->origin.position.x,
-            link.second->collision->origin.position.y,
-            link.second->collision->origin.position.z) *
-          Eigen::Quaterniond(link.second->collision->origin.rotation.w,
-            link.second->collision->origin.rotation.x,
-            link.second->collision->origin.rotation.y,
-            link.second->collision->origin.rotation.z);
-
-        // Total transform of collision geometry in world frame
-        Eigen::Affine3d world_T_col = world_T_link * link_T_col;
-        Eigen::Vector3d obstCenter = world_T_col.translation();
-        Eigen::Quaterniond obstOrientation(world_T_col.rotation());
-        auto obst = this->obstacleFromCollisionObject(
-          obstacleID++,
-          *link.second->collision,
-          obstCenter,
-          obstOrientation,
-          2.0, // InfluenDefaultce zone scale
-          this->repulsiveGain // Repulsive gain
-        );
-        this->pField.addObstacle(obst);
-      }
-    }
-  }
-
+  this->pField.addObstacle(
+    PotentialFieldObstacle(0, Eigen::Vector3d(3, 3, 0), Eigen::Quaterniond::Identity(), ObstacleType::SPHERE, ObstacleGeometry{1.0, 0.0, 0.0, 0.0}, 2.0, this->repulsiveGain)
+  );
+  this->pField.addObstacle(
+    PotentialFieldObstacle(1, Eigen::Vector3d(-1.5, -1, 0), Eigen::Quaterniond::Identity(), ObstacleType::SPHERE, ObstacleGeometry{1.5, 0.0, 0.0, 0.0}, 2.0, this->repulsiveGain)
+  );
+  this->pField.addObstacle(
+    PotentialFieldObstacle(2, Eigen::Vector3d(-2, 3, 1.0 / 2.0), Eigen::Quaterniond::Identity(), ObstacleType::BOX, ObstacleGeometry{0.0, 1.0, 1.0, 1.0}, 2.0, this->repulsiveGain)
+  );
+  this->pField.addObstacle(
+    PotentialFieldObstacle(3, Eigen::Vector3d(2, -3.5, 1.5 / 2.0), Eigen::Quaterniond::Identity(), ObstacleType::CYLINDER, ObstacleGeometry{1.0, 0.0, 0.0, 1.5}, 2.0, this->repulsiveGain)
+  );
+  this->pField.addObstacle(
+    PotentialFieldObstacle(4, Eigen::Vector3d(4, -0.5, 1.5 / 2.0), yaw45Quat, ObstacleType::BOX, ObstacleGeometry{0.0, 2.0, 1.0, 1.5}, 2.0, this->repulsiveGain)
+  );
 
   // Create a CSV file to store the potential field data for python to plot
   std::string filename = "pfield_data";
