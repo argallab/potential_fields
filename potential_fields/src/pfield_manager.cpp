@@ -8,7 +8,7 @@ PotentialFieldManager::PotentialFieldManager()
   RCLCPP_INFO(this->get_logger(), "PotentialFieldManager Initialized");
 
   // Declare parameters
-  this->timerFreq = this->declare_parameter("timer_frequency", 10.0f); // [Hz]
+  this->timerFreq = this->declare_parameter("timer_frequency", 100.0f); // [Hz]
   this->attractiveGain = this->declare_parameter("attractive_gain", 1.0f); // [N]
   this->rotationalAttractiveGain = this->declare_parameter("rotational_attractive_gain", 0.7f); // [N]
   this->repulsiveGain = this->declare_parameter("repulsive_gain", 1.0f); // [N]
@@ -62,7 +62,7 @@ PotentialFieldManager::PotentialFieldManager()
 
   // Run the timer for visualizing the potential field
   this->timer = this->create_wall_timer(
-    std::chrono::seconds(static_cast<int>(1.0f / this->timerFreq)),
+    std::chrono::duration<double>(1.0 / this->timerFreq), // Timer period based on frequency
     std::bind(&PotentialFieldManager::timerCallback, this)
   );
 }
@@ -81,11 +81,10 @@ void PotentialFieldManager::updateQueryPoint() {
     double y = static_cast<double>(rand()) / RAND_MAX * 10.0 - 5.0; // Random y between -5 and 5
     this->queryPoint.setPosition(Eigen::Vector3d(x, y, 0));
   }
-  double period = (1.0f / this->timerFreq); // Period of the timer
+  const double period = (1.0f / this->timerFreq); // Period of the timer
   SpatialVector velocity = this->pField.evaluateVelocityAtPose(queryPoint);
   // Determine the new position of the query point depending on the velocity and the period
-  double scale = 0.1; // Scale factor for the velocity so it's not too fast
-  Eigen::Vector3d newPosition = queryPoint.getPosition() + (velocity.getPosition() * period * scale);
+  Eigen::Vector3d newPosition = queryPoint.getPosition() + (velocity.getPosition() * period);
   this->queryPoint.setPosition(newPosition);
 }
 

@@ -1,6 +1,6 @@
 pfield_manager:
   ros__parameters:
-    timer_frequency: 10.0 # [Hz]
+    timer_frequency: 100.0 # [Hz]
     attractive_gain: 1.0 # [Ns/m]
     rotational_attractive_gain: 0.7 # [Ns/m]
     repulsive_gain: 20.0 # [Ns/m]
