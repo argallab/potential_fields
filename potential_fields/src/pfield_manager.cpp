@@ -81,7 +81,7 @@ PotentialFieldManager::PotentialFieldManager()
   // Initialize the potential field
   this->pField = PotentialField(SpatialVector{Eigen::Vector3d::Zero()}, this->attractiveGain, this->rotationalAttractiveGain);
   // Delay for the TF2 listener to populate the buffer
-  rclcpp::sleep_for(std::chrono::milliseconds(100)); // TODO: Put this logic into a timer, this is just to visualize the robot for now
+  rclcpp::sleep_for(std::chrono::milliseconds(1000)); // TODO: Put this logic into a timer, this is just to visualize the robot for now
   // Load the URDF model
   RCLCPP_INFO(this->get_logger(), "Loading URDF model from %s", this->urdfFilePath.c_str());
   urdf::Model robotModel;
@@ -145,8 +145,8 @@ PotentialFieldManager::PotentialFieldManager()
 
 
   // Create a CSV file to store the potential field data for python to plot
-  std::string filename = "pfield_data";
-  this->createCSV(filename);
+  // std::string filename = "pfield_data";
+  // this->createCSV(filename);
 
   this->queryPoint = SpatialVector(Eigen::Vector3d(8, 4, 0));
 
@@ -161,6 +161,50 @@ void PotentialFieldManager::timerCallback() {
   this->visualizePF();
   this->updateQueryPoint();
   // this->updateTransforms();
+}
+
+Path PotentialFieldManager::interpolatePath(const SpatialVector& start, double deltaTime) {
+  // Interpolate a path from the start point to the current goal point
+  const double goalThreshold = 0.01; // Threshold to consider the goal reached [m]
+  // Initialize Path and add the start pose
+  Path path;
+  path.header.frame_id = "world";
+  path.header.stamp = this->now();
+  PoseStamped startPose;
+  startPose.header.frame_id = path.header.frame_id;
+  startPose.header.stamp = path.header.stamp;
+  startPose.pose.position.x = start.getPosition().x();
+  startPose.pose.position.y = start.getPosition().y();
+  startPose.pose.position.z = start.getPosition().z();
+  startPose.pose.orientation.x = start.getOrientation().x();
+  startPose.pose.orientation.y = start.getOrientation().y();
+  startPose.pose.orientation.z = start.getOrientation().z();
+  startPose.pose.orientation.w = start.getOrientation().w();
+  path.poses.push_back(startPose);
+  // Interpolate through the potential field until the goal is reached with the given delta time
+  SpatialVector currentPose = start;
+  while (currentPose.euclideanDistance(this->pField.getGoalPose()) > goalThreshold) {
+    // Evaluate the velocity at the current pose
+    SpatialVector velocity = this->pField.evaluateVelocityAtPose(currentPose);
+    // Update the current pose based on the velocity and delta time
+    Eigen::Vector3d newPosition = currentPose.getPosition() + (velocity.getPosition() * deltaTime);
+    Eigen::Quaterniond newOrientation = this->pField.integrateAngularVelocity(currentPose.getOrientation(), deltaTime);
+    currentPose.setPosition(newPosition);
+    currentPose.setOrientation(newOrientation);
+    // Add the new pose to the path
+    PoseStamped newPose;
+    newPose.header.frame_id = path.header.frame_id;
+    newPose.header.stamp = this->now();
+    newPose.pose.position.x = currentPose.getPosition().x();
+    newPose.pose.position.y = currentPose.getPosition().y();
+    newPose.pose.position.z = currentPose.getPosition().z();
+    newPose.pose.orientation.x = currentPose.getOrientation().x();
+    newPose.pose.orientation.y = currentPose.getOrientation().y();
+    newPose.pose.orientation.z = currentPose.getOrientation().z();
+    newPose.pose.orientation.w = currentPose.getOrientation().w();
+    path.poses.push_back(newPose);
+  }
+  return path;
 }
 
 void PotentialFieldManager::updateTransforms() {

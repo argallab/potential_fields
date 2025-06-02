@@ -16,7 +16,6 @@
 #include "tf2_ros/transform_broadcaster.h"
 #include "tf2_ros/buffer.h"
 #include "tf2_ros/transform_listener.h"
-#include "tf2_ros/static_transform_broadcaster.h"
 #include "tf2_eigen/tf2_eigen.hpp"
 #include "urdf/model.h"
 #include "urdf_parser/urdf_parser.h"
@@ -79,6 +78,7 @@ private:
   // Subscriber for the goal pose
   rclcpp::Subscription<PoseStamped>::SharedPtr goalPoseSub;
 
+  Path interpolatePath(const SpatialVector& start, double deltaTime);
   void updateQueryPoint();
   void visualizePF();
   void updateTransforms();

@@ -136,6 +136,56 @@ public:
     return SpatialVector(totalForce, totalOrientation);
   }
 
+  Eigen::Vector3d angularVelocityFromQuaternion(const Eigen::Quaterniond& q, double deltaTime) {
+    Eigen::Vector3d axis;
+    double angle;
+    if (q.w() > 1.0) {
+      // Normalize the quaternion
+      Eigen::Quaterniond normalizedQ = q.normalized();
+      axis = normalizedQ.vec();
+      angle = 2.0 * std::acos(normalizedQ.w());
+    } else {
+      axis = q.vec();
+      angle = 2.0 * std::acos(q.w());
+    }
+    // Angular velocity is the axis of rotation scaled by the angle over time
+    return axis.normalized() * (angle / deltaTime);
+  }
+
+  /**
+   * @brief Given a current orientation and a delta time, computes the angular velocity
+   *        to compute the new orientation after the time step.
+   *
+   * @param currentOrientation The starting orientation as a quaternion.
+   * @param deltaTime The time step over which to integrate the angular velocity [s].
+   * @return Eigen::Quaterniond The resulting orientation after integrating the angular velocity.
+   */
+  Eigen::Quaterniond integrateAngularVelocity(const Eigen::Quaterniond& currentOrientation, double deltaTime) {
+    Eigen::Vector3d angularVelocity = angularVelocityFromQuaternion(currentOrientation, deltaTime);
+    const double epsilon = 1e-6; // Small value to avoid division by zero
+    if (angularVelocity.norm() < epsilon) {
+      // If angular velocity is near zero, return the current orientation
+      return currentOrientation;
+    }
+    Eigen::Quaterniond deltaOrientation;
+    deltaOrientation = Eigen::AngleAxisd(angularVelocity.norm() * deltaTime, angularVelocity.normalized());
+    return (currentOrientation * deltaOrientation).normalized();
+  }
+
+  /**
+   * @brief Given a current position, an instantaneous linear velocity vector, and a delta time,
+   *        integrates the linear velocity to compute the new position after the time step.
+   *
+   * @param currentPosition The starting position as a 3D vector.
+   * @param linearVelocity The instantaneous linear velocity vector in meters per second.
+   * @param deltaTime The time step over which to integrate the linear velocity [s].
+   * @return Eigen::Vector3d The resulting position after integrating the linear velocity.
+   */
+  Eigen::Vector3d integrateLinearVelocity(const Eigen::Vector3d& currentPosition,
+    const Eigen::Vector3d& linearVelocity, double deltaTime) {
+    return currentPosition + (linearVelocity * deltaTime);
+  }
+
   SpatialVector getGoalPose() const { return this->goalPose; }
   std::vector<PotentialFieldObstacle> getObstacles() const { return this->obstacles; }
 
