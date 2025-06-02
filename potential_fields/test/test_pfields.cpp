@@ -217,7 +217,7 @@ TEST(PotentialFieldTest, RepulsionMonotonicity) {
   EXPECT_GT(v1.getPosition().x(), v2.getPosition().x());
 }
 
-TEST(PotentialExtensiveTest, SymmetricObstaclesCancelAxes) {
+TEST(PotentialTest, SymmetricObstaclesCancelAxes) {
   SpatialVector goal; // Default goal at origin
   PotentialField pf(goal, 0.0, 0.0);
   pf.addObstacle(PotentialFieldObstacle(1, Eigen::Vector3d(-1, 0, 0), Eigen::Quaterniond::Identity(), ObstacleType::SPHERE, ObstacleGeometry{0.5, 0.0, 0.0, 0.0}, 6.0, 5.0));
