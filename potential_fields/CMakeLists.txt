@@ -34,7 +34,7 @@ ament_add_gtest(test_pfields
 
 include_directories(
   include/potential_fields
-  ${deltarobot_interfaces_INCLUDE_DIRS}
+  ${potential_fields_interfaces_INCLUDE_DIRS}
 )
 add_executable(pfield_manager src/pfield_manager.cpp)
 ament_target_dependencies(pfield_manager
@@ -69,7 +69,6 @@ install(
   DIRECTORY urdf
   DESTINATION share/${PROJECT_NAME}
 )
-
 
 install(
   TARGETS test_spatial_vector
