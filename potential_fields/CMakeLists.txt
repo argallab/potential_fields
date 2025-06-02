@@ -48,7 +48,9 @@ ament_target_dependencies(pfield_manager
   tf2_eigen
   urdf
 )
-target_link_libraries(pfield_manager ${potential_fields_interfaces_INCLUDE_DIRS})
+target_link_libraries(pfield_manager
+  ${potential_fields_interfaces_LIBRARIES}
+)
 
 install(
   TARGETS pfield_manager
