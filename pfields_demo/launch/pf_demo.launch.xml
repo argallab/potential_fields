@@ -1,0 +1,4 @@
+<launch>
+  <node pkg="pfields_demo" exec="pf_demo" name="pf_demo_node" output="screen"/>
+  <include file="$(find-pkg-share potential_fields)/launch/pfield.launch.xml"/>
+</launch>
