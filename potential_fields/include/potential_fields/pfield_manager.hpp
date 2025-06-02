@@ -2,7 +2,6 @@
 #define PFIELD_MANAGER_HPP
 
 #include "rclcpp/rclcpp.hpp"
-#include <vector>
 #include "geometry_msgs/msg/pose.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/point.hpp"
@@ -17,7 +16,9 @@
 #include "tf2_ros/transform_listener.h"
 #include "tf2_eigen/tf2_eigen.hpp"
 #include "urdf/model.h"
-#include "urdf_parser/urdf_parser.h"
+#include "pfield.hpp"
+#include "potential_fields_interfaces/msg/obstacle.hpp"
+#include <vector>
 #include <fstream>
 
 using Marker = visualization_msgs::msg::Marker;
@@ -28,6 +29,7 @@ using Point = geometry_msgs::msg::Point;
 using Quaternion = geometry_msgs::msg::Quaternion;
 using Path = nav_msgs::msg::Path;
 using TransformStamped = geometry_msgs::msg::TransformStamped;
+using Obstacle = potential_fields_interfaces::msg::Obstacle;
 
 class PotentialFieldManager : public rclcpp::Node {
 public:
@@ -78,6 +80,9 @@ private:
   // Subscriber for the goal pose
   rclcpp::Subscription<PoseStamped>::SharedPtr goalPoseSub;
 
+  // Subscriber for obstacles
+  rclcpp::Subscription<Obstacle>::SharedPtr obstacleSub;
+
   Path interpolatePath(const SpatialVector& start, double deltaTime);
   void updateQueryPoint();
   void visualizePF();
@@ -88,11 +93,6 @@ private:
   MarkerArray createGoalMarker();
   MarkerArray createPotentialVectorMarkers();
   MarkerArray createQueryPointMarker();
-
-  PotentialFieldObstacle obstacleFromCollisionObject(int id,
-    const urdf::Collision& collisionObject,
-    const Eigen::Vector3d& position, const Eigen::Quaterniond& orientation,
-    double influenceZoneScale = 2.0, double repulsiveGain = 5.0);
 
   void createCSV(const std::string& filename);
 

@@ -1,6 +1,4 @@
-#include "rclcpp/rclcpp.hpp"
 #include "pfield_manager.hpp"
-#include "pfield.hpp"
 
 PotentialFieldManager::PotentialFieldManager()
   : Node("potential_field_manager") {
@@ -21,6 +19,15 @@ PotentialFieldManager::PotentialFieldManager()
   this->maxForce = this->get_parameter("max_force").as_double();
   this->urdfFilePath = this->get_parameter("robot_description").as_string();
   this->fixedFrame = this->get_parameter("fixed_frame").as_string();
+
+  // Initialize the potential field
+  this->pField = PotentialField(SpatialVector{Eigen::Vector3d::Zero()}, this->attractiveGain, this->rotationalAttractiveGain);
+
+  // Setup TF2 broadcaster, buffer, and listener
+  this->dynamicTfBroadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(this);
+  this->tfBuffer = std::make_shared<tf2_ros::Buffer>(this->get_clock());
+  this->tfListener = std::make_shared<tf2_ros::TransformListener>(*this->tfBuffer, this);
+  RCLCPP_INFO(this->get_logger(), "TF2 broadcaster, buffer, and listener initialized");
 
   // Setup marker publisher
   this->markerPub = this->create_publisher<MarkerArray>("visualization_marker_array", 10);
@@ -45,76 +52,21 @@ PotentialFieldManager::PotentialFieldManager()
   }
   );
 
-  // Setup TF2 broadcaster, buffer, and listener
-  this->dynamicTfBroadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(this);
-  this->tfBuffer = std::make_shared<tf2_ros::Buffer>(this->get_clock());
-  this->tfListener = std::make_shared<tf2_ros::TransformListener>(*this->tfBuffer, this);
-  RCLCPP_INFO(this->get_logger(), "TF2 broadcaster, buffer, and listener initialized");
-
-  // Initialize the potential field
-  this->pField = PotentialField(SpatialVector{Eigen::Vector3d::Zero()}, this->attractiveGain, this->rotationalAttractiveGain);
-
-  // Load the URDF model
-  RCLCPP_INFO(this->get_logger(), "Loading URDF model from %s", this->urdfFilePath.c_str());
-  urdf::Model robotModel;
-  if (!robotModel.initFile(this->urdfFilePath)) {
-    RCLCPP_ERROR(this->get_logger(), "Failed to load URDF model from %s", this->urdfFilePath.c_str());
-  } else {
-    RCLCPP_INFO(this->get_logger(),
-      "Successfully parsed URDF: robot name = '%s'", robotModel.getName().c_str());
-    // Extract collision geometries from the URDF model and add them as obstacles
-    int obstacleID = 0;
-    for (const auto& link : robotModel.links_) {
-      // Create a potential field obstacle from the collision geometry
-      // Get the link's transform in the world frame
-      std::string link_name = link.second->name;
-      if (!link.second->collision) {
-        RCLCPP_WARN(this->get_logger(), "Link '%s' has no collision geometry, skipping", link_name.c_str());
-        continue;
-      }
-      // Get the transform from the world frame to the link's frame
-      // Since robot_state_publisher should be publishing transforms
-      TransformStamped linkTransform;
-      try {
-        linkTransform = this->tfBuffer->lookupTransform(this->fixedFrame, link_name, tf2::TimePointZero);
-      }
-      catch (const tf2::TransformException& ex) {
-        RCLCPP_ERROR(this->get_logger(), "Failed to get transform for link '%s': %s", link_name.c_str(), ex.what());
-      }
-      const urdf::Pose& collisionOrigin = link.second->collision->origin;
-      // Convert TF to Eigen::Affine3d
-      Eigen::Affine3d world_T_link = tf2::transformToEigen(linkTransform.transform);
-      // Construct link_T_collision from URDF collision origin
-      Eigen::Affine3d link_T_col =
-        Eigen::Translation3d(
-          collisionOrigin.position.x,
-          collisionOrigin.position.y,
-          collisionOrigin.position.z) *
-        Eigen::Quaterniond(
-          collisionOrigin.rotation.w,
-          collisionOrigin.rotation.x,
-          collisionOrigin.rotation.y,
-          collisionOrigin.rotation.z);
-
-      // Compose to get world_T_collision
-      Eigen::Affine3d world_T_col = world_T_link * link_T_col;
-
-      // Extract final obstacle pose
-      Eigen::Vector3d obstCenter = world_T_col.translation();
-      Eigen::Quaterniond obstOrientation(world_T_col.rotation());
-
-      auto obst = this->obstacleFromCollisionObject(
-        obstacleID++,
-        *link.second->collision,
-        obstCenter,
-        obstOrientation,
-        2.0, // Influence zone scale
-        this->repulsiveGain // Repulsive gain
-      );
-      this->pField.addObstacle(obst);
-    }
+  // Setup obstacle subscriber
+  this->obstacleSub = this->create_subscription<Obstacle>("pfield/obstacles", 10,
+    [this](const Obstacle::SharedPtr msg) {
+    PotentialFieldObstacle obstacle(
+      msg->id,
+      Eigen::Vector3d(msg->pose.position.x, msg->pose.position.y, msg->pose.position.z),
+      Eigen::Quaterniond(msg->pose.orientation.w, msg->pose.orientation.x, msg->pose.orientation.y, msg->pose.orientation.z),
+      stringToObstacleType(msg->type),
+      ObstacleGeometry{msg->radius, msg->length, msg->width, msg->height},
+      2.0, // influence zone scale
+      this->repulsiveGain
+    );
+    this->pField.addObstacle(obstacle);
   }
-
+  );
 
   // Create a CSV file to store the potential field data for python to plot
   // std::string filename = "pfield_data";
@@ -541,44 +493,6 @@ void PotentialFieldManager::createCSV(const std::string& base_filename) {
   } else {
     RCLCPP_ERROR(this->get_logger(), "Unable to open file: %s", vectors_filename.c_str());
   }
-}
-
-PotentialFieldObstacle PotentialFieldManager::obstacleFromCollisionObject(
-  int id,
-  const urdf::Collision& collisionObject,
-  const Eigen::Vector3d& position,
-  const Eigen::Quaterniond& orientation,
-  double influenceZoneScale,
-  double repulsiveGain) {
-  ObstacleType type;
-  ObstacleGeometry geom{};
-
-  auto* geometry = collisionObject.geometry.get();
-  if (urdf::Box* b = dynamic_cast<urdf::Box*>(geometry)) {
-    type = ObstacleType::BOX;
-    geom.length = b->dim.x;
-    geom.width = b->dim.y;
-    geom.height = b->dim.z;
-  } else if (urdf::Sphere* s = dynamic_cast<urdf::Sphere*>(geometry)) {
-    type = ObstacleType::SPHERE;
-    geom.radius = s->radius;
-  } else if (urdf::Cylinder* c = dynamic_cast<urdf::Cylinder*>(geometry)) {
-    type = ObstacleType::CYLINDER;
-    geom.radius = c->radius;
-    geom.height = c->length;
-  } else if (urdf::Mesh* m = dynamic_cast<urdf::Mesh*>(geometry)) {
-    // Approximate mesh as a box for now
-    type = ObstacleType::BOX;
-    // TODO: Handle mesh geometry to assign Box size
-  } else {
-    // throw std::runtime_error("Unhandled URDF geometry type");
-    RCLCPP_ERROR(this->get_logger(),
-      "Unhandled URDF geometry type for collision object with id %d", id);
-  }
-
-  return PotentialFieldObstacle{
-    id, position, orientation, type, geom, influenceZoneScale, repulsiveGain
-  };
 }
 
 int main(int argc, char* argv[]) {

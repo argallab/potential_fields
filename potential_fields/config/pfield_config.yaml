@@ -5,3 +5,6 @@ pfield_manager:
     rotational_attractive_gain: 0.7 # [Ns/m]
     repulsive_gain: 20.0 # [Ns/m]
     max_force: 10.0 # [N]
+robot_parser:
+  ros__parameters:
+    timer_frequency: 50.0 # [Hz]
