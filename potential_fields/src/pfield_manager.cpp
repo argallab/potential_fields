@@ -12,6 +12,7 @@ PotentialFieldManager::PotentialFieldManager()
   this->repulsiveGain = this->declare_parameter("repulsive_gain", 1.0f); // [N]
   this->maxForce = this->declare_parameter("max_force", 10.0f); // [N]
   this->urdfFilePath = this->declare_parameter("robot_description", "urdf/robot.urdf"); // Path to the URDF file
+  this->fixedFrame = this->declare_parameter("fixed_frame", "world"); // RViz fixed frame
   // Get parameters from yaml file
   this->timerFreq = this->get_parameter("timer_frequency").as_double();
   this->attractiveGain = this->get_parameter("attractive_gain").as_double();
@@ -19,6 +20,7 @@ PotentialFieldManager::PotentialFieldManager()
   this->repulsiveGain = this->get_parameter("repulsive_gain").as_double();
   this->maxForce = this->get_parameter("max_force").as_double();
   this->urdfFilePath = this->get_parameter("robot_description").as_string();
+  this->fixedFrame = this->get_parameter("fixed_frame").as_string();
 
   // Setup marker publisher
   this->markerPub = this->create_publisher<MarkerArray>("visualization_marker_array", 10);
@@ -51,8 +53,7 @@ PotentialFieldManager::PotentialFieldManager()
 
   // Initialize the potential field
   this->pField = PotentialField(SpatialVector{Eigen::Vector3d::Zero()}, this->attractiveGain, this->rotationalAttractiveGain);
-  // Delay for the TF2 listener to populate the buffer
-  rclcpp::sleep_for(std::chrono::milliseconds(1000)); // TODO: Put this logic into a timer, this is just to visualize the robot for now
+
   // Load the URDF model
   RCLCPP_INFO(this->get_logger(), "Loading URDF model from %s", this->urdfFilePath.c_str());
   urdf::Model robotModel;
@@ -75,7 +76,7 @@ PotentialFieldManager::PotentialFieldManager()
       // Since robot_state_publisher should be publishing transforms
       TransformStamped linkTransform;
       try {
-        linkTransform = this->tfBuffer->lookupTransform("world", link_name, tf2::TimePointZero);
+        linkTransform = this->tfBuffer->lookupTransform(this->fixedFrame, link_name, tf2::TimePointZero);
       }
       catch (const tf2::TransformException& ex) {
         RCLCPP_ERROR(this->get_logger(), "Failed to get transform for link '%s': %s", link_name.c_str(), ex.what());
@@ -139,7 +140,7 @@ Path PotentialFieldManager::interpolatePath(const SpatialVector& start, double d
   const double goalThreshold = 0.01; // Threshold to consider the goal reached [m]
   // Initialize Path and add the start pose
   Path path;
-  path.header.frame_id = "world";
+  path.header.frame_id = this->fixedFrame;
   path.header.stamp = this->now();
   PoseStamped startPose;
   startPose.header.frame_id = path.header.frame_id;
@@ -183,7 +184,7 @@ void PotentialFieldManager::updateTransforms() {
     // Publish a TF from world to obstacle frame
     geometry_msgs::msg::TransformStamped obstacleTransform;
     obstacleTransform.header.stamp = this->now();
-    obstacleTransform.header.frame_id = "world";
+    obstacleTransform.header.frame_id = this->fixedFrame;
     obstacleTransform.child_frame_id = "obstacle_" + std::to_string(obst.getID());
     obstacleTransform.transform.translation.x = obst.getPosition().x();
     obstacleTransform.transform.translation.y = obst.getPosition().y();
@@ -230,7 +231,7 @@ void PotentialFieldManager::updateQueryPoint() {
   Eigen::Vector3d newPosition = queryPoint.getPosition() + (velocity.getPosition() * period);
   this->queryPoint.setPosition(newPosition);
   PoseStamped pstamped;
-  pstamped.header.frame_id = "world";
+  pstamped.header.frame_id = this->fixedFrame;
   pstamped.header.stamp = this->now();
   pstamped.pose.position.x = this->queryPoint.getPosition().x();
   pstamped.pose.position.y = this->queryPoint.getPosition().y();
@@ -239,7 +240,7 @@ void PotentialFieldManager::updateQueryPoint() {
   pstamped.pose.orientation.y = this->queryPoint.getOrientation().y();
   pstamped.pose.orientation.z = this->queryPoint.getOrientation().z();
   pstamped.pose.orientation.w = this->queryPoint.getOrientation().w();
-  this->queryPath.header.frame_id = "world";
+  this->queryPath.header.frame_id = this->fixedFrame;
   this->queryPath.header.stamp = this->now();
   this->queryPath.poses.push_back(pstamped);
   this->pathPub->publish(this->queryPath);
@@ -250,7 +251,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers() {
   int id = 0;
   for (const auto& obstacle : this->pField.getObstacles()) {
     Marker obstacleMarker;
-    obstacleMarker.header.frame_id = "world";
+    obstacleMarker.header.frame_id = this->fixedFrame;
     obstacleMarker.header.stamp = this->now();
     obstacleMarker.ns = "obstacle";
     obstacleMarker.id = id;
@@ -296,7 +297,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers() {
     markerArray.markers.push_back(obstacleMarker);
     // Create a transparent volume representing the influence zone
     Marker influenceMarker;
-    influenceMarker.header.frame_id = "world";
+    influenceMarker.header.frame_id = this->fixedFrame;
     influenceMarker.header.stamp = this->now();
     influenceMarker.ns = "obstacle_influence";
     influenceMarker.id = id;
@@ -345,7 +346,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers() {
 MarkerArray PotentialFieldManager::createGoalMarker() {
   // Create a green sphere marker
   Marker goalMarker;
-  goalMarker.header.frame_id = "world";
+  goalMarker.header.frame_id = this->fixedFrame;
   goalMarker.header.stamp = this->now();
   goalMarker.ns = "goal";
   goalMarker.id = 0;
@@ -371,7 +372,7 @@ MarkerArray PotentialFieldManager::createGoalMarker() {
   goalAxes.reserve(3);
   for (int i = 0; i < 3; i++) {
     Marker axis;
-    axis.header.frame_id = "world";
+    axis.header.frame_id = this->fixedFrame;
     axis.header.stamp = this->now();
     axis.ns = "goal";
     axis.id = i + 1;
@@ -433,7 +434,7 @@ MarkerArray PotentialFieldManager::createPotentialVectorMarkers() {
         double magnitude = velocity.getPosition().norm();
         // Normalize the velocity vector since we want to show direction
         velocity.normalizePosition();
-        vectorMarker.header.frame_id = "world";
+        vectorMarker.header.frame_id = this->fixedFrame;
         vectorMarker.header.stamp = this->now();
         vectorMarker.ns = "potential_vectors";
         vectorMarker.id = id++;
@@ -467,7 +468,7 @@ MarkerArray PotentialFieldManager::createPotentialVectorMarkers() {
 MarkerArray PotentialFieldManager::createQueryPointMarker() {
   MarkerArray markerArray;
   Marker queryPointMarker;
-  queryPointMarker.header.frame_id = "world";
+  queryPointMarker.header.frame_id = this->fixedFrame;
   queryPointMarker.header.stamp = this->now();
   queryPointMarker.ns = "query_point";
   queryPointMarker.id = 0;

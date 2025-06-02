@@ -1,8 +1,10 @@
 <launch>
 <arg name="rviz_config" default="$(find-pkg-share potential_fields)/config/view_pfield.rviz" description="The RVIZ config file (.rviz)"/>
 <arg name="use_jsp" default="gui" description="The JointState Publisher to launch. ['gui', 'jsp', 'none']"/>
+<arg name="rviz_fixed_frame" default="world" description="The fixed frame for RVIZ"/>
   <node pkg="potential_fields" exec="pfield_manager" name="pfield_manager" output="screen">
     <param from="$(find-pkg-share potential_fields)/config/pfield_config.yaml"/>
+    <param name="fixed_frame" value="$(var rviz_fixed_frame)"/>
     <param name="robot_description" value="$(find-pkg-share potential_fields)/urdf/robot.urdf"/>
   </node>
   <node pkg="robot_state_publisher" exec="robot_state_publisher" >
@@ -10,5 +12,5 @@
   </node>
   <node pkg="joint_state_publisher_gui" exec="joint_state_publisher_gui" if="$(eval \'$(var use_jsp)\'==\'gui\')"/>
   <node pkg="joint_state_publisher" exec="joint_state_publisher" if="$(eval \'$(var use_jsp)\'==\'jsp\')"/>
-  <node pkg="rviz2" exec="rviz2" args="-d $(var rviz_config)" />
+  <node pkg="rviz2" exec="rviz2" args="-d $(var rviz_config) --fixed-frame $(var rviz_fixed_frame)" />
 </launch>
