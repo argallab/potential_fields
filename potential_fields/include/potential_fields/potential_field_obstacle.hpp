@@ -25,6 +25,18 @@ std::string obstacleTypeToString(const ObstacleType& type) {
   }
 }
 
+ObstacleType stringToObstacleType(const std::string& typeStr) {
+  if (typeStr == "Sphere") {
+    return ObstacleType::SPHERE;
+  } else if (typeStr == "Box") {
+    return ObstacleType::BOX;
+  } else if (typeStr == "Cylinder") {
+    return ObstacleType::CYLINDER;
+  } else {
+    throw std::invalid_argument("Unknown obstacle type string: " + typeStr);
+  }
+}
+
 
 struct ObstacleGeometry {
   double radius = 0.0; // Radius for sphere and cylinder, unused for box

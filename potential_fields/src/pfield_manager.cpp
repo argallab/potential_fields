@@ -1,6 +1,4 @@
-#include "rclcpp/rclcpp.hpp"
 #include "pfield_manager.hpp"
-#include "pfield.hpp"
 
 PotentialFieldManager::PotentialFieldManager()
   : Node("potential_field_manager") {
@@ -11,14 +9,23 @@ PotentialFieldManager::PotentialFieldManager()
   this->rotationalAttractiveGain = this->declare_parameter("rotational_attractive_gain", 0.7f); // [N]
   this->repulsiveGain = this->declare_parameter("repulsive_gain", 1.0f); // [N]
   this->maxForce = this->declare_parameter("max_force", 10.0f); // [N]
-  this->urdfFilePath = this->declare_parameter("robot_description", "urdf/robot.urdf"); // Path to the URDF file
+  this->fixedFrame = this->declare_parameter("fixed_frame", "world"); // RViz fixed frame
   // Get parameters from yaml file
   this->timerFreq = this->get_parameter("timer_frequency").as_double();
   this->attractiveGain = this->get_parameter("attractive_gain").as_double();
   this->rotationalAttractiveGain = this->get_parameter("rotational_attractive_gain").as_double();
   this->repulsiveGain = this->get_parameter("repulsive_gain").as_double();
   this->maxForce = this->get_parameter("max_force").as_double();
-  this->urdfFilePath = this->get_parameter("robot_description").as_string();
+  this->fixedFrame = this->get_parameter("fixed_frame").as_string();
+
+  // Initialize the potential field
+  this->pField = PotentialField(SpatialVector{Eigen::Vector3d::Zero()}, this->attractiveGain, this->rotationalAttractiveGain);
+
+  // Setup TF2 broadcaster, buffer, and listener
+  this->dynamicTfBroadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(this);
+  this->tfBuffer = std::make_shared<tf2_ros::Buffer>(this->get_clock());
+  this->tfListener = std::make_shared<tf2_ros::TransformListener>(*this->tfBuffer, this);
+  RCLCPP_INFO(this->get_logger(), "TF2 broadcaster, buffer, and listener initialized");
 
   // Setup marker publisher
   this->markerPub = this->create_publisher<MarkerArray>("visualization_marker_array", 10);
@@ -43,106 +50,21 @@ PotentialFieldManager::PotentialFieldManager()
   }
   );
 
-  // Setup TF2 broadcaster, buffer, and listener
-  this->dynamicTfBroadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(this);
-  this->tfBuffer = std::make_shared<tf2_ros::Buffer>(this->get_clock());
-  this->tfListener = std::make_shared<tf2_ros::TransformListener>(*this->tfBuffer, this);
-  static tf2_ros::StaticTransformBroadcaster staticBroadcaster = tf2_ros::StaticTransformBroadcaster(this);
-  RCLCPP_INFO(this->get_logger(), "TF2 broadcaster, buffer, and listener initialized");
-
-  // Publish a static transform at the origin of the world frame
-  geometry_msgs::msg::TransformStamped worldTransform;
-  worldTransform.header.stamp = this->now();
-  worldTransform.header.frame_id = "world";
-  worldTransform.child_frame_id = "map";
-  worldTransform.transform.translation.x = 0.0;
-  worldTransform.transform.translation.y = 0.0;
-  worldTransform.transform.translation.z = 0.0;
-  worldTransform.transform.rotation.x = 0.0;
-  worldTransform.transform.rotation.y = 0.0;
-  worldTransform.transform.rotation.z = 0.0;
-  worldTransform.transform.rotation.w = 1.0;
-  staticBroadcaster.sendTransform(worldTransform);
-
-  // Publish a static transform from world to base_link
-  geometry_msgs::msg::TransformStamped baseLinkTransform;
-  baseLinkTransform.header.stamp = this->now();
-  baseLinkTransform.header.frame_id = "world";
-  baseLinkTransform.child_frame_id = "base_link";
-  baseLinkTransform.transform.translation.x = 0.0;
-  baseLinkTransform.transform.translation.y = 0.0;
-  baseLinkTransform.transform.translation.z = 0.0;
-  baseLinkTransform.transform.rotation.x = 0.0;
-  baseLinkTransform.transform.rotation.y = 0.0;
-  baseLinkTransform.transform.rotation.z = 0.0;
-  baseLinkTransform.transform.rotation.w = 1.0;
-  staticBroadcaster.sendTransform(baseLinkTransform);
-
-  // Initialize the potential field
-  this->pField = PotentialField(SpatialVector{Eigen::Vector3d::Zero()}, this->attractiveGain, this->rotationalAttractiveGain);
-  // Delay for the TF2 listener to populate the buffer
-  rclcpp::sleep_for(std::chrono::milliseconds(1000)); // TODO: Put this logic into a timer, this is just to visualize the robot for now
-  // Load the URDF model
-  RCLCPP_INFO(this->get_logger(), "Loading URDF model from %s", this->urdfFilePath.c_str());
-  urdf::Model robotModel;
-  if (!robotModel.initFile(this->urdfFilePath)) {
-    RCLCPP_ERROR(this->get_logger(), "Failed to load URDF model from %s", this->urdfFilePath.c_str());
-  } else {
-    RCLCPP_INFO(this->get_logger(),
-      "Successfully parsed URDF: robot name = '%s'", robotModel.getName().c_str());
-    // Extract collision geometries from the URDF model and add them as obstacles
-    int obstacleID = 0;
-    for (const auto& link : robotModel.links_) {
-      // Create a potential field obstacle from the collision geometry
-      // Get the link's transform in the world frame
-      std::string link_name = link.second->name;
-      if (!link.second->collision) {
-        RCLCPP_WARN(this->get_logger(), "Link '%s' has no collision geometry, skipping", link_name.c_str());
-        continue;
-      }
-      // Get the transform from the world frame to the link's frame
-      // Since robot_state_publisher should be publishing transforms
-      TransformStamped linkTransform;
-      try {
-        linkTransform = this->tfBuffer->lookupTransform("world", link_name, tf2::TimePointZero);
-      }
-      catch (const tf2::TransformException& ex) {
-        RCLCPP_ERROR(this->get_logger(), "Failed to get transform for link '%s': %s", link_name.c_str(), ex.what());
-      }
-      const urdf::Pose& collisionOrigin = link.second->collision->origin;
-      // Convert TF to Eigen::Affine3d
-      Eigen::Affine3d world_T_link = tf2::transformToEigen(linkTransform.transform);
-      // Construct link_T_collision from URDF collision origin
-      Eigen::Affine3d link_T_col =
-        Eigen::Translation3d(
-          collisionOrigin.position.x,
-          collisionOrigin.position.y,
-          collisionOrigin.position.z) *
-        Eigen::Quaterniond(
-          collisionOrigin.rotation.w,
-          collisionOrigin.rotation.x,
-          collisionOrigin.rotation.y,
-          collisionOrigin.rotation.z);
-
-      // Compose to get world_T_collision
-      Eigen::Affine3d world_T_col = world_T_link * link_T_col;
-
-      // Extract final obstacle pose
-      Eigen::Vector3d obstCenter = world_T_col.translation();
-      Eigen::Quaterniond obstOrientation(world_T_col.rotation());
-
-      auto obst = this->obstacleFromCollisionObject(
-        obstacleID++,
-        *link.second->collision,
-        obstCenter,
-        obstOrientation,
-        2.0, // Influence zone scale
-        this->repulsiveGain // Repulsive gain
-      );
-      this->pField.addObstacle(obst);
-    }
+  // Setup obstacle subscriber
+  this->obstacleSub = this->create_subscription<Obstacle>("pfield/obstacles", 10,
+    [this](const Obstacle::SharedPtr msg) {
+    PotentialFieldObstacle obstacle(
+      msg->id,
+      Eigen::Vector3d(msg->pose.position.x, msg->pose.position.y, msg->pose.position.z),
+      Eigen::Quaterniond(msg->pose.orientation.w, msg->pose.orientation.x, msg->pose.orientation.y, msg->pose.orientation.z),
+      stringToObstacleType(msg->type),
+      ObstacleGeometry{msg->radius, msg->length, msg->width, msg->height},
+      2.0, // influence zone scale
+      this->repulsiveGain
+    );
+    this->pField.addObstacle(obstacle);
   }
-
+  );
 
   // Create a CSV file to store the potential field data for python to plot
   // std::string filename = "pfield_data";
@@ -168,7 +90,7 @@ Path PotentialFieldManager::interpolatePath(const SpatialVector& start, double d
   const double goalThreshold = 0.01; // Threshold to consider the goal reached [m]
   // Initialize Path and add the start pose
   Path path;
-  path.header.frame_id = "world";
+  path.header.frame_id = this->fixedFrame;
   path.header.stamp = this->now();
   PoseStamped startPose;
   startPose.header.frame_id = path.header.frame_id;
@@ -212,7 +134,7 @@ void PotentialFieldManager::updateTransforms() {
     // Publish a TF from world to obstacle frame
     geometry_msgs::msg::TransformStamped obstacleTransform;
     obstacleTransform.header.stamp = this->now();
-    obstacleTransform.header.frame_id = "world";
+    obstacleTransform.header.frame_id = this->fixedFrame;
     obstacleTransform.child_frame_id = "obstacle_" + std::to_string(obst.getID());
     obstacleTransform.transform.translation.x = obst.getPosition().x();
     obstacleTransform.transform.translation.y = obst.getPosition().y();
@@ -259,7 +181,7 @@ void PotentialFieldManager::updateQueryPoint() {
   Eigen::Vector3d newPosition = queryPoint.getPosition() + (velocity.getPosition() * period);
   this->queryPoint.setPosition(newPosition);
   PoseStamped pstamped;
-  pstamped.header.frame_id = "world";
+  pstamped.header.frame_id = this->fixedFrame;
   pstamped.header.stamp = this->now();
   pstamped.pose.position.x = this->queryPoint.getPosition().x();
   pstamped.pose.position.y = this->queryPoint.getPosition().y();
@@ -268,7 +190,7 @@ void PotentialFieldManager::updateQueryPoint() {
   pstamped.pose.orientation.y = this->queryPoint.getOrientation().y();
   pstamped.pose.orientation.z = this->queryPoint.getOrientation().z();
   pstamped.pose.orientation.w = this->queryPoint.getOrientation().w();
-  this->queryPath.header.frame_id = "world";
+  this->queryPath.header.frame_id = this->fixedFrame;
   this->queryPath.header.stamp = this->now();
   this->queryPath.poses.push_back(pstamped);
   this->pathPub->publish(this->queryPath);
@@ -279,7 +201,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers() {
   int id = 0;
   for (const auto& obstacle : this->pField.getObstacles()) {
     Marker obstacleMarker;
-    obstacleMarker.header.frame_id = "world";
+    obstacleMarker.header.frame_id = this->fixedFrame;
     obstacleMarker.header.stamp = this->now();
     obstacleMarker.ns = "obstacle";
     obstacleMarker.id = id;
@@ -325,7 +247,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers() {
     markerArray.markers.push_back(obstacleMarker);
     // Create a transparent volume representing the influence zone
     Marker influenceMarker;
-    influenceMarker.header.frame_id = "world";
+    influenceMarker.header.frame_id = this->fixedFrame;
     influenceMarker.header.stamp = this->now();
     influenceMarker.ns = "obstacle_influence";
     influenceMarker.id = id;
@@ -374,7 +296,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers() {
 MarkerArray PotentialFieldManager::createGoalMarker() {
   // Create a green sphere marker
   Marker goalMarker;
-  goalMarker.header.frame_id = "world";
+  goalMarker.header.frame_id = this->fixedFrame;
   goalMarker.header.stamp = this->now();
   goalMarker.ns = "goal";
   goalMarker.id = 0;
@@ -400,7 +322,7 @@ MarkerArray PotentialFieldManager::createGoalMarker() {
   goalAxes.reserve(3);
   for (int i = 0; i < 3; i++) {
     Marker axis;
-    axis.header.frame_id = "world";
+    axis.header.frame_id = this->fixedFrame;
     axis.header.stamp = this->now();
     axis.ns = "goal";
     axis.id = i + 1;
@@ -462,7 +384,7 @@ MarkerArray PotentialFieldManager::createPotentialVectorMarkers() {
         double magnitude = velocity.getPosition().norm();
         // Normalize the velocity vector since we want to show direction
         velocity.normalizePosition();
-        vectorMarker.header.frame_id = "world";
+        vectorMarker.header.frame_id = this->fixedFrame;
         vectorMarker.header.stamp = this->now();
         vectorMarker.ns = "potential_vectors";
         vectorMarker.id = id++;
@@ -496,7 +418,7 @@ MarkerArray PotentialFieldManager::createPotentialVectorMarkers() {
 MarkerArray PotentialFieldManager::createQueryPointMarker() {
   MarkerArray markerArray;
   Marker queryPointMarker;
-  queryPointMarker.header.frame_id = "world";
+  queryPointMarker.header.frame_id = this->fixedFrame;
   queryPointMarker.header.stamp = this->now();
   queryPointMarker.ns = "query_point";
   queryPointMarker.id = 0;
@@ -569,44 +491,6 @@ void PotentialFieldManager::createCSV(const std::string& base_filename) {
   } else {
     RCLCPP_ERROR(this->get_logger(), "Unable to open file: %s", vectors_filename.c_str());
   }
-}
-
-PotentialFieldObstacle PotentialFieldManager::obstacleFromCollisionObject(
-  int id,
-  const urdf::Collision& collisionObject,
-  const Eigen::Vector3d& position,
-  const Eigen::Quaterniond& orientation,
-  double influenceZoneScale,
-  double repulsiveGain) {
-  ObstacleType type;
-  ObstacleGeometry geom{};
-
-  auto* geometry = collisionObject.geometry.get();
-  if (urdf::Box* b = dynamic_cast<urdf::Box*>(geometry)) {
-    type = ObstacleType::BOX;
-    geom.length = b->dim.x;
-    geom.width = b->dim.y;
-    geom.height = b->dim.z;
-  } else if (urdf::Sphere* s = dynamic_cast<urdf::Sphere*>(geometry)) {
-    type = ObstacleType::SPHERE;
-    geom.radius = s->radius;
-  } else if (urdf::Cylinder* c = dynamic_cast<urdf::Cylinder*>(geometry)) {
-    type = ObstacleType::CYLINDER;
-    geom.radius = c->radius;
-    geom.height = c->length;
-  } else if (urdf::Mesh* m = dynamic_cast<urdf::Mesh*>(geometry)) {
-    // Approximate mesh as a box for now
-    type = ObstacleType::BOX;
-    // TODO: Handle mesh geometry to assign Box size
-  } else {
-    // throw std::runtime_error("Unhandled URDF geometry type");
-    RCLCPP_ERROR(this->get_logger(),
-      "Unhandled URDF geometry type for collision object with id %d", id);
-  }
-
-  return PotentialFieldObstacle{
-    id, position, orientation, type, geom, influenceZoneScale, repulsiveGain
-  };
 }
 
 int main(int argc, char* argv[]) {

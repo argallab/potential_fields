@@ -34,9 +34,11 @@ ament_add_gtest(test_pfields
 
 include_directories(
   include/potential_fields
-  ${deltarobot_interfaces_INCLUDE_DIRS}
+  ${potential_fields_interfaces_INCLUDE_DIRS}
 )
+
 add_executable(pfield_manager src/pfield_manager.cpp)
+add_executable(robot_parser src/robot_parser.cpp)
 ament_target_dependencies(pfield_manager
   rclcpp
   Eigen3
@@ -48,28 +50,41 @@ ament_target_dependencies(pfield_manager
   tf2_eigen
   urdf
 )
-target_link_libraries(pfield_manager ${deltarobot_interfaces_LIBRARIES})
+
+ament_target_dependencies(robot_parser
+  rclcpp
+  Eigen3
+  potential_fields_interfaces
+  geometry_msgs
+  visualization_msgs
+  nav_msgs
+  tf2_ros
+  tf2_eigen
+  urdf
+)
+
+target_link_libraries(pfield_manager
+  ${potential_fields_interfaces_LIBRARIES}
+)
+
+target_link_libraries(robot_parser
+  ${potential_fields_interfaces_LIBRARIES}
+)
 
 install(
-  TARGETS pfield_manager
+  TARGETS pfield_manager robot_parser
   DESTINATION lib/${PROJECT_NAME}
 )
 
 install(
   DIRECTORY launch
-  DESTINATION share/${PROJECT_NAME}/
+  DESTINATION share/${PROJECT_NAME}
 )
 
 install(
   DIRECTORY config
-  DESTINATION share/${PROJECT_NAME}/
-)
-
-install(
-  DIRECTORY urdf
   DESTINATION share/${PROJECT_NAME}
 )
-
 
 install(
   TARGETS test_spatial_vector
