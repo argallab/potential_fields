@@ -4,7 +4,9 @@
   <arg name="rviz_fixed_frame" default="world" description="The fixed frame for RVIZ"/>
   <arg name="robot_urdf_xacro" default="$(find-pkg-share pfields_demo)/urdf/robot.urdf.xacro" description="The URDF Xacro file for the robot"/>
   
-  <node pkg="pfields_demo" exec="pf_demo" name="pf_demo_node" output="screen"/>
+  <node pkg="pfields_demo" exec="pf_demo" name="pf_demo_node" output="screen">
+    <param name="fixed_frame" value="$(var rviz_fixed_frame)"/>
+  </node>
   <node pkg="robot_state_publisher" exec="robot_state_publisher" >
     <param name="robot_description" value="$(command 'xacro $(var robot_urdf_xacro)')"/>
   </node>

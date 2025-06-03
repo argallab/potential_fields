@@ -59,7 +59,7 @@ std::vector<Obstacle> RobotParser::parseURDF() {
         linkTransform = this->tfBuffer->lookupTransform(this->fixedFrame, link_name, tf2::TimePointZero);
       }
       catch (const tf2::TransformException& ex) {
-        RCLCPP_ERROR(this->get_logger(), "Failed to get transform for link '%s': %s", link_name.c_str(), ex.what());
+        RCLCPP_WARN(this->get_logger(), "Failed to get transform for link '%s': %s", link_name.c_str(), ex.what());
       }
       const urdf::Pose& collisionOrigin = link.second->collision->origin;
       // Convert TF to Eigen::Affine3d
