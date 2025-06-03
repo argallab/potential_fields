@@ -66,11 +66,32 @@ PotentialFieldManager::PotentialFieldManager()
   }
   );
 
+  // Create service to get planned path from a query pose to the goal pose
+  this->pathPlanningService = this->create_service<PlanPath>("pfield/plan_path",
+    [this](const PlanPath::Request::SharedPtr request, PlanPath::Response::SharedPtr response) {
+    RCLCPP_INFO(this->get_logger(), "Received path request");
+    // Interpolate the path from the start pose to the goal pose
+    SpatialVector startPose(
+      Eigen::Vector3d(
+        request->start.pose.position.x, request->start.pose.position.y,
+        request->start.pose.position.z
+      ),
+      Eigen::Quaterniond(
+        request->start.pose.orientation.w, request->start.pose.orientation.x,
+        request->start.pose.orientation.y, request->start.pose.orientation.z
+      )
+    );
+    Path path = this->interpolatePath(startPose, request->delta_time, request->goal_tolerance);
+    response->plan.header.frame_id = this->fixedFrame;
+    response->plan.header.stamp = this->now();
+    response->plan = path;
+    RCLCPP_INFO(this->get_logger(), "Path generated with %zu poses", path.poses.size());
+  }
+  );
+
   // Create a CSV file to store the potential field data for python to plot
   // std::string filename = "pfield_data";
-  // this->createCSV(filename);
-
-  this->queryPoint = SpatialVector(Eigen::Vector3d(8, 4, 0));
+  // this->exportFieldDataToCSV(filename);
 
   // Run the timer for visualizing the potential field
   this->timer = this->create_wall_timer(
@@ -81,13 +102,10 @@ PotentialFieldManager::PotentialFieldManager()
 
 void PotentialFieldManager::timerCallback() {
   this->visualizePF();
-  this->updateQueryPoint();
-  // this->updateTransforms();
 }
 
-Path PotentialFieldManager::interpolatePath(const SpatialVector& start, double deltaTime) {
+Path PotentialFieldManager::interpolatePath(const SpatialVector& start, double deltaTime, double goalTolerance) {
   // Interpolate a path from the start point to the current goal point
-  const double goalThreshold = 0.01; // Threshold to consider the goal reached [m]
   // Initialize Path and add the start pose
   Path path;
   path.header.frame_id = this->fixedFrame;
@@ -105,7 +123,7 @@ Path PotentialFieldManager::interpolatePath(const SpatialVector& start, double d
   path.poses.push_back(startPose);
   // Interpolate through the potential field until the goal is reached with the given delta time
   SpatialVector currentPose = start;
-  while (currentPose.euclideanDistance(this->pField.getGoalPose()) > goalThreshold) {
+  while (currentPose.euclideanDistance(this->pField.getGoalPose()) > goalTolerance) {
     // Evaluate the velocity at the current pose
     SpatialVector velocity = this->pField.evaluateVelocityAtPose(currentPose);
     // Update the current pose based on the velocity and delta time
@@ -129,24 +147,6 @@ Path PotentialFieldManager::interpolatePath(const SpatialVector& start, double d
   return path;
 }
 
-void PotentialFieldManager::updateTransforms() {
-  for (const auto& obst : this->pField.getObstacles()) {
-    // Publish a TF from world to obstacle frame
-    geometry_msgs::msg::TransformStamped obstacleTransform;
-    obstacleTransform.header.stamp = this->now();
-    obstacleTransform.header.frame_id = this->fixedFrame;
-    obstacleTransform.child_frame_id = "obstacle_" + std::to_string(obst.getID());
-    obstacleTransform.transform.translation.x = obst.getPosition().x();
-    obstacleTransform.transform.translation.y = obst.getPosition().y();
-    obstacleTransform.transform.translation.z = obst.getPosition().z();
-    obstacleTransform.transform.rotation.x = obst.getOrientation().x();
-    obstacleTransform.transform.rotation.y = obst.getOrientation().y();
-    obstacleTransform.transform.rotation.z = obst.getOrientation().z();
-    obstacleTransform.transform.rotation.w = obst.getOrientation().w();
-    this->dynamicTfBroadcaster->sendTransform(obstacleTransform);
-  }
-}
-
 void PotentialFieldManager::visualizePF() {
   MarkerArray markerArray;
   // markerArray.markers.push_back(this->createGoalMarker());
@@ -158,42 +158,11 @@ void PotentialFieldManager::visualizePF() {
   auto potentialVectorMarkers = this->createPotentialVectorMarkers();
   markerArray.markers.insert(markerArray.markers.cend(), potentialVectorMarkers.markers.cbegin(),
     potentialVectorMarkers.markers.cend());
-  auto queryPointMarker = this->createQueryPointMarker();
-  markerArray.markers.insert(markerArray.markers.cend(), queryPointMarker.markers.cbegin(),
-    queryPointMarker.markers.cend());
+  // auto queryPointMarker = this->createQueryPointMarker();
+  // markerArray.markers.insert(markerArray.markers.cend(), queryPointMarker.markers.cbegin(),
+  //   queryPointMarker.markers.cend());
   // Publish the marker array
   this->markerPub->publish(markerArray);
-}
-
-void PotentialFieldManager::updateQueryPoint() {
-  // If the query point is near the goal, reset it to a random position
-  double distanceToGoal = this->queryPoint.euclideanDistance(this->pField.getGoalPose());
-  if (distanceToGoal < 0.5) {
-    // Reset the query point to a random position
-    this->queryPath.poses.clear();
-    double x = static_cast<double>(rand()) / RAND_MAX * 10.0 - 5.0; // Random x between -5 and 5
-    double y = static_cast<double>(rand()) / RAND_MAX * 10.0 - 5.0; // Random y between -5 and 5
-    this->queryPoint.setPosition(Eigen::Vector3d(x, y, 0));
-  }
-  const double period = (1.0f / this->timerFreq); // Period of the timer
-  SpatialVector velocity = this->pField.evaluateVelocityAtPose(queryPoint);
-  // Determine the new position of the query point depending on the velocity and the period
-  Eigen::Vector3d newPosition = queryPoint.getPosition() + (velocity.getPosition() * period);
-  this->queryPoint.setPosition(newPosition);
-  PoseStamped pstamped;
-  pstamped.header.frame_id = this->fixedFrame;
-  pstamped.header.stamp = this->now();
-  pstamped.pose.position.x = this->queryPoint.getPosition().x();
-  pstamped.pose.position.y = this->queryPoint.getPosition().y();
-  pstamped.pose.position.z = this->queryPoint.getPosition().z();
-  pstamped.pose.orientation.x = this->queryPoint.getOrientation().x();
-  pstamped.pose.orientation.y = this->queryPoint.getOrientation().y();
-  pstamped.pose.orientation.z = this->queryPoint.getOrientation().z();
-  pstamped.pose.orientation.w = this->queryPoint.getOrientation().w();
-  this->queryPath.header.frame_id = this->fixedFrame;
-  this->queryPath.header.stamp = this->now();
-  this->queryPath.poses.push_back(pstamped);
-  this->pathPub->publish(this->queryPath);
 }
 
 MarkerArray PotentialFieldManager::createObstacleMarkers() {
@@ -364,20 +333,20 @@ MarkerArray PotentialFieldManager::createGoalMarker() {
 MarkerArray PotentialFieldManager::createPotentialVectorMarkers() {
   MarkerArray markerArray;
   int id = 0;
-  // Discretize the space around the goal till the farthest obstacle
-  // For now, let's hard-code 10x10 grid at a single Z-height
+  // TODO: Decide limits based on farthest entity in the field
+  // TODO: Parameterize these limits and resolution
+  const double lowerLimit = -5.0f; // Lower limit of the grid
+  const double upperLimit = 5.0f; // Upper limit of the grid
+  const double fieldResolution = 0.5f; // Resolution of the grid
   const double Z = this->pField.getGoalPose().getPosition().z();
-  const double res = 0.5f; // Resolution of the grid
-  for (double x = -5.0f; x <= 5.0f; x += res) {
-    for (double y = -5.0f; y <= 5.0f; y += res) {
-      for (double z = -5.0f; z <= 5.0f; z += res) {
+  for (double x = lowerLimit; x <= upperLimit; x += fieldResolution) {
+    for (double y = lowerLimit; y <= upperLimit; y += fieldResolution) {
+      for (double z = lowerLimit; z <= upperLimit; z += fieldResolution) {
         // Skip the Z-axis since we are only interested in the XY plane for now
-        if (z != Z) { continue; }
+        if (std::abs(z - Z) > 1e-6) { continue; }
         // Skip any points that are inside obstacle radius
         Eigen::Vector3d point(x, y, z);
-        if (this->pField.isPointInsideObstacle(point)) {
-          continue;
-        }
+        if (this->pField.isPointInsideObstacle(point)) { continue; }
         Marker vectorMarker;
         SpatialVector position{point};
         SpatialVector velocity = this->pField.evaluateVelocityAtPose(position);
@@ -415,38 +384,7 @@ MarkerArray PotentialFieldManager::createPotentialVectorMarkers() {
   return markerArray;
 }
 
-MarkerArray PotentialFieldManager::createQueryPointMarker() {
-  MarkerArray markerArray;
-  Marker queryPointMarker;
-  queryPointMarker.header.frame_id = this->fixedFrame;
-  queryPointMarker.header.stamp = this->now();
-  queryPointMarker.ns = "query_point";
-  queryPointMarker.id = 0;
-  queryPointMarker.type = Marker::SPHERE;
-  queryPointMarker.action = Marker::ADD;
-  queryPointMarker.pose.position.x = this->queryPoint.getPosition().x();
-  queryPointMarker.pose.position.y = this->queryPoint.getPosition().y();
-  queryPointMarker.pose.position.z = this->queryPoint.getPosition().z();
-  queryPointMarker.scale.x = 0.3f; // Diameter
-  queryPointMarker.scale.y = 0.3f; // Diameter
-  queryPointMarker.scale.z = 0.3f; // Diameter
-  bool isInfluenced = this->pField.isPointWithinInfluenceZone(this->queryPoint.getPosition());
-  if (isInfluenced) {
-    queryPointMarker.color.r = 1.0f; // Red if inside an obstacle
-    queryPointMarker.color.g = 0.0f;
-    queryPointMarker.color.b = 0.0f;
-  } else {
-    queryPointMarker.color.r = 0.0f; // Blue if outside obstacles
-    queryPointMarker.color.g = 0.0f;
-    queryPointMarker.color.b = 1.0f;
-  }
-  queryPointMarker.color.a = 1.0f; // Opaque
-  queryPointMarker.lifetime = rclcpp::Duration(0, 0); // No lifetime
-  markerArray.markers.push_back(queryPointMarker);
-  return markerArray;
-}
-
-void PotentialFieldManager::createCSV(const std::string& base_filename) {
+void PotentialFieldManager::exportFieldDataToCSV(const std::string& base_filename) {
   // Write obstacle positions to a CSV file
   std::string obstacles_filename = base_filename + "_obstacles.csv";
   std::ofstream obstacles_file(obstacles_filename);
@@ -466,11 +404,12 @@ void PotentialFieldManager::createCSV(const std::string& base_filename) {
     RCLCPP_ERROR(this->get_logger(), "Unable to open file: %s", obstacles_filename.c_str());
   }
 
-  // Write velocity vectors in a 10x10 grid at Z = 0 to a separate CSV file
+  // Write velocity vectors to a separate CSV file
   std::string vectors_filename = base_filename + "_vectors.csv";
   std::ofstream vectors_file(vectors_filename);
   if (vectors_file.is_open()) {
     vectors_file << "grid_x,grid_y,grid_z,vel_x,vel_y,vel_z\n";
+    //TODO: Parameterize the grid resolution and limits
     const double z = 0.0;
     const double res = 1.0; // 10x10 grid from -5 to 5
     for (double x = -5.0; x <= 5.0; x += res) {

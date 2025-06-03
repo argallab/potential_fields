@@ -1,0 +1,11 @@
+# The start pose for the plan
+geometry_msgs/PoseStamped start
+
+# Timestep to breadcrumb the vector field [s]
+float32 delta_time
+
+# Tolerance for "reaching" the goal [m]
+float32 goal_tolerance
+
+---
+nav_msgs/Path plan

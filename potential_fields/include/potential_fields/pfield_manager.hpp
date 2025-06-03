@@ -18,6 +18,7 @@
 #include "urdf/model.h"
 #include "pfield.hpp"
 #include "potential_fields_interfaces/msg/obstacle.hpp"
+#include "potential_fields_interfaces/srv/plan_path.hpp"
 #include <vector>
 #include <fstream>
 
@@ -30,6 +31,7 @@ using Quaternion = geometry_msgs::msg::Quaternion;
 using Path = nav_msgs::msg::Path;
 using TransformStamped = geometry_msgs::msg::TransformStamped;
 using Obstacle = potential_fields_interfaces::msg::Obstacle;
+using PlanPath = potential_fields_interfaces::srv::PlanPath;
 
 class PotentialFieldManager : public rclcpp::Node {
 public:
@@ -52,11 +54,7 @@ private:
   double repulsiveGain; // Repulsive gain [Ns/m]
   double maxForce; // Maximum force [N]
   std::string fixedFrame; // RViz fixed frame for visualization and PF computation
-  SpatialVector queryPoint; // Query point for the potential field to "animate"
-  Path queryPath; // History of query points for visualization of path
-
-  // Potential field object
-  PotentialField pField;
+  PotentialField pField; // Potential field instance
 
   // Timer to perodically update the potential field
   rclcpp::TimerBase::SharedPtr timer;
@@ -82,18 +80,17 @@ private:
   // Subscriber for obstacles
   rclcpp::Subscription<Obstacle>::SharedPtr obstacleSub;
 
-  Path interpolatePath(const SpatialVector& start, double deltaTime);
-  void updateQueryPoint();
-  void visualizePF();
-  void updateTransforms();
-  void transformsFromURDF();
+  // Service to obtain a path from a query point to the goal
+  rclcpp::Service<PlanPath>::SharedPtr pathPlanningService;
 
+  Path interpolatePath(const SpatialVector& start, double deltaTime, double goalTolerance);
+
+  void visualizePF();
   MarkerArray createObstacleMarkers();
   MarkerArray createGoalMarker();
   MarkerArray createPotentialVectorMarkers();
-  MarkerArray createQueryPointMarker();
 
-  void createCSV(const std::string& filename);
+  void exportFieldDataToCSV(const std::string& filename);
 
   void timerCallback();
 };
