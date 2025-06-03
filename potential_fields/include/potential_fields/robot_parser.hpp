@@ -32,7 +32,7 @@ public:
 
 private:
   double timerFreq; // Timer frequency [Hz]
-  std::string urdfFilePath; // Path to the URDF file describing the robot
+  std::string robotDescription; // Robot Description
   std::string fixedFrame; // RViz fixed frame
 
   rclcpp::TimerBase::SharedPtr timer;

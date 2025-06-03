@@ -6,11 +6,11 @@ RobotParser::RobotParser() : Node("robot_parser") {
 
   // Declare parameters
   this->timerFreq = this->declare_parameter("timer_frequency", 50.0f); // [Hz]
-  this->urdfFilePath = this->declare_parameter("robot_description", "urdf/robot.urdf"); // Path to the URDF file
+  this->robotDescription = this->declare_parameter("robot_description", "urdf/robot.urdf");
   this->fixedFrame = this->declare_parameter("fixed_frame", "world"); // RViz fixed frame
   // Get parameters from yaml file
   this->timerFreq = this->get_parameter("timer_frequency").as_double();
-  this->urdfFilePath = this->get_parameter("robot_description").as_string();
+  this->robotDescription = this->get_parameter("robot_description").as_string();
   this->fixedFrame = this->get_parameter("fixed_frame").as_string();
 
   // Setup obstacle publisher
@@ -39,8 +39,8 @@ void RobotParser::timerCallback() {
 std::vector<Obstacle> RobotParser::parseURDF() {
   std::vector<Obstacle> collisionObjects;
   urdf::Model robotModel;
-  if (!robotModel.initFile(this->urdfFilePath)) {
-    RCLCPP_ERROR(this->get_logger(), "Failed to load URDF model from %s", this->urdfFilePath.c_str());
+  if (!robotModel.initString(this->robotDescription)) {
+    RCLCPP_ERROR(this->get_logger(), "Failed to load URDF model");
   } else {
     // Extract collision geometries from the URDF model and add them as obstacles
     int obstacleID = 0;
@@ -118,7 +118,6 @@ Obstacle RobotParser::obstacleFromCollisionObject(
     type = ObstacleType::BOX;
     // TODO: Handle mesh geometry to assign Box size
   } else {
-    // throw std::runtime_error("Unhandled URDF geometry type");
     RCLCPP_ERROR(this->get_logger(),
       "Unhandled URDF geometry type for collision object with id %d", id);
   }

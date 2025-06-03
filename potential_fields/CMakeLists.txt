@@ -36,6 +36,7 @@ include_directories(
   include/potential_fields
   ${potential_fields_interfaces_INCLUDE_DIRS}
 )
+
 add_executable(pfield_manager src/pfield_manager.cpp)
 add_executable(robot_parser src/robot_parser.cpp)
 ament_target_dependencies(pfield_manager
@@ -49,6 +50,7 @@ ament_target_dependencies(pfield_manager
   tf2_eigen
   urdf
 )
+
 ament_target_dependencies(robot_parser
   rclcpp
   Eigen3
@@ -81,11 +83,6 @@ install(
 
 install(
   DIRECTORY config
-  DESTINATION share/${PROJECT_NAME}
-)
-
-install(
-  DIRECTORY urdf
   DESTINATION share/${PROJECT_NAME}
 )
 

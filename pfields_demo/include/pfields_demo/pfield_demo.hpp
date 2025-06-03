@@ -7,7 +7,8 @@ class PFDemo : public rclcpp::Node {
 public:
   PFDemo();
   ~PFDemo() = default;
-
+private:
+  std::string fixedFrame; // RViz fixed frame for visualization
 };
 
 #endif // PFIELD_DEMO_HPP

@@ -1,7 +1,18 @@
 <launch>
+  <arg name="use_jsp" default="gui" description="The JointState Publisher to launch. ['gui', 'jsp', 'none']"/>
+  <arg name="use_rviz" default="true" description="Whether to launch RViz or not."/>
+  <arg name="rviz_fixed_frame" default="world" description="The fixed frame for RVIZ"/>
+  <arg name="robot_urdf_xacro" default="$(find-pkg-share pfields_demo)/urdf/robot.urdf.xacro" description="The URDF Xacro file for the robot"/>
+  
   <node pkg="pfields_demo" exec="pf_demo" name="pf_demo_node" output="screen"/>
+  <node pkg="robot_state_publisher" exec="robot_state_publisher" >
+    <param name="robot_description" value="$(command 'xacro $(var robot_urdf_xacro)')"/>
+  </node>
+  <node pkg="joint_state_publisher_gui" exec="joint_state_publisher_gui" if="$(eval \'$(var use_jsp)\'==\'gui\')"/>
+  <node pkg="joint_state_publisher" exec="joint_state_publisher" if="$(eval \'$(var use_jsp)\'==\'jsp\')"/>
   <include file="$(find-pkg-share potential_fields)/launch/pfield.launch.xml">
-    <arg name="use_jsp" value="gui"/>
-    <arg name="rviz_fixed_frame" value="pf_world"/>
+    <arg name="rviz_fixed_frame" value="$(var rviz_fixed_frame)"/>
+    <arg name="use_rviz" value="$(var use_rviz)"/>
+    <arg name="robot_urdf_xacro" value="$(var robot_urdf_xacro)"/>
   </include>
 </launch>
