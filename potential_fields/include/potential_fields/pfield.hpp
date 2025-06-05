@@ -215,7 +215,7 @@ private:
    * @brief Computes the attractive force towards the goal pose. Also computes the
    * rotational force to align the query pose with the goal pose.
    *
-   * @note Equation: F = attractiveGain * (distace * direction)
+   * @note Equation: F = -attractiveGain * (distace * direction)
    *       where direction is a unit vector pointing towards the goal.
    *
    * @param queryPose The pose in 3D space to compute the force from.
