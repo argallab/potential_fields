@@ -24,6 +24,17 @@ PFDemo::PFDemo() : Node("pfield_demo") {
   baseLinkTransform.transform.rotation.z = 0.0;
   baseLinkTransform.transform.rotation.w = 1.0;
   staticBroadcaster.sendTransform(baseLinkTransform);
+
+  // Wait for the service to be available
+  this->planPathClient = this->create_client<PlanPath>("plan_path");
+  while (!this->planPathClient->wait_for_service(std::chrono::milliseconds(500))) {
+    if (!rclcpp::ok()) {
+      RCLCPP_ERROR(this->get_logger(), "Interrupted while waiting for the service. Exiting.");
+      return;
+    }
+    RCLCPP_INFO(this->get_logger(), "Waiting for the plan_path service to be available...");
+  }
+  RCLCPP_INFO(this->get_logger(), "Plan path service is available.");
 }
 
 int main(int argc, char* argv[]) {
