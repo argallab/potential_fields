@@ -1,3 +1,25 @@
+/// @file pfield_manager.cpp
+/// @brief Manages a PotentialField instance and visualizes obstacles, the goal, and planned paths.
+///
+/// PARAMETERS:
+///   timer_frequency (float64): The frequency for the timer updating the potential field visualization [Hz]
+///   attractive_gain (float64): Gain for the attractive force towards the goal [Ns/m]
+///   rotational_attractive_gain (float64): Gain for the rotational attractive force [Ns/m]
+///   repulsive_gain (float64): Gain for the repulsive force from obstacles [Ns/m]
+///   max_force (float64): Maximum force allowed by the potential field [N]
+///   fixed_frame (string): The fixed frame for RViz visualization and potential field computation
+///
+/// SERVICES:
+///   ~/pfield/plan_path (potential_fields_interfaces::srv::PlanPath): Interpolates a path from a start pose to the goal pose
+///
+/// SUBSCRIBERS:
+///   ~/goal_pose (geometry_msgs::msg::PoseStamped): Updates the goal pose in the potential field
+///   ~/pfield/obstacles (potential_fields_interfaces::msg::Obstacle): Obtains the obstacles to be added to the potential field
+///
+/// PUBLISHERS:
+///   ~/visualization_marker_array (visualization_msgs::msg::MarkerArray): Publishes markers for visualization in RViz
+///   ~/nav_msgs/msg/Path (nav_msgs::msg::Path): Publishes the path of the query point to visualize its trajectory
+
 #include "pfield_manager.hpp"
 
 PotentialFieldManager::PotentialFieldManager()
@@ -5,9 +27,9 @@ PotentialFieldManager::PotentialFieldManager()
   RCLCPP_INFO(this->get_logger(), "PotentialFieldManager Initialized");
   // Declare parameters
   this->timerFreq = this->declare_parameter("timer_frequency", 100.0f); // [Hz]
-  this->attractiveGain = this->declare_parameter("attractive_gain", 1.0f); // [N]
-  this->rotationalAttractiveGain = this->declare_parameter("rotational_attractive_gain", 0.7f); // [N]
-  this->repulsiveGain = this->declare_parameter("repulsive_gain", 1.0f); // [N]
+  this->attractiveGain = this->declare_parameter("attractive_gain", 1.0f); // [Ns/m]
+  this->rotationalAttractiveGain = this->declare_parameter("rotational_attractive_gain", 0.7f); // [Ns/m]
+  this->repulsiveGain = this->declare_parameter("repulsive_gain", 1.0f); // [Ns/m]
   this->maxForce = this->declare_parameter("max_force", 10.0f); // [N]
   this->fixedFrame = this->declare_parameter("fixed_frame", "world"); // RViz fixed frame
   // Get parameters from yaml file

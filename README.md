@@ -4,13 +4,13 @@ MSR project to revamp current pfields repo for open sourcing
 # ROS Package Structure and Overview
 
 ## Potential Field C++ Library
-The `pfield` library is a ROS-independent C++ API that the ROS package maintains an instance of.
+The `pfield` library is a ROS-independent C++ API that the ROS package maintains an instance of. Vectors and Quaternions are implemented with Eigen and are wrapped into a singular object named `SpatialVector`. The Vector portion defines the translational velocity [m/s] towards the goal and the Quaternion represents the unit quaternion difference between the orientation and the goal orientation. Currently the C++ library is embedded in the include folder (header-only implementation) of the ROS package but will be extracted and presented as a standalone C++ library that the ROS package will need to link with.
 
-## Potential Field Manager (ROS Node)
-Manages the `pfield` instance and visualizes the obstacles, the goal pose, and the "planned" path.
+## PotentialFieldManager (ROS Node)
+Manages the `pfield` instance and visualizes the obstacles, the goal pose, and the "planned" path. Subcribes to `/goal_pose` to get the updated goal pose and updates the internal pfield instance's goal pose. Also subscribes to `/pfield/obstacles` to obtain the obstacles for the potential field. The obstacles can be published from any node and the robot parser node (see below) handles publishing the robot's geometry as pfield obstacles. The manager also handles user arguments to setup RViz and tune the attraction/repulsive gains.
 
 ## Robot Parser (ROS Node)
-Subscribes to the robot description and publishes the `pfield` obstacles consistent with the URDF available. Requires that the user publishes a transform from a fixed frame (provided as a launch argument) to the base link of the robot.
+Subscribes to the robot description and publishes the `pfield` obstacles consistent with the URDF available. Requires that the user publishes a transform from a fixed frame (provided as a launch argument) to the base link of the robot. Publishes the collision objects from the URDF as pfield obstacles to the `/pfield/obstacles` topic to send updated obstacles.
 
 # Potential Equations
 These equations were obtained from a [Columbia Presentation on Potential Field Path Planning](https://www.cs.columbia.edu/~allen/F17/NOTES/potentialfield.pdf). The paper: [Real-Time Obstacle Avoidance for Manipulators and Mobile Robots](https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=1087247) is the original reference for these equations and describe the derivation of the potential equations, how to obtain the gradients, and how to obtain a velocity from the gradients.
