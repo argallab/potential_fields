@@ -19,7 +19,7 @@ Once this repository is cloned, you will need to install the `Eigen` dependency 
 sudo apt install libeigen3-dev
 ```
 
-Ensure that `/usr/include/eigen3` exists and add it to your C++ configurations, these are my settings for the workspace to allow VS Code to recognize ROS and Eigen types, syntax highlight, and support Ctrl+Click for definitions.
+Ensure that `/usr/include/eigen3` exists and add it to your C++ configurations, below are my settings (_.vscode/c_cpp_properties.json_) for the workspace to allow VS Code to recognize ROS and Eigen types, syntax highlight, and support Ctrl+Click for definitions.
 
 ```json
 {
