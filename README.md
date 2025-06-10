@@ -12,6 +12,53 @@ Manages the `pfield` instance and visualizes the obstacles, the goal pose, and t
 ## Robot Parser (ROS Node)
 Subscribes to the robot description and publishes the `pfield` obstacles consistent with the URDF available. Requires that the user publishes a transform from a fixed frame (provided as a launch argument) to the base link of the robot. Publishes the collision objects from the URDF as pfield obstacles to the `/pfield/obstacles` topic to send updated obstacles.
 
+## Setting up the workspace
+Once this repository is cloned, you will need to install the `Eigen` dependency locally on your machine before being able to build and launch the `potential_fields` package:
+
+```bash
+sudo apt install libeigen3-dev
+```
+
+Ensure that `/usr/include/eigen3` exists and add it to your C++ configurations, these are my settings for the workspace to allow VS Code to recognize ROS and Eigen types, syntax highlight, and support Ctrl+Click for definitions.
+
+```json
+{
+"configurations": [
+    {
+        "name": "Linux",
+        "includePath": [
+            "${workspaceFolder}/**",
+            "/opt/ros/jazzy/include/**",
+            "/usr/include/eigen3/**"
+        ],
+        "defines": [],
+        "compilerPath": "/usr/bin/clang",
+        "cStandard": "c17",
+        "cppStandard": "c++20",
+        "intelliSenseMode": "linux-clang-x64",
+        "configurationProvider": "ms-vscode.cpptools"
+    }
+],
+"version": 4
+}
+```
+## Building, Testing, and Launching
+To build the workspace, use `colcon` to build the project and run the unit tests:
+
+```bash
+colcon build
+source install/setup.bash
+colcon test && colcon test-result --verbose
+```
+
+Use `pf_demo.launch.xml` to launch the demo node that also launches the potential_fields package (`pfield.launch.xml`):
+
+```bash
+ros2 launch pfields_demo pf_demo.launch.xml
+```
+
+Launching the project without any arguments is good enough to launch the basic robot and visualization. Of course, arguments are necessary to customize the PF package with your robot, RViz config, gain parameters, etc.
+
 # Potential Equations
 These equations were obtained from a [Columbia Presentation on Potential Field Path Planning](https://www.cs.columbia.edu/~allen/F17/NOTES/potentialfield.pdf). The paper: [Real-Time Obstacle Avoidance for Manipulators and Mobile Robots](https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=1087247) is the original reference for these equations and describe the derivation of the potential equations, how to obtain the gradients, and how to obtain a velocity from the gradients.
 
