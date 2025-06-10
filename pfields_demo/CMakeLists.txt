@@ -31,6 +31,7 @@ add_executable(pf_demo src/pfield_demo.cpp)
 ament_target_dependencies(pf_demo
   rclcpp
   Eigen3
+  potential_fields
   potential_fields_interfaces
   geometry_msgs
   visualization_msgs
