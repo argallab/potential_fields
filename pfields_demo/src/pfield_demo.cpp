@@ -26,8 +26,8 @@ PFDemo::PFDemo() : Node("pfield_demo") {
   staticBroadcaster.sendTransform(baseLinkTransform);
 
   // Wait for the service to be available
-  this->planPathClient = this->create_client<PlanPath>("plan_path");
-  while (!this->planPathClient->wait_for_service(std::chrono::milliseconds(500))) {
+  this->planPathClient = this->create_client<PlanPath>("pfield/plan_path");
+  while (!this->planPathClient->wait_for_service(std::chrono::seconds(1))) {
     if (!rclcpp::ok()) {
       RCLCPP_ERROR(this->get_logger(), "Interrupted while waiting for the service. Exiting.");
       return;
