@@ -72,7 +72,12 @@ target_link_libraries(robot_parser
 )
 
 install(
-  TARGETS pfield_manager robot_parser
+  TARGETS pfield_manager
+  DESTINATION lib/${PROJECT_NAME}
+)
+
+install(
+  TARGETS robot_parser
   DESTINATION lib/${PROJECT_NAME}
 )
 
