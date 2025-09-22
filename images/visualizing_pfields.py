@@ -1,8 +1,7 @@
 import matplotlib.pyplot as plt
 import numpy as np
 
-IMAGES_DIR = "images/"
-CSV_DIR = "data/"
+CSV_DIR = "../data/"
 
 
 def create_basic_field():
@@ -31,7 +30,7 @@ def create_basic_field():
     # Show the plot
     plt.grid()
     # plt.show()
-    plt.savefig("images/basic_vector_field.png")
+    plt.savefig("basic_vector_field.png")
     print(f"Saved basic_vector_field.png")
 
 
@@ -139,7 +138,7 @@ def create_2D_vector_field_with_obstacles():
     plt.ylim(0, 10)
     plt.axis('equal')
     # plt.show()
-    plt.savefig("images/2D_vector_field.png")
+    plt.savefig("2D_vector_field.png")
     print(f"Saved 2D_vector_field.png")
 
 
@@ -213,12 +212,12 @@ def create_3D_vector_field_with_obstacles():
     ax.set_box_aspect([1, 1, 1])  # Make the axes equal
     # Show the plot
     # plt.show()
-    plt.savefig("images/3D_vector_field.png")
+    plt.savefig("3D_vector_field.png")
     print(f"Saved 3D_vector_field.png")
     # Change the viewing angle and save another plot
     # Rotate the view
     ax.view_init(elev=20, azim=150)
-    plt.savefig("images/3D_vector_field_rotated.png")
+    plt.savefig("3D_vector_field_rotated.png")
     print(f"Saved 3D_vector_field_rotated.png")
 
 
@@ -270,7 +269,7 @@ def graph_forces():
     plt.legend()
     plt.grid()
     plt.tight_layout()
-    plt.savefig("images/forces.png")
+    plt.savefig("forces.png")
     print(f"Saved forces.png")
     # plt.show()
 
@@ -318,12 +317,14 @@ def draw_pfield_from_csv(pfield_vectors, pfield_obstacles):
     # Show the plot
     plt.grid()
     plt.show()
-    # plt.savefig("images/pfield_from_csv.png")
+    # plt.savefig("pfield_from_csv.png")
 
 
 if __name__ == "__main__":
-    draw_pfield_from_csv("data/pfield_data_vectors.csv",
-                         "data/pfield_data_obstacles.csv")
+    draw_pfield_from_csv(
+        CSV_DIR + "pfield_data_vectors.csv",
+        CSV_DIR + "pfield_data_obstacles.csv"
+    )
     # create_basic_field()
     # graph_forces()
     # create_2D_vector_field_with_obstacles()

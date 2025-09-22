@@ -1,5 +1,4 @@
 # Fall 2025 Project Goals
-
 - Connect to planning with robot (Franka, Kinova) directly for users to avoid MoveIt
 - Accept inverse kinematics function or library (IKFast) to create trajectories in the joint space, to then be sent to the Joint Trajectory Action Server
 - Connect PF ROS Package to MoveIt Joint Trajectory Action Server to perform planning (and execution) to a goal pose and enable the user to call the ROS package with a simple interface to plan and execute a path
