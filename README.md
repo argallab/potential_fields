@@ -1,6 +1,8 @@
 # pfields_2025
 MSR project to revamp current pfields repo for open sourcing
 
+[Project Journal](https://docs.google.com/document/d/1IJ0fK89f-ZZ52c72lqh1HTT0OAE9BSruDTp8FuKGbpw/edit?usp=sharing)
+
 # ROS Package Structure and Overview
 
 ## Potential Field C++ Library
