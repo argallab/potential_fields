@@ -62,6 +62,8 @@ Robot Arms the Argallab uses:
 - Verify Units for all equations (demonstrate dimensional analysis for entire potential function)
 
 # References
+- Pinocchio
+  - [Pinocchio](https://github.com/stack-of-tasks/pinocchio.git)
 - Xarm
   - [custom singularities avoidance](https://github.com/argallab/argallab_jparse)
   - [python api](https://github.com/xArm-Developer/xArm-Python-SDK.git)
