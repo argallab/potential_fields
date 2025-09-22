@@ -55,10 +55,14 @@ These nodes will be reimplemented in ROS 2 written in C++. The project proposal 
 # Robots to test
 Robot Arms the Argallab uses:
 - Ufactory X Arm 7-DOF
-- Kinova Gen2 Jaco
+- Kinova Gen2 Jaco 7-DOF
 - Kinova Mico 6-DOF
 
 # Project Notes and TODO items
 - Verify Units for all equations (demonstrate dimensional analysis for entire potential function)
-- Connect to planning with robot (Franka, Kinova)
-- Only need simulation for planning
+
+
+# Spring 2025 Quarter Remarks
+The Demo Node currently publishes a static transform that is intended to be the transform between the fixed frame and the robot’s base link and this should be handled in the launch file of the PF package instead of in the user node. The arguments for the frame and the transformation can be accepted as user args so the user can define it easily without writing code, but configuring the launch arguments.
+
+The objects being parsed directly into PF obstacles are of type `urdf::Collision`, and the publisher for the obstacles should be adjusted to use a standard ROS type for obstacles instead of the custom type. This might require parameters for default PF obstacles to be defined elsewhere instead of through the ROS message. This will be helpful for _any_ ROS node to be able to publish obstacles to the potential field.
