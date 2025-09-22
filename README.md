@@ -83,7 +83,7 @@ Where:
 ## Rotational Attraction
 Geodesic distance $\theta$ is the distance between two unit quaternions $q_1$ and $q_2$ (shortest angle of rotation required to align one orientation with the other on $\mathcal{S}^3$), bound to $\theta \in [0, \pi]$ is.
 
-We can use the geodesic distance $\theta$ and a rotational attractive gain parameter $\omega$ ($0.7$ in original implementation) to scale the quaternion representing the difference $q_{diff}$ to act as a rotational attraction force:
+We can use the geodesic distance $\theta$ as a threshold whether to apply the rotational force and a rotational attractive gain parameter $\omega$ ($0.7$ in original implementation) to scale the quaternion representing the difference $q_{diff}$ to act as a rotational attraction force:
 
 $$
 \begin{align}
