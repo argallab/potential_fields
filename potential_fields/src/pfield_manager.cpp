@@ -326,10 +326,12 @@ MarkerArray PotentialFieldManager::createGoalMarker() {
     if (i == 0) { // X-axis (red cylinder)
       axis.color.r = 1.0f;
       axisRotation = Eigen::AngleAxisd(M_PI / 2, Eigen::Vector3d::UnitY());
-    } else if (i == 1) { // Y-axis (green cylinder)
+    }
+    else if (i == 1) { // Y-axis (green cylinder)
       axis.color.g = 1.0f;
       axisRotation = Eigen::AngleAxisd(-M_PI / 2, Eigen::Vector3d::UnitX());
-    } else if (i == 2) { // Z-axis (blue cylinder)
+    }
+    else if (i == 2) { // Z-axis (blue cylinder)
       axis.color.b = 1.0f;
       axisRotation = Eigen::AngleAxisd(0, Eigen::Vector3d::UnitZ());
     }
@@ -408,7 +410,7 @@ MarkerArray PotentialFieldManager::createPotentialVectorMarkers() {
 
 void PotentialFieldManager::exportFieldDataToCSV(const std::string& base_filename) {
   // Write obstacle positions to a CSV file
-  std::string obstacles_filename = base_filename + "_obstacles.csv";
+  std::string obstacles_filename = "data/" + base_filename + "_obstacles.csv";
   std::ofstream obstacles_file(obstacles_filename);
   if (obstacles_file.is_open()) {
     obstacles_file << "obstacle_x,obstacle_y,obstacle_z,type,influence,repulsive_gain,radius,length,width,height\n";
@@ -422,12 +424,13 @@ void PotentialFieldManager::exportFieldDataToCSV(const std::string& base_filenam
         << "\n";
     }
     obstacles_file.close();
-  } else {
+  }
+  else {
     RCLCPP_ERROR(this->get_logger(), "Unable to open file: %s", obstacles_filename.c_str());
   }
 
   // Write velocity vectors to a separate CSV file
-  std::string vectors_filename = base_filename + "_vectors.csv";
+  std::string vectors_filename = "data/" + base_filename + "_vectors.csv";
   std::ofstream vectors_file(vectors_filename);
   if (vectors_file.is_open()) {
     vectors_file << "grid_x,grid_y,grid_z,vel_x,vel_y,vel_z\n";
@@ -449,7 +452,8 @@ void PotentialFieldManager::exportFieldDataToCSV(const std::string& base_filenam
       }
     }
     vectors_file.close();
-  } else {
+  }
+  else {
     RCLCPP_ERROR(this->get_logger(), "Unable to open file: %s", vectors_filename.c_str());
   }
 }
