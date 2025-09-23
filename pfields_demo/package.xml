@@ -4,7 +4,7 @@
   <name>pfields_demo</name>
   <version>0.0.0</version>
   <description>TODO: Package description</description>
-  <maintainer email="sharwin24@gmail.com">Sharwin Patil</maintainer>
+  <maintainer email="sharwinpatil@u.northwestern.edu">Sharwin Patil</maintainer>
   <license>TODO: License declaration</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
