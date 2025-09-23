@@ -53,10 +53,10 @@ These nodes will be reimplemented in ROS 2 written in C++. The project proposal 
     - Can use meshes to represent obstacles for more complex obstacles
 
 # Robots to test
-Robot Arms the Argallab uses:
-- Ufactory X Arm 7-DOF
-- Kinova Gen2 Jaco 7-DOF
-- Kinova Mico 6-DOF
+- Franka Emika Panda 7-DOF (ROS2 MoveIt)
+- Ufactory X Arm 7-DOF (ROS2)
+- Kinova Gen2 Jaco 7-DOF (ROS1)
+- Kinova Mico 6-DOF (ROS1)
 
 # Project Notes and TODO items
 - Verify Units for all equations (demonstrate dimensional analysis for entire potential function)
