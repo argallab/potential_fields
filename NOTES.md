@@ -61,6 +61,15 @@ These nodes will be reimplemented in ROS 2 written in C++. The project proposal 
 # Project Notes and TODO items
 - Verify Units for all equations (demonstrate dimensional analysis for entire potential function)
 
+# References
+- Pinocchio
+  - [Pinocchio](https://github.com/stack-of-tasks/pinocchio.git)
+- Xarm
+  - [custom singularities avoidance](https://github.com/argallab/argallab_jparse)
+  - [python api](https://github.com/xArm-Developer/xArm-Python-SDK.git)
+
+- Jaco
+  - [kinova ros](https://github.com/argallab/kinova-ros/tree/3008ff1b7b4014bb20a36beda49555817062d919)
 
 # Spring 2025 Quarter Remarks
 The Demo Node currently publishes a static transform that is intended to be the transform between the fixed frame and the robot’s base link and this should be handled in the launch file of the PF package instead of in the user node. The arguments for the frame and the transformation can be accepted as user args so the user can define it easily without writing code, but configuring the launch arguments.
