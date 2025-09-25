@@ -28,6 +28,10 @@ public:
   bool sendCartesianTwist(const geometry_msgs::msg::Twist& endEffectorTwist) override;
   bool readRobotState(sensor_msgs::msg::JointState& js, geometry_msgs::msg::PoseStamped& endEffectorPose) override;
 
+private:
+  std::string hostname;
+  std::unique_ptr<franka::Robot> robot;
+  std::unique_ptr<franka::ActiveControl> activeControl;
 };
 
 
