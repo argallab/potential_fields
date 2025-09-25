@@ -26,7 +26,7 @@ public:
   bool sendJointStates(const sensor_msgs::msg::JointState& js) override;
   bool readRobotState(sensor_msgs::msg::JointState& js, geometry_msgs::msg::PoseStamped& endEffectorPose) override;
 
-  void startControlLoop();
+  void startControlLoop(const franka::Duration& movementDuration);
 private:
   std::unique_ptr<franka::Robot> robot;
   std::unique_ptr<franka::CartesianVelocities> currentEEVelocity;

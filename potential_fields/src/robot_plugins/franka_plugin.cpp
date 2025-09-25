@@ -15,20 +15,41 @@ bool FrankaPlugin::initializeRobot(const std::string& hostname) {
   }
 }
 
-bool FrankaPlugin::startControlLoop() {
+bool FrankaPlugin::startControlLoop(const franka::Duration& movementDuration) {
   if (!this->currentEEVelocity) {
     std::cerr << "No end-effector velocity command set. Please send a velocity command before starting the control loop." << std::endl;
     return false;
   }
 
-  // Start the control using joint impedance mode
-  bool motionFinished = false;
-  auto activeControl = this->robot->startCartesianVelocityControl(franka::ControllerMode::kJointImpedance);
-  while (!motionFinished) {
-    auto robotStateAndDuration = activeControl.readOnce();
-    const franka::RobotState& robotState = robotStateAndDuration.first;
-    const franka::Duration& period = robotStateAndDuration.second;
+  auto controlTime = franka::Duration(0.0);
+  auto controlCallback = [this, &controlTime](const franka::RobotState& robotState,
+    franka::Duration period) -> franka::CartesianVelocities {
+    // Move along the controlTime to see if we should finish the motion
+    controlTime += period;
+    if (controlTime >= movementDuration) {
+      return franka::MotionFinished(*this->currentEEVelocity);
+    }
+    return *this->currentEEVelocity;
+  };
+
+  try {
+    // Start the control using joint impedance mode
+    bool motionFinished = false;
+    auto activeControl = this->robot->startCartesianVelocityControl(franka::ControllerMode::kJointImpedance);
+    while (!motionFinished) {
+      auto robotStateAndDuration = activeControl.readOnce();
+      const franka::RobotState& robotState = robotStateAndDuration.first;
+      const franka::Duration& period = robotStateAndDuration.second;
+      auto cartesianVelocities = controlCallback(robotState, period);
+      motionFinished = cartesianVelocities.motion_finished;
+      activeControl.writeOnce(cartesianVelocities);
+    }
   }
+  catch (const franka::Exception& e) {
+    std::cerr << "Control loop failed: " << e.what() << std::endl;
+    return false;
+  }
+  return true;
 }
 
 bool FrankaPlugin::sendCartesianTwist(const geometry_msgs::msg::Twist& endEffectorTwist) {
