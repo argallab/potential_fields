@@ -19,19 +19,19 @@
 
 class FrankaPlugin : public MotionPlugin {
 public:
-  explicit FrankaPlugin(double speed_factor = 0.2);
+  FrankaPlugin(const std::string& hostname);
   ~FrankaPlugin() override = default;
 
-  bool configure() override;
-  bool start() override;
-  bool stop() override;
   bool sendCartesianTwist(const geometry_msgs::msg::Twist& endEffectorTwist) override;
+  bool sendJointStates(const sensor_msgs::msg::JointState& js) override;
   bool readRobotState(sensor_msgs::msg::JointState& js, geometry_msgs::msg::PoseStamped& endEffectorPose) override;
 
+  void startControlLoop();
 private:
-  std::string hostname;
   std::unique_ptr<franka::Robot> robot;
-  std::unique_ptr<franka::ActiveControl> activeControl;
+  std::unique_ptr<franka::CartesianVelocities> currentEEVelocity;
+
+  void initializeRobot(const std::string& hostname);
 };
 
 

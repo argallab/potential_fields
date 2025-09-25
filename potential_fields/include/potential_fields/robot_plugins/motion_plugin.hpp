@@ -9,11 +9,12 @@
 class MotionPlugin {
 public:
   virtual ~MotionPlugin() = default;
-  virtual bool configure() = 0;
-  virtual bool start() = 0;
-  virtual bool stop() = 0;
   virtual bool sendCartesianTwist(const geometry_msgs::msg::Twist& endEffectorTwist) = 0;
+  virtual bool sendJointStates(const sensor_msgs::msg::JointState& js) = 0;
   virtual bool readRobotState(sensor_msgs::msg::JointState& js, geometry_msgs::msg::PoseStamped& endEffectorPose) = 0;
+  virtual void assignSharedClock(rclcpp::Clock::SharedPtr clock) { this->clock = clock; }
+protected:
+  rclcpp::Clock::SharedPtr clock;
 };
 
 #endif // !MOTION_PLUGIN_HPP

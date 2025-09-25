@@ -21,7 +21,15 @@
   *
   * @param[in] robot Robot instance to set behavior on.
   */
-void setDefaultBehavior(franka::Robot& robot);
+static void setDefaultBehavior(franka::Robot& robot) {
+  robot.setCollisionBehavior(
+    {{20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0}}, {{20.0, 20.0, 20.0, 20.0, 20.0, 20.0, 20.0}},
+    {{10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0}}, {{10.0, 10.0, 10.0, 10.0, 10.0, 10.0, 10.0}},
+    {{20.0, 20.0, 20.0, 20.0, 20.0, 20.0}}, {{20.0, 20.0, 20.0, 20.0, 20.0, 20.0}},
+    {{10.0, 10.0, 10.0, 10.0, 10.0, 10.0}}, {{10.0, 10.0, 10.0, 10.0, 10.0, 10.0}});
+  robot.setJointImpedance({{3000, 3000, 3000, 2500, 2500, 2000, 2000}});
+  robot.setCartesianImpedance({{3000, 3000, 3000, 300, 300, 300}});
+}
 
 /**
  * An example showing how to generate a joint pose motion to a goal position. Adapted from:
