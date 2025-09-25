@@ -20,7 +20,7 @@
 ///   ~/visualization_marker_array (visualization_msgs::msg::MarkerArray): Publishes markers for visualization in RViz
 ///   ~/nav_msgs/msg/Path (nav_msgs::msg::Path): Publishes the path of the query point to visualize its trajectory
 
-#include "pfield_manager.hpp"
+#include "ros/pfield_manager.hpp"
 
 PotentialFieldManager::PotentialFieldManager()
   : Node("potential_field_manager") {

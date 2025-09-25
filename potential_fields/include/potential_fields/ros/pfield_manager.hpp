@@ -10,13 +10,12 @@
 #include "visualization_msgs/msg/marker.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
 #include "nav_msgs/msg/path.hpp"
-#include "pfield.hpp"
+#include "pfield/pfield.hpp"
 #include "tf2_ros/transform_broadcaster.h"
 #include "tf2_ros/buffer.h"
 #include "tf2_ros/transform_listener.h"
 #include "tf2_eigen/tf2_eigen.hpp"
 #include "urdf/model.h"
-#include "pfield.hpp"
 #include "potential_fields_interfaces/msg/obstacle.hpp"
 #include "potential_fields_interfaces/srv/plan_path.hpp"
 #include <vector>
@@ -42,8 +41,8 @@ public:
     Quaternion q;
     q.x = 0.0;
     q.y = 0.0;
-    q.z = sin(yaw / 2);
-    q.w = cos(yaw / 2);
+    q.z = sin(yaw / 2.0);
+    q.w = cos(yaw / 2.0);
     return q;
   }
 

@@ -1,4 +1,4 @@
-#include "robot_parser.hpp"
+#include "ros/robot_parser.hpp"
 
 
 RobotParser::RobotParser() : Node("robot_parser") {
@@ -41,7 +41,8 @@ std::vector<Obstacle> RobotParser::parseURDF() {
   urdf::Model robotModel;
   if (!robotModel.initString(this->robotDescription)) {
     RCLCPP_ERROR(this->get_logger(), "Failed to load URDF model");
-  } else {
+  }
+  else {
     // Extract collision geometries from the URDF model and add them as obstacles
     int obstacleID = 0;
     for (const auto& link : robotModel.links_) {
@@ -106,18 +107,22 @@ Obstacle RobotParser::obstacleFromCollisionObject(
     geom.length = b->dim.x;
     geom.width = b->dim.y;
     geom.height = b->dim.z;
-  } else if (urdf::Sphere* s = dynamic_cast<urdf::Sphere*>(geometry)) {
+  }
+  else if (urdf::Sphere* s = dynamic_cast<urdf::Sphere*>(geometry)) {
     type = ObstacleType::SPHERE;
     geom.radius = s->radius;
-  } else if (urdf::Cylinder* c = dynamic_cast<urdf::Cylinder*>(geometry)) {
+  }
+  else if (urdf::Cylinder* c = dynamic_cast<urdf::Cylinder*>(geometry)) {
     type = ObstacleType::CYLINDER;
     geom.radius = c->radius;
     geom.height = c->length;
-  } else if (urdf::Mesh* m = dynamic_cast<urdf::Mesh*>(geometry)) {
+  }
+  else if (urdf::Mesh* m = dynamic_cast<urdf::Mesh*>(geometry)) {
     // Approximate mesh as a box for now
     type = ObstacleType::BOX;
     // TODO: Handle mesh geometry to assign Box size
-  } else {
+  }
+  else {
     RCLCPP_ERROR(this->get_logger(),
       "Unhandled URDF geometry type for collision object with id %d", id);
   }

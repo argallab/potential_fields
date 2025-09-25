@@ -11,14 +11,13 @@
 #include "visualization_msgs/msg/marker.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
 #include "nav_msgs/msg/path.hpp"
-#include "pfield.hpp"
+#include "pfield/pfield.hpp"
 #include "tf2_ros/transform_broadcaster.h"
 #include "tf2_ros/buffer.h"
 #include "tf2_ros/transform_listener.h"
 #include "tf2_eigen/tf2_eigen.hpp"
 #include "urdf/model.h"
 #include "urdf_parser/urdf_parser.h"
-#include "pfield.hpp"
 #include <fstream>
 #include "potential_fields_interfaces/msg/obstacle.hpp"
 

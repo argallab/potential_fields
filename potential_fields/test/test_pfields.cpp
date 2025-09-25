@@ -1,8 +1,8 @@
 #include <gtest/gtest.h>
-#include "pfield.hpp"
-#include "potential_field_obstacle.hpp"
-#include "spatial_vector.hpp"
 #include <eigen3/Eigen/Dense>
+#include "pfield/pfield.hpp"
+#include "pfield/potential_field_obstacle.hpp"
+#include "pfield/spatial_vector.hpp"
 
 TEST(PotentialFieldTest, AddAndRemoveObstacles) {
   PotentialField pf;
@@ -234,7 +234,7 @@ TEST(PotentialFieldTest, RotationalAttraction) {
   SpatialVector goal;
   SpatialVector query; // Same position, different orientation
   goal.setOrientationEuler(0, 0, 0);
-  query.setOrientationEuler(0, 0, M_PI_2);  // 90 degrees yaw 
+  query.setOrientationEuler(0, 0, M_PI_2);  // 90 degrees yaw
 
   PotentialField pf(goal, 0.0f, 10.0f);  // No translation pull
   SpatialVector vel = pf.evaluateVelocityAtPose(query);

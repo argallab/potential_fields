@@ -17,6 +17,7 @@ find_package(rclcpp REQUIRED)
 find_package(potential_fields_interfaces REQUIRED)
 find_package(Doxygen)
 find_package(geometry_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
@@ -37,8 +38,8 @@ include_directories(
   ${potential_fields_interfaces_INCLUDE_DIRS}
 )
 
-add_executable(pfield_manager src/pfield_manager.cpp)
-add_executable(robot_parser src/robot_parser.cpp)
+add_executable(pfield_manager src/ros/pfield_manager.cpp)
+add_executable(robot_parser src/ros/robot_parser.cpp)
 ament_target_dependencies(pfield_manager
   rclcpp
   Eigen3
@@ -56,6 +57,7 @@ ament_target_dependencies(robot_parser
   Eigen3
   potential_fields_interfaces
   geometry_msgs
+  sensor_msgs
   visualization_msgs
   nav_msgs
   tf2_ros
