@@ -15,11 +15,15 @@ public:
 
 private:
   rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr humanTwistSub;
-  rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr autonomyTwistPub;
+  rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr autonomyTwistSub;
   rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr fusedTwistPub;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goalPoseSub;
   rclcpp::Service<std_srvs::srv::Empty>::SharedPtr startSrv, stopSrv;
   rclcpp::TimerBase::SharedPtr controlTimer;
+
+  double fusionAlpha;
+  double controlLoopFreq;
+  bool controlEnabled;
 
   // Instead of storing a shared_ptr, we will need to reach into the PF Manager node
   // via ROS interfaces to get the data and functions we need
@@ -29,8 +33,15 @@ private:
   geometry_msgs::msg::Twist::SharedPtr twistLimits;
   geometry_msgs::msg::PoseStamped::SharedPtr currentGoal;
   geometry_msgs::msg::TwistStamped::SharedPtr lastHumanTwist;
+  geometry_msgs::msg::TwistStamped::SharedPtr lastAutonomyTwist;
 
   void controlLoop();
+
+  geometry_msgs::msg::TwistStamped fuseTwists(
+    const geometry_msgs::msg::TwistStamped::SharedPtr humanTwist,
+    const geometry_msgs::msg::TwistStamped::SharedPtr autonomyTwist);
+
+  geometry_msgs::msg::TwistStamped clampTwist(const geometry_msgs::msg::TwistStamped& twist);
 };
 
 #endif // !MOTION_INTERFACE_HPP
