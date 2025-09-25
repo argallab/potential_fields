@@ -8,3 +8,16 @@ pfield_manager:
 robot_parser:
   ros__parameters:
     timer_frequency: 50.0 # [Hz]
+motion_interface:
+  ros__parameters:
+    robot_plugin: "franka"
+    robot_hostname: "192.168.18.1"
+    base_frame: "panda_link0"
+    end_effector_frame: "panda_hand"
+    control_loop_frequency: 10.0 # [Hz]
+    fusion_alpha: 1.0 # Weight for fusing human (0) and PF (1) velocities [0, 1]
+    limits:
+      v_lin_max: 0.20 # [m/s]
+      v_ang_max: 0.80 # [rad/s]
+      a_lin_max: 0.40 # [m/s^2]
+      a_ang_max: 1.60 # [rad/s^2]
