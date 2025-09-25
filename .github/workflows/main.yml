@@ -14,7 +14,7 @@ jobs:
     container:
       image: rostooling/setup-ros-docker:ubuntu-noble-latest
     steps:
-      - name: Check out repository
+      - name: Checkout repository
         uses: actions/checkout@v4
         with:
           ref: ${{ github.event.pull_request.merge_commit_sha }}
@@ -27,3 +27,5 @@ jobs:
         with:
           package-name: potential_fields
           target-ros2-distro: jazzy
+        env:
+          ROS_REPOS_TOKEN: ${{ secrets.GH_PAT }}
