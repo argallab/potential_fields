@@ -38,13 +38,11 @@ public:
    * @param goalPose The pose in 3D space that will generate an attractive force.
    */
   PotentialField(SpatialVector goalPose) :
-    goalPose(goalPose) {
-  }
+    goalPose(goalPose) {}
 
   PotentialField(SpatialVector goalPose, double attractiveGain, double rotationalAttractiveGain) : attractiveGain(attractiveGain),
     rotationalAttractiveGain(rotationalAttractiveGain),
-    goalPose(goalPose) {
-  }
+    goalPose(goalPose) {}
 
   ~PotentialField() = default;
 
@@ -82,7 +80,8 @@ public:
       // Obstacle with the same ID already exists, update it
       *it = obstacle;
       return;
-    } else {
+    }
+    else {
       // New obstacle, add it to the list
       this->obstacles.push_back(obstacle);
     }
@@ -115,7 +114,8 @@ public:
       [obstacleID](const PotentialFieldObstacle& obs) {return obs.getID() == obstacleID;});
     if (it != this->obstacles.cend()) {
       return *it;
-    } else {
+    }
+    else {
       throw std::invalid_argument("Obstacle with the given ID does not exist.");
     }
   }
@@ -144,7 +144,8 @@ public:
       Eigen::Quaterniond normalizedQ = q.normalized();
       axis = normalizedQ.vec();
       angle = 2.0 * std::acos(normalizedQ.w());
-    } else {
+    }
+    else {
       axis = q.vec();
       angle = 2.0 * std::acos(q.w());
     }
@@ -242,7 +243,8 @@ private:
     // If geodesic distance is (near) zero, don't apply rotational force
     if (angularDistance < this->rotationalThreshold) {
       return attractiveForce;
-    } else {
+    }
+    else {
       // Apply a rotational force proportional to the geodesic distance and the gain
       double rotationalMagnitude = -this->rotationalAttractiveGain * angularDistance;
       // Apply the rotational force
