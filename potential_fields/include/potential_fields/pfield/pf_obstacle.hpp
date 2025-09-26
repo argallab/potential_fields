@@ -12,7 +12,7 @@ enum class ObstacleType {
   CYLINDER // [center, radius, height]
 };
 
-std::string obstacleTypeToString(const ObstacleType& type) {
+inline std::string obstacleTypeToString(const ObstacleType& type) {
   switch (type) {
   case ObstacleType::SPHERE:
     return "Sphere";
@@ -25,7 +25,7 @@ std::string obstacleTypeToString(const ObstacleType& type) {
   }
 }
 
-ObstacleType stringToObstacleType(const std::string& typeStr) {
+inline ObstacleType stringToObstacleType(const std::string& typeStr) {
   if (typeStr == "Sphere") {
     return ObstacleType::SPHERE;
   }

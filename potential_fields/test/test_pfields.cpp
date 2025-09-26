@@ -1,7 +1,7 @@
 #include <gtest/gtest.h>
 #include <eigen3/Eigen/Dense>
 #include "pfield/pfield.hpp"
-#include "pfield/potential_field_obstacle.hpp"
+#include "pfield/pf_obstacle.hpp"
 #include "pfield/spatial_vector.hpp"
 
 TEST(PotentialFieldTest, AddAndRemoveObstacles) {

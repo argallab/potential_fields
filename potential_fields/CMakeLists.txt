@@ -33,9 +33,27 @@ ament_add_gtest(test_pfields
   test/test_pfields.cpp
 )
 
+target_link_libraries(test_spatial_vector pfield_lib)
+target_link_libraries(test_pfields pfield_lib)
+
 include_directories(
   include/potential_fields
   ${potential_fields_interfaces_INCLUDE_DIRS}
+)
+
+add_library(pfield_lib SHARED
+  src/pfield/pf_obstacle.cpp
+  src/pfield/pfield.cpp
+  src/pfield/spatial_vector.cpp
+)
+
+target_include_directories(pfield_lib PUBLIC
+  include
+  ${EIGEN3_INCLUDE_DIRS}
+)
+
+ament_target_dependencies(pfield_lib
+  Eigen3
 )
 
 add_executable(pfield_manager src/ros/pfield_manager.cpp)
@@ -67,6 +85,7 @@ ament_target_dependencies(robot_parser
 
 target_link_libraries(pfield_manager
   ${potential_fields_interfaces_LIBRARIES}
+  pfield_lib
 )
 
 target_link_libraries(robot_parser
