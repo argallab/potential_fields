@@ -72,8 +72,18 @@ struct ObstacleGeometry {
 class PotentialFieldObstacle {
 public:
   PotentialFieldObstacle() = delete;
-  PotentialFieldObstacle(int id, Eigen::Vector3d centerPosition, Eigen::Quaterniond orientation,
-    ObstacleType type, ObstacleGeometry geometry, double influenceZoneScale, double repulsiveGain);
+  PotentialFieldObstacle(int id,
+    Eigen::Vector3d centerPosition, Eigen::Quaterniond orientation,
+    ObstacleType type, ObstacleGeometry geometry,
+    double influenceZoneScale, double repulsiveGain)
+    : id(id),
+    position(centerPosition),
+    orientation(orientation),
+    orientationConjugate(orientation.conjugate()),
+    type(type),
+    geometry(geometry),
+    influenceZoneScale(influenceZoneScale),
+    repulsiveGain(repulsiveGain) {}
   ~PotentialFieldObstacle() = default;
 
   int getID() const { return this->id; }

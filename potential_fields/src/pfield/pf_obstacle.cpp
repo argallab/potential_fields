@@ -1,19 +1,5 @@
 #include "pfield/pf_obstacle.hpp"
 
-
-PotentialFieldObstacle::PotentialFieldObstacle(int id,
-  Eigen::Vector3d centerPosition, Eigen::Quaterniond orientation,
-  ObstacleType type, ObstacleGeometry geometry,
-  double influenceZoneScale, double repulsiveGain)
-  : id(id),
-  position(centerPosition),
-  orientation(orientation),
-  orientationConjugate(orientation.conjugate()),
-  type(type),
-  geometry(geometry),
-  influenceZoneScale(influenceZoneScale),
-  repulsiveGain(repulsiveGain) {}
-
 bool PotentialFieldObstacle::withinInfluenceZone(Eigen::Vector3d pos) const {
   Eigen::Vector3d localPos = this->toObstacleFrame(pos);
   // influenceZoneScale is the scalar that applies to each dimension of the obstacle's geometry
