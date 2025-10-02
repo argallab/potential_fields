@@ -56,6 +56,7 @@ private:
   double maxForce; // Maximum force [N]
   std::string fixedFrame; // RViz fixed frame for visualization and PF computation
   PotentialField pField; // Potential field instance
+  PotentialField planningPField; // PF instance for path planning
 
   // Timer to perodically update the potential field
   rclcpp::TimerBase::SharedPtr timer;
