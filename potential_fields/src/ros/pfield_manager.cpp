@@ -11,6 +11,7 @@
 ///
 /// SERVICES:
 ///   ~/pfield/plan_path (potential_fields_interfaces::srv::PlanPath): Interpolates a path from a start pose to the goal pose
+///   ~/pfield/compute_autonomy_vector (potential_fields_interfaces::srv::ComputeAutonomyVector): Computes the autonomy vector at a given pose
 ///
 /// SUBSCRIBERS:
 ///   ~/goal_pose (geometry_msgs::msg::PoseStamped): Updates the goal pose in the potential field
@@ -41,7 +42,7 @@ PotentialFieldManager::PotentialFieldManager()
   this->fixedFrame = this->get_parameter("fixed_frame").as_string();
 
   // Initialize the potential field
-  this->pField = PotentialField(SpatialVector{Eigen::Vector3d::Zero()}, this->attractiveGain, this->rotationalAttractiveGain);
+  this->pField = PotentialField(this->attractiveGain, this->rotationalAttractiveGain);
 
   // Setup TF2 broadcaster, buffer, and listener
   this->dynamicTfBroadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(this);
@@ -80,6 +81,7 @@ PotentialFieldManager::PotentialFieldManager()
       Eigen::Vector3d(msg->pose.position.x, msg->pose.position.y, msg->pose.position.z),
       Eigen::Quaterniond(msg->pose.orientation.w, msg->pose.orientation.x, msg->pose.orientation.y, msg->pose.orientation.z),
       stringToObstacleType(msg->type),
+      stringToObstacleGroup(msg->group),
       ObstacleGeometry{msg->radius, msg->length, msg->width, msg->height},
       2.0, // influence zone scale
       this->repulsiveGain
@@ -111,6 +113,41 @@ PotentialFieldManager::PotentialFieldManager()
   }
   );
 
+  // Create service to compute the autonomy vector at a given pose
+  this->autonomyVectorService = this->create_service<ComputeAutonomyVector>("pfield/compute_autonomy_vector",
+    [this](const ComputeAutonomyVector::Request::SharedPtr request, ComputeAutonomyVector::Response::SharedPtr response) {
+    RCLCPP_INFO(this->get_logger(), "Received autonomy vector request");
+    // Compute the autonomy vector at the given pose
+    SpatialVector queryPose(
+      Eigen::Vector3d(
+        request->start.pose.position.x, request->start.pose.position.y,
+        request->start.pose.position.z
+      ),
+      Eigen::Quaterniond(
+        request->start.pose.orientation.w, request->start.pose.orientation.x,
+        request->start.pose.orientation.y, request->start.pose.orientation.z
+      )
+    );
+    SpatialVector autonomyVector = this->pField.evaluateVelocityAtPose(queryPose);
+    response->autonomy_vector.header.frame_id = this->fixedFrame;
+    response->autonomy_vector.header.stamp = this->now();
+    response->autonomy_vector.twist.linear.x = autonomyVector.getPosition().x();
+    response->autonomy_vector.twist.linear.y = autonomyVector.getPosition().y();
+    response->autonomy_vector.twist.linear.z = autonomyVector.getPosition().z();
+    // For angular velocity, convert quaternion to euler angles (yaw, pitch, roll)
+    Eigen::Vector3d eulerAngles = autonomyVector.getOrientation().toRotationMatrix().eulerAngles(2, 1, 0);
+    response->autonomy_vector.twist.angular.x = eulerAngles[2]; // roll
+    response->autonomy_vector.twist.angular.y = eulerAngles[1]; // pitch
+    response->autonomy_vector.twist.angular.z = eulerAngles[0]; // yaw
+    RCLCPP_INFO(
+      this->get_logger(),
+      "Autonomy vector computed at pose: pos=(%.2f, %.2f, %.2f), RPY=(%.2f, %.2f, %.2f)",
+      queryPose.getPosition().x(), queryPose.getPosition().y(), queryPose.getPosition().z(),
+      eulerAngles[2], eulerAngles[1], eulerAngles[0]
+    );
+  }
+  );
+
   // Create a CSV file to store the potential field data for python to plot
   // std::string filename = "pfield_data";
   // this->exportFieldDataToCSV(filename);
@@ -127,8 +164,6 @@ void PotentialFieldManager::timerCallback() {
 }
 
 Path PotentialFieldManager::interpolatePath(const SpatialVector& start, double deltaTime, double goalTolerance) {
-  // Interpolate a path from the start point to the current goal point
-  // Initialize Path and add the start pose
   Path path;
   path.header.frame_id = this->fixedFrame;
   path.header.stamp = this->now();

@@ -92,3 +92,23 @@ Another library is [`franky`](https://github.com/TimSchneider42/franky), which c
 
 ## Generate Cartesian Velocity Commands Example
 The [Cartesian Velocity Motion Example](https://github.com/frankarobotics/libfranka/blob/main/examples/generate_cartesian_velocity_motion_external_control_loop.cpp) demonstrates how to apply cartesian velocity commands to the robot with an external control loop.
+
+
+Stick to Moveit compatible msgs for planning path using position control. Trajectory_msgs/JointTrajectory
+Update PF when robot moves to build path.
+Think about replan timer.
+Build-path should be able to do moving+planning or planning and then moving later.
+Convert to JointTrajectory from plan.
+Parrallize planning.
+Send JT to JTAS when running MoveIt Franka demo. Doesn't matter if MoveIt.
+Generic programming (Policy based design) for different IK solvers.
+
+## IK
+[GeoFIK](https://arxiv.org/abs/2503.03992)
+TrackIK
+KDL (ROS1 XArm)
+Pinocchio (ROS2 XArm)
+Custom IK Solver (GeoFIK for Franka)
+
+This week:
+Pinnochio as IK to get JointTrajectory from a planned path.

@@ -20,16 +20,29 @@
 #include "spatial_vector.hpp"
 #include "pf_obstacle.hpp"
 #include <eigen3/Eigen/Dense>
-
- // Functionality to support:
- // 1. Track a Goal Position (Initialization and Update)
- // 2. Create obstacles with a specified geometry
- // 3. Compute velocity vector at a given position
+#include <unordered_set>
 
 class PotentialField {
 public:
 
-  PotentialField();
+  PotentialField() = default;
+  ~PotentialField() = default;
+
+  PotentialField(const PotentialField& other) :
+    attractiveGain(other.attractiveGain),
+    rotationalAttractiveGain(other.rotationalAttractiveGain),
+    goalPose(other.goalPose),
+    obstacles(other.obstacles) {}
+
+  PotentialField& operator=(const PotentialField& other) {
+    if (this != &other) {
+      this->attractiveGain = other.attractiveGain;
+      this->rotationalAttractiveGain = other.rotationalAttractiveGain;
+      this->goalPose = other.goalPose;
+      this->obstacles = other.obstacles;
+    }
+    return *this;
+  }
 
   /**
    * @brief Constructs a PotentialField with the specified goal position.
@@ -37,11 +50,20 @@ public:
    *
    * @param goalPose The pose in 3D space that will generate an attractive force.
    */
-  PotentialField(SpatialVector goalPose);
+  PotentialField(SpatialVector goalPose) :
+    attractiveGain(1.0),
+    rotationalAttractiveGain(0.7),
+    goalPose(goalPose) {}
 
-  PotentialField(SpatialVector goalPose, double attractiveGain, double rotationalAttractiveGain);
+  PotentialField(SpatialVector goalPose, double attractiveGain, double rotationalAttractiveGain) :
+    attractiveGain(attractiveGain),
+    rotationalAttractiveGain(rotationalAttractiveGain),
+    goalPose(goalPose) {}
 
-  ~PotentialField() = default;
+  PotentialField(double attractiveGain, double rotationalAttractiveGain) :
+    attractiveGain(attractiveGain),
+    rotationalAttractiveGain(rotationalAttractiveGain),
+    goalPose(SpatialVector(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity())) {}
 
   /**
  * @brief Updates the goal position (3D Vector) in the potential field.
@@ -123,11 +145,27 @@ public:
 
   bool isPointWithinInfluenceZone(Eigen::Vector3d point) const;
 
+  bool operator==(const PotentialField& other) const {
+    auto obstaclesEqual = [this, &other]() -> bool {
+      if (this->obstacles.size() != other.obstacles.size()) return false;
+      // Convert both obstacle lists to unordered_sets for comparison
+      std::unordered_set<PotentialFieldObstacle, PotentialFieldObstacleHash> thisObstaclesSet(this->obstacles.cbegin(), this->obstacles.cend());
+      std::unordered_set<PotentialFieldObstacle, PotentialFieldObstacleHash> otherObstaclesSet(other.obstacles.cbegin(), other.obstacles.cend());
+      return thisObstaclesSet == otherObstaclesSet;
+    }();
+    return this->attractiveGain == other.attractiveGain &&
+      this->rotationalAttractiveGain == other.rotationalAttractiveGain &&
+      this->goalPose == other.goalPose &&
+      obstaclesEqual;
+  }
+
+  bool operator!=(const PotentialField& other) const { return !(*this == other); }
+
 private:
-  double attractiveGain = 1.0f; // Gain for attractive force
-  double rotationalAttractiveGain = 0.7f; // Gain for rotational attractive force
-  double translationalTolerance = 1e-3f; // Threshold for distances to the goal and obstacles
-  double rotationalThreshold = 0.06f; // Threshold for rotational geodesic distance
+  double attractiveGain; // Gain for attractive force
+  double rotationalAttractiveGain; // Gain for rotational attractive force
+  double translationalTolerance = 1e-3; // Threshold for distances to the goal and obstacles
+  double rotationalThreshold = 0.06; // Threshold for rotational geodesic distance
   SpatialVector goalPose;
   std::vector<PotentialFieldObstacle> obstacles;
 

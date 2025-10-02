@@ -121,6 +121,7 @@ Obstacle RobotParser::obstacleFromCollisionObject(
     // Approximate mesh as a box for now
     type = ObstacleType::BOX;
     // TODO: Handle mesh geometry to assign Box size
+    (void)m; // Mark as used to avoid compiler warning
   }
   else {
     RCLCPP_ERROR(this->get_logger(),
@@ -129,6 +130,7 @@ Obstacle RobotParser::obstacleFromCollisionObject(
   Obstacle obstacle;
   obstacle.id = id;
   obstacle.type = obstacleTypeToString(type);
+  obstacle.group = obstacleGroupToString(ObstacleGroup::ROBOT);
   obstacle.pose.position.x = position.x();
   obstacle.pose.position.y = position.y();
   obstacle.pose.position.z = position.z();

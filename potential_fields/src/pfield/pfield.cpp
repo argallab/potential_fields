@@ -2,15 +2,6 @@
 #include "pfield/pf_obstacle.hpp"
 #include "pfield/spatial_vector.hpp"
 
-PotentialField::PotentialField() = default;
-
-PotentialField::PotentialField(SpatialVector goalPose) :
-  goalPose(goalPose) {}
-
-PotentialField::PotentialField(SpatialVector goalPose, double attractiveGain, double rotationalAttractiveGain) : attractiveGain(attractiveGain),
-rotationalAttractiveGain(rotationalAttractiveGain),
-goalPose(goalPose) {}
-
 void PotentialField::updateGoalPosition(SpatialVector newGoalPose) {
   this->goalPose = newGoalPose;
 }

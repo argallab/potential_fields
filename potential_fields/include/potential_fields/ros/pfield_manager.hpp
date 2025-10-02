@@ -18,6 +18,7 @@
 #include "urdf/model.h"
 #include "potential_fields_interfaces/msg/obstacle.hpp"
 #include "potential_fields_interfaces/srv/plan_path.hpp"
+#include "potential_fields_interfaces/srv/compute_autonomy_vector.hpp"
 #include <vector>
 #include <fstream>
 
@@ -31,6 +32,7 @@ using Path = nav_msgs::msg::Path;
 using TransformStamped = geometry_msgs::msg::TransformStamped;
 using Obstacle = potential_fields_interfaces::msg::Obstacle;
 using PlanPath = potential_fields_interfaces::srv::PlanPath;
+using ComputeAutonomyVector = potential_fields_interfaces::srv::ComputeAutonomyVector;
 
 class PotentialFieldManager : public rclcpp::Node {
 public:
@@ -82,6 +84,20 @@ private:
   // Service to obtain a path from a query point to the goal
   rclcpp::Service<PlanPath>::SharedPtr pathPlanningService;
 
+  // Service to compute the autonomy vector at a given pose
+  rclcpp::Service<ComputeAutonomyVector>::SharedPtr autonomyVectorService;
+
+  /**
+   * @brief Interpolates a path from a start pose to the goal pose.
+   *
+   * @note Accounts for the robot moving along the path with
+   *       its geometry contributing to the potential field as obstacles.
+   *
+   * @param start The starting pose of the path
+   * @param deltaTime The time step for each interpolation segment [s]
+   * @param goalTolerance The tolerance for reaching the goal [m]
+   * @return Path The interpolated path from start to goal
+   */
   Path interpolatePath(const SpatialVector& start, double deltaTime, double goalTolerance);
 
   void visualizePF();

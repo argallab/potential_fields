@@ -12,6 +12,12 @@ enum class ObstacleType {
   CYLINDER // [center, radius, height]
 };
 
+enum class ObstacleGroup {
+  STATIC, // Static environment obstacles
+  DYNAMIC, // Dynamic environment obstacles
+  ROBOT // The Robot itself as an obstacle, used for self-collision avoidance
+};
+
 inline std::string obstacleTypeToString(const ObstacleType& type) {
   switch (type) {
   case ObstacleType::SPHERE:
@@ -40,6 +46,33 @@ inline ObstacleType stringToObstacleType(const std::string& typeStr) {
   }
 }
 
+inline std::string obstacleGroupToString(const ObstacleGroup& group) {
+  switch (group) {
+  case ObstacleGroup::STATIC:
+    return "Static";
+  case ObstacleGroup::DYNAMIC:
+    return "Dynamic";
+  case ObstacleGroup::ROBOT:
+    return "Robot";
+  default:
+    throw std::invalid_argument("Unknown obstacle group");
+  }
+}
+
+inline ObstacleGroup stringToObstacleGroup(const std::string& groupStr) {
+  if (groupStr == "Static") {
+    return ObstacleGroup::STATIC;
+  }
+  else if (groupStr == "Dynamic") {
+    return ObstacleGroup::DYNAMIC;
+  }
+  else if (groupStr == "Robot") {
+    return ObstacleGroup::ROBOT;
+  }
+  else {
+    throw std::invalid_argument("Unknown obstacle group string: " + groupStr);
+  }
+}
 
 struct ObstacleGeometry {
   double radius = 0.0; // Radius for sphere and cylinder, unused for box
@@ -69,24 +102,27 @@ struct ObstacleGeometry {
   }
 };
 
+
 class PotentialFieldObstacle {
 public:
   PotentialFieldObstacle() = delete;
   PotentialFieldObstacle(int id,
     Eigen::Vector3d centerPosition, Eigen::Quaterniond orientation,
-    ObstacleType type, ObstacleGeometry geometry,
+    ObstacleType type, ObstacleGroup group, ObstacleGeometry geometry,
     double influenceZoneScale, double repulsiveGain)
     : id(id),
     position(centerPosition),
     orientation(orientation),
     orientationConjugate(orientation.conjugate()),
     type(type),
+    group(group),
     geometry(geometry),
     influenceZoneScale(influenceZoneScale),
     repulsiveGain(repulsiveGain) {}
   ~PotentialFieldObstacle() = default;
 
   int getID() const { return this->id; }
+  ObstacleGroup getGroup() const { return this->group; }
   Eigen::Vector3d getPosition() const { return this->position; }
   Eigen::Quaterniond getOrientation() const { return this->orientation; }
   ObstacleType getType() const { return this->type; }
@@ -113,11 +149,12 @@ public:
   }
 
 private:
-  int id = 0; // Unique ID for the obstacle
+  int id; // Unique ID for the obstacle
   Eigen::Vector3d position; // Center Position of the obstacle in 3D space
   Eigen::Quaterniond orientation; // Orientation of the obstacle in 3D space
   Eigen::Quaterniond orientationConjugate; // Cached conjugate of the orientation for efficiency
   ObstacleType type; // Type of the obstacle
+  ObstacleGroup group; // Obstacle group/category
   ObstacleGeometry geometry; // Geometry of the obstacle, containing relevant dimensions
   double influenceZoneScale; // The scale value of the volume of the obstacle that becomes the influence zone for repulsive forces
   double repulsiveGain; // Gain for the repulsive force
@@ -125,6 +162,14 @@ private:
   Eigen::Vector3d toObstacleFrame(const Eigen::Vector3d& point) const;
 
   Eigen::Vector3d halfDimensions() const;
+};
+
+struct PotentialFieldObstacleHash {
+  std::size_t operator()(const PotentialFieldObstacle& obstacle) const {
+    return std::hash<int>()(obstacle.getID()) ^
+      std::hash<std::string>()(obstacleTypeToString(obstacle.getType())) ^
+      std::hash<std::string>()(obstacleGroupToString(obstacle.getGroup()));
+  }
 };
 
 #endif // PF_OBSTACLE_HPP
