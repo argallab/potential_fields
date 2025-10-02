@@ -1,4 +1,7 @@
 #include "ros/robot_parser.hpp"
+#include "urdf/model.h"
+#include "urdf_parser/urdf_parser.h"
+#include "tf2_eigen/tf2_eigen.hpp"
 
 
 RobotParser::RobotParser() : Node("robot_parser") {
@@ -118,10 +121,12 @@ Obstacle RobotParser::obstacleFromCollisionObject(
     geom.height = c->length;
   }
   else if (urdf::Mesh* m = dynamic_cast<urdf::Mesh*>(geometry)) {
-    // Approximate mesh as a box for now
-    type = ObstacleType::BOX;
-    // TODO: Handle mesh geometry to assign Box size
-    (void)m; // Mark as used to avoid compiler warning
+    // Treat mesh as MESH type but approximate PF collision as its scale bounding box
+    type = ObstacleType::MESH;
+    // Some URDF meshes may have default scale (1,1,1); we store both the visual scale and use as approximate bbox if no dims provided
+    geom.length = m->scale.x;
+    geom.width = m->scale.y;
+    geom.height = m->scale.z;
   }
   else {
     RCLCPP_ERROR(this->get_logger(),
@@ -142,6 +147,18 @@ Obstacle RobotParser::obstacleFromCollisionObject(
   obstacle.length = geom.length;
   obstacle.width = geom.width;
   obstacle.height = geom.height;
+  if (auto* m = dynamic_cast<urdf::Mesh*>(geometry)) {
+    obstacle.mesh_resource = m->filename;
+    obstacle.scale_x = static_cast<float>(m->scale.x);
+    obstacle.scale_y = static_cast<float>(m->scale.y);
+    obstacle.scale_z = static_cast<float>(m->scale.z);
+  }
+  else {
+    obstacle.mesh_resource = "";
+    obstacle.scale_x = 1.0f;
+    obstacle.scale_y = 1.0f;
+    obstacle.scale_z = 1.0f;
+  }
   return obstacle;
 }
 

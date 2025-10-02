@@ -1,15 +1,18 @@
 #ifndef PF_OBSTACLE_HPP
 #define PF_OBSTACLE_HPP
 #include "spatial_vector.hpp"
-#include <eigen3/Eigen/Dense>
+#include <Eigen/Core>
+#include <Eigen/Geometry>
 #include <vector>
 #include <stdexcept>
 #include <cmath>
+#include <string>
 
 enum class ObstacleType {
   SPHERE, // [center, radius]
   BOX, // [center, length, width, height]
-  CYLINDER // [center, radius, height]
+  CYLINDER, // [center, radius, height]
+  MESH // [center, scale_x, scale_y, scale_z] - Treat geometry as box
 };
 
 enum class ObstacleGroup {
@@ -26,6 +29,8 @@ inline std::string obstacleTypeToString(const ObstacleType& type) {
     return "Box";
   case ObstacleType::CYLINDER:
     return "Cylinder";
+  case ObstacleType::MESH:
+    return "Mesh";
   default:
     throw std::invalid_argument("Unknown obstacle type");
   }
@@ -40,6 +45,9 @@ inline ObstacleType stringToObstacleType(const std::string& typeStr) {
   }
   else if (typeStr == "Cylinder") {
     return ObstacleType::CYLINDER;
+  }
+  else if (typeStr == "Mesh") {
+    return ObstacleType::MESH;
   }
   else {
     throw std::invalid_argument("Unknown obstacle type string: " + typeStr);
@@ -96,6 +104,8 @@ struct ObstacleGeometry {
       return {length, width, height};
     case ObstacleType::CYLINDER:
       return {radius, height};
+    case ObstacleType::MESH:
+      return {length, width, height};
     default:
       throw std::invalid_argument("Unknown obstacle type");
     }
@@ -109,7 +119,9 @@ public:
   PotentialFieldObstacle(int id,
     Eigen::Vector3d centerPosition, Eigen::Quaterniond orientation,
     ObstacleType type, ObstacleGroup group, ObstacleGeometry geometry,
-    double influenceZoneScale, double repulsiveGain)
+    double influenceZoneScale, double repulsiveGain,
+    const std::string& meshResource = std::string(),
+    const Eigen::Vector3d& meshScale = Eigen::Vector3d::Ones())
     : id(id),
     position(centerPosition),
     orientation(orientation),
@@ -118,7 +130,9 @@ public:
     group(group),
     geometry(geometry),
     influenceZoneScale(influenceZoneScale),
-    repulsiveGain(repulsiveGain) {}
+    repulsiveGain(repulsiveGain),
+    meshResource(meshResource),
+    meshScale(meshScale) {}
   ~PotentialFieldObstacle() = default;
 
   int getID() const { return this->id; }
@@ -129,6 +143,8 @@ public:
   ObstacleGeometry getGeometry() const { return this->geometry; }
   double getInfluenceZoneScale() const { return this->influenceZoneScale; }
   double getRepulsiveGain() const { return this->repulsiveGain; }
+  const std::string& getMeshResource() const { return this->meshResource; }
+  Eigen::Vector3d getMeshScale() const { return this->meshScale; }
 
   void setPosition(Eigen::Vector3d newPosition) { this->position = newPosition; }
   void setOrientation(Eigen::Quaterniond newOrientation) {
@@ -158,6 +174,9 @@ private:
   ObstacleGeometry geometry; // Geometry of the obstacle, containing relevant dimensions
   double influenceZoneScale; // The scale value of the volume of the obstacle that becomes the influence zone for repulsive forces
   double repulsiveGain; // Gain for the repulsive force
+  // Mesh specific metadata (optional)
+  std::string meshResource; // URI or file path to the mesh resource (e.g., package://, file://)
+  Eigen::Vector3d meshScale; // Scale for mesh visualization if using MESH_RESOURCE
 
   Eigen::Vector3d toObstacleFrame(const Eigen::Vector3d& point) const;
 

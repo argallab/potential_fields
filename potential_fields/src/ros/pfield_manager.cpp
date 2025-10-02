@@ -84,7 +84,9 @@ PotentialFieldManager::PotentialFieldManager()
       stringToObstacleGroup(msg->group),
       ObstacleGeometry{msg->radius, msg->length, msg->width, msg->height},
       2.0, // influence zone scale
-      this->repulsiveGain
+      this->repulsiveGain,
+      msg->mesh_resource,
+      Eigen::Vector3d(msg->scale_x, msg->scale_y, msg->scale_z)
     );
     this->pField.addObstacle(obstacle);
   }
@@ -264,6 +266,26 @@ MarkerArray PotentialFieldManager::createObstacleMarkers() {
       obstacleMarker.scale.z = obstacle.getGeometry().height; // Height
       break;
     }
+    case ObstacleType::MESH: {
+      if (!obstacle.getMeshResource().empty()) {
+        obstacleMarker.type = Marker::MESH_RESOURCE;
+        obstacleMarker.mesh_resource = obstacle.getMeshResource();
+        obstacleMarker.mesh_use_embedded_materials = true;
+        // Use the meshScale for visualization; if geometry dims are provided and non-zero, multiply scale accordingly
+        Eigen::Vector3d scale = obstacle.getMeshScale();
+        obstacleMarker.scale.x = scale.x();
+        obstacleMarker.scale.y = scale.y();
+        obstacleMarker.scale.z = scale.z();
+      }
+      else {
+        // Fallback to box approximation
+        obstacleMarker.type = Marker::CUBE;
+        obstacleMarker.scale.x = obstacle.getGeometry().length;
+        obstacleMarker.scale.y = obstacle.getGeometry().width;
+        obstacleMarker.scale.z = obstacle.getGeometry().height;
+      }
+      break;
+    }
     }
     obstacleMarker.color.r = 1.0f;
     obstacleMarker.color.g = 0.0f;
@@ -305,6 +327,22 @@ MarkerArray PotentialFieldManager::createObstacleMarkers() {
       influenceMarker.scale.x = obstacle.getInfluenceZoneScale() * obstacle.getGeometry().radius * 2.0f; // Diameter
       influenceMarker.scale.y = obstacle.getInfluenceZoneScale() * obstacle.getGeometry().radius * 2.0f; // Diameter
       influenceMarker.scale.z = obstacle.getInfluenceZoneScale() * obstacle.getGeometry().height; // Height
+      break;
+    }
+    case ObstacleType::MESH: {
+      // Represent mesh influence as a scaled bounding box around the mesh
+      influenceMarker.type = Marker::CUBE;
+      // If geometry bbox provided, use it; otherwise derive from meshScale
+      double lx = obstacle.getGeometry().length;
+      double ly = obstacle.getGeometry().width;
+      double lz = obstacle.getGeometry().height;
+      if (lx <= 0.0 || ly <= 0.0 || lz <= 0.0) {
+        Eigen::Vector3d s = obstacle.getMeshScale();
+        lx = s.x(); ly = s.y(); lz = s.z();
+      }
+      influenceMarker.scale.x = obstacle.getInfluenceZoneScale() * lx;
+      influenceMarker.scale.y = obstacle.getInfluenceZoneScale() * ly;
+      influenceMarker.scale.z = obstacle.getInfluenceZoneScale() * lz;
       break;
     }
     }
@@ -451,11 +489,11 @@ void PotentialFieldManager::exportFieldDataToCSV(const std::string& base_filenam
     obstacles_file << "obstacle_x,obstacle_y,obstacle_z,type,influence,repulsive_gain,radius,length,width,height\n";
     for (const auto& obstacle : this->pField.getObstacles()) {
       const Eigen::Vector3d& position = obstacle.getPosition();
-      std::vector<double> obstGeomVector = obstacle.getGeometry().asVector(obstacle.getType());
+      const ObstacleGeometry& g = obstacle.getGeometry();
       obstacles_file << position.x() << "," << position.y() << "," << position.z() << ","
         << obstacleTypeToString(obstacle.getType()) << "," << obstacle.getInfluenceZoneScale() << ","
         << obstacle.getRepulsiveGain() << ","
-        << obstGeomVector[0] << "," << obstGeomVector[1] << "," << obstGeomVector[2] << obstGeomVector[3]
+        << g.radius << "," << g.length << "," << g.width << "," << g.height
         << "\n";
     }
     obstacles_file.close();
