@@ -17,6 +17,21 @@
 #include "examples_common.h"
 #include "motion_plugin.hpp"
 
+class FrankaIKSolver : public IKSolver {
+public:
+  FrankaIKSolver();
+  ~FrankaIKSolver() override = default;
+
+  bool computeIK(const geometry_msgs::msg::PoseStamped& endEffectorPose,
+    sensor_msgs::msg::JointState& jointState) override;
+
+private:
+  // The joint angles of the franka in the "home" position [rad]
+  const std::array<double, 7> homeJointAngles = {0, -M_PI_4, 0, -3 * M_PI_4, 0, M_PI_2, M_PI_4};
+  // The homogeneous transform from the robot's base link [O] to the end-effector [E] in the "home" position
+  Eigen::Matrix4d homeTransformOE;
+};
+
 class FrankaPlugin : public MotionPlugin {
 public:
   FrankaPlugin(const std::string& hostname);
@@ -26,12 +41,12 @@ public:
   bool sendJointStates(const sensor_msgs::msg::JointState& js) override;
   bool readRobotState(sensor_msgs::msg::JointState& js, geometry_msgs::msg::PoseStamped& endEffectorPose) override;
 
-  void startControlLoop(const franka::Duration& movementDuration);
+  bool startControlLoop(const franka::Duration& movementDuration);
 private:
   std::unique_ptr<franka::Robot> robot;
   std::unique_ptr<franka::CartesianVelocities> currentEEVelocity;
 
-  void initializeRobot(const std::string& hostname);
+  bool initializeRobot(const std::string& hostname);
 };
 
 

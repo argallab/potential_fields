@@ -1,6 +1,17 @@
 #include "robot_plugins/franka_plugin.hpp"
+#include "geofik.h"
 
-FrankaPlugin::FrankaPlugin(const std::string& hostname, double speed_factor) : MotionPlugin() {
+FrankaIKSolver::FrankaIKSolver() : IKSolver() {
+  this->homeTransformOE = franka_fk(this->homeJointAngles);
+}
+
+bool FrankaIKSolver::computeIK(const geometry_msgs::msg::PoseStamped& targetPose,
+  sensor_msgs::msg::JointState& jointState) {
+  return false;
+}
+
+FrankaPlugin::FrankaPlugin(const std::string& hostname) : MotionPlugin() {
+  this->assignIKSolver(std::make_unique<FrankaIKSolver>());
   this->initializeRobot(hostname);
 }
 
@@ -22,7 +33,7 @@ bool FrankaPlugin::startControlLoop(const franka::Duration& movementDuration) {
   }
 
   auto controlTime = franka::Duration(0.0);
-  auto controlCallback = [this, &controlTime](const franka::RobotState& robotState,
+  auto controlCallback = [this, &controlTime, &movementDuration](const franka::RobotState& robotState,
     franka::Duration period) -> franka::CartesianVelocities {
     // Move along the controlTime to see if we should finish the motion
     controlTime += period;
@@ -35,14 +46,16 @@ bool FrankaPlugin::startControlLoop(const franka::Duration& movementDuration) {
   try {
     // Start the control using joint impedance mode
     bool motionFinished = false;
-    auto activeControl = this->robot->startCartesianVelocityControl(franka::ControllerMode::kJointImpedance);
+    auto activeControl = this->robot->startCartesianVelocityControl(
+      research_interface::robot::Move::ControllerMode::kJointImpedance
+    );
     while (!motionFinished) {
-      auto robotStateAndDuration = activeControl.readOnce();
+      auto robotStateAndDuration = activeControl->readOnce();
       const franka::RobotState& robotState = robotStateAndDuration.first;
       const franka::Duration& period = robotStateAndDuration.second;
       auto cartesianVelocities = controlCallback(robotState, period);
       motionFinished = cartesianVelocities.motion_finished;
-      activeControl.writeOnce(cartesianVelocities);
+      activeControl->writeOnce(cartesianVelocities);
     }
   }
   catch (const franka::Exception& e) {
@@ -53,14 +66,14 @@ bool FrankaPlugin::startControlLoop(const franka::Duration& movementDuration) {
 }
 
 bool FrankaPlugin::sendCartesianTwist(const geometry_msgs::msg::Twist& endEffectorTwist) {
-  const franka::CartesianVelocities velocityCommand(
+  const auto velocityCommand = franka::CartesianVelocities({
     endEffectorTwist.linear.x,
     endEffectorTwist.linear.y,
     endEffectorTwist.linear.z,
     endEffectorTwist.angular.x,
     endEffectorTwist.angular.y,
     endEffectorTwist.angular.z
-  );
+    });
   this->currentEEVelocity = std::make_unique<franka::CartesianVelocities>(velocityCommand);
   return true;
 }
