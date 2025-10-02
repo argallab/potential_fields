@@ -12,7 +12,6 @@ enable_testing()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
-find_package(ament_cmake_gtest REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(potential_fields_interfaces REQUIRED)
 find_package(Doxygen)
@@ -26,35 +25,38 @@ find_package(tf2_eigen REQUIRED)
 find_package(urdf REQUIRED)
 find_package(Eigen3 REQUIRED)
 
-# Setup testing files
-ament_add_gtest(test_spatial_vector
-  test/test_spatial_vector.cpp
-)
-ament_add_gtest(test_pfields
-  test/test_pfields.cpp
-)
+# Setup testing files (moved under BUILD_TESTING below)
 
-target_link_libraries(test_spatial_vector pfield_lib)
-target_link_libraries(test_pfields pfield_lib)
-
-include_directories(
-  include/potential_fields
-  ${potential_fields_interfaces_INCLUDE_DIRS}
-)
-
+# Setup pfield_lib library
 add_library(pfield_lib SHARED
   src/pfield/pf_obstacle.cpp
   src/pfield/pfield.cpp
   src/pfield/spatial_vector.cpp
 )
-
 target_include_directories(pfield_lib PUBLIC
-  include
+  include/potential_fields
   ${EIGEN3_INCLUDE_DIRS}
 )
-
 ament_target_dependencies(pfield_lib
   Eigen3
+)
+
+# Optional: use precompiled headers to speed up builds (CMake >= 3.16)
+if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.16)
+  target_precompile_headers(pfield_lib PRIVATE
+    <Eigen/Core>
+    <Eigen/Geometry>
+    <vector>
+    <string>
+    <cmath>
+  )
+endif()
+
+## Tests link against pfield_lib (see BUILD_TESTING section)
+
+include_directories(
+  include/potential_fields
+  ${potential_fields_interfaces_INCLUDE_DIRS}
 )
 
 add_executable(pfield_manager src/ros/pfield_manager.cpp)
@@ -64,6 +66,7 @@ ament_target_dependencies(pfield_manager
   Eigen3
   potential_fields_interfaces
   geometry_msgs
+  sensor_msgs
   visualization_msgs
   nav_msgs
   trajectory_msgs
@@ -94,6 +97,14 @@ target_link_libraries(robot_parser
   ${potential_fields_interfaces_LIBRARIES}
 )
 
+# Install the shared library so runtime linker can find it
+install(
+  TARGETS pfield_lib
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION bin
+)
+
 install(
   TARGETS pfield_manager
   DESTINATION lib/${PROJECT_NAME}
@@ -114,18 +125,32 @@ install(
   DESTINATION share/${PROJECT_NAME}
 )
 
-install(
-  TARGETS test_spatial_vector
-  DESTINATION lib/${PROJECT_NAME}
-)
-
-install(
-  TARGETS test_pfields
-  DESTINATION lib/${PROJECT_NAME}
-)
+## Test targets are installed only when BUILD_TESTING is enabled
 
 if(BUILD_TESTING)
+  find_package(ament_cmake_gtest REQUIRED)
   # find_package(ament_lint_auto REQUIRED)
+
+  # Add gtests only when explicitly building tests
+  ament_add_gtest(test_spatial_vector
+    test/test_spatial_vector.cpp
+  )
+  target_link_libraries(test_spatial_vector pfield_lib)
+
+  ament_add_gtest(test_pfields
+    test/test_pfields.cpp
+  )
+  target_link_libraries(test_pfields pfield_lib)
+
+  install(
+    TARGETS test_spatial_vector
+    DESTINATION lib/${PROJECT_NAME}
+  )
+
+  install(
+    TARGETS test_pfields
+    DESTINATION lib/${PROJECT_NAME}
+  )
 
   # the following line skips the linter which checks for copyrights
   # comment the line when a copyright and license is added to all source files
