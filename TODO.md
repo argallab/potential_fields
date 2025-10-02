@@ -7,3 +7,6 @@
 - For open sourcing, we may even want to consider installing the PF C++ library as a sub-module git repo to be maintained separately (not necessary but could be relevant if we identify a strong need for it)
 - Enable converting mesh objects to PF obstacles, approximating as primitives
 - Improve approximation by enabling native mesh object to be defined as the PF obstacle
+---
+
+- A `MotionInterface` to bridge the computed PF velocity/path to a robot's motion controller. This should be universal enough so users can adapt it to their robot. Services, topics, and actions should be provided to interface with the PF planner to set goals, start/stop planning, and get status updates.

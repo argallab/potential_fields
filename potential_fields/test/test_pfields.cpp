@@ -1,17 +1,17 @@
 #include <gtest/gtest.h>
-#include "pfield.hpp"
-#include "potential_field_obstacle.hpp"
-#include "spatial_vector.hpp"
 #include <eigen3/Eigen/Dense>
+#include "pfield/pfield.hpp"
+#include "pfield/pf_obstacle.hpp"
+#include "pfield/spatial_vector.hpp"
 
 TEST(PotentialFieldTest, AddAndRemoveObstacles) {
   PotentialField pf;
-  PotentialFieldObstacle o1(1, Eigen::Vector3d(1.0f, 1.0f, 1.0f), Eigen::Quaterniond::Identity(), ObstacleType::SPHERE, ObstacleGeometry{1.0f, 0.0f, 0.0f, 0.0f}, 2.0f, 10.0f);
+  PotentialFieldObstacle o1(1, Eigen::Vector3d(1.0f, 1.0f, 1.0f), Eigen::Quaterniond::Identity(), ObstacleType::SPHERE, ObstacleGroup::STATIC, ObstacleGeometry{1.0f, 0.0f, 0.0f, 0.0f}, 2.0f, 10.0f);
   pf.addObstacle(o1);
   EXPECT_EQ(pf.getObstacles().size(), 1);
 
   // Overwrite same ID
-  PotentialFieldObstacle o1b(1, Eigen::Vector3d(2.0f, 2.0f, 2.0f), Eigen::Quaterniond::Identity(), ObstacleType::SPHERE, ObstacleGeometry{1.5f, 0.0f, 0.0f, 0.0f}, 2.5f, 12.0f);
+  PotentialFieldObstacle o1b(1, Eigen::Vector3d(2.0f, 2.0f, 2.0f), Eigen::Quaterniond::Identity(), ObstacleType::SPHERE, ObstacleGroup::STATIC, ObstacleGeometry{1.5f, 0.0f, 0.0f, 0.0f}, 2.5f, 12.0f);
   pf.addObstacle(o1b);
   EXPECT_EQ(pf.getObstacles().size(), 1);
   EXPECT_EQ(pf.getObstacles()[0].getType(), ObstacleType::SPHERE);
@@ -23,7 +23,7 @@ TEST(PotentialFieldTest, AddAndRemoveObstacles) {
   EXPECT_EQ(pf.getObstacles()[0].getRepulsiveGain(), 12.0f);
 
   // Add another and remove
-  pf.addObstacle(PotentialFieldObstacle(2, Eigen::Vector3d(-1.0f, -1.0f, 0.0f), Eigen::Quaterniond::Identity(), ObstacleType::BOX, ObstacleGeometry{1.0f, 2.0f, 8.0f, 1.0f}, 2.0f, 8.0f));
+  pf.addObstacle(PotentialFieldObstacle(2, Eigen::Vector3d(-1.0f, -1.0f, 0.0f), Eigen::Quaterniond::Identity(), ObstacleType::BOX, ObstacleGroup::STATIC, ObstacleGeometry{1.0f, 2.0f, 8.0f, 1.0f}, 2.0f, 8.0f));
   EXPECT_EQ(pf.getObstacles().size(), 2);
   EXPECT_TRUE(pf.removeObstacle(2));
   EXPECT_FALSE(pf.removeObstacle(99));  // nonexistent
@@ -32,8 +32,8 @@ TEST(PotentialFieldTest, AddAndRemoveObstacles) {
 
 TEST(PotentialFieldTest, ClearObstacles) {
   PotentialField pf;
-  pf.addObstacle(PotentialFieldObstacle(1, Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity(), ObstacleType::SPHERE, ObstacleGeometry{2.0, 0.0, 0.0, 0.0}, 2.0, 10.0f));
-  pf.addObstacle(PotentialFieldObstacle(2, Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity(), ObstacleType::SPHERE, ObstacleGeometry{2.0, 0.0, 0.0, 0.0}, 2.0, 10.0f));
+  pf.addObstacle(PotentialFieldObstacle(1, Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity(), ObstacleType::SPHERE, ObstacleGroup::STATIC, ObstacleGeometry{2.0, 0.0, 0.0, 0.0}, 2.0, 10.0f));
+  pf.addObstacle(PotentialFieldObstacle(2, Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity(), ObstacleType::SPHERE, ObstacleGroup::STATIC, ObstacleGeometry{2.0, 0.0, 0.0, 0.0}, 2.0, 10.0f));
   pf.clearObstacles();
   EXPECT_TRUE(pf.getObstacles().empty());
 }
@@ -69,9 +69,9 @@ TEST(PotentialFieldTest, AttractiveGainScaling) {
 TEST(PotentialFieldTest, RepulsiveFieldPushesAwayFromObstacle) {
   Eigen::Vector3d goalPosition(0.0f, 0.0f, 0.0f);
   PotentialField pf(SpatialVector(goalPosition), 0.0f, 0.0f);  // no attraction
-  auto sphereObst = PotentialFieldObstacle(0, goalPosition, Eigen::Quaterniond::Identity(), ObstacleType::SPHERE, ObstacleGeometry{2.0,0.0,0.0,0.0}, 2.0f, 10.0f);
-  auto boxObst = PotentialFieldObstacle(1, goalPosition, Eigen::Quaterniond::Identity(), ObstacleType::BOX, ObstacleGeometry{2.0, 2.0, 2.0, 0.0}, 2.0f, 10.0f);
-  auto cylinderObst = PotentialFieldObstacle(2, goalPosition, Eigen::Quaterniond::Identity(), ObstacleType::CYLINDER, ObstacleGeometry{1.0, 0.0, 0.0, 2.0}, 2.0f, 10.0f);
+  auto sphereObst = PotentialFieldObstacle(0, goalPosition, Eigen::Quaterniond::Identity(), ObstacleType::SPHERE, ObstacleGroup::STATIC, ObstacleGeometry{2.0,0.0,0.0,0.0}, 2.0f, 10.0f);
+  auto boxObst = PotentialFieldObstacle(1, goalPosition, Eigen::Quaterniond::Identity(), ObstacleType::BOX, ObstacleGroup::STATIC, ObstacleGeometry{2.0, 2.0, 2.0, 0.0}, 2.0f, 10.0f);
+  auto cylinderObst = PotentialFieldObstacle(2, goalPosition, Eigen::Quaterniond::Identity(), ObstacleType::CYLINDER, ObstacleGroup::STATIC, ObstacleGeometry{1.0, 0.0, 0.0, 2.0}, 2.0f, 10.0f);
   pf.addObstacle(sphereObst);
   SpatialVector query(Eigen::Vector3d(1.0, 0.0, 0.0));
   SpatialVector vel = pf.evaluateVelocityAtPose(query);
@@ -97,7 +97,7 @@ TEST(PotentialFieldTest, BoxWithinObstacleAxisAligned) {
   ObstacleGeometry geom{0.0, 2.0, 4.0, 6.0};  // length=2, width=4, height=6
   PotentialFieldObstacle box(
     1, center, Eigen::Quaterniond::Identity(),
-    ObstacleType::BOX, geom, 1.0, 1.0);
+    ObstacleType::BOX, ObstacleGroup::STATIC, geom, 1.0, 1.0);
   // Points exactly on faces and inside
   EXPECT_TRUE(box.withinObstacle(Eigen::Vector3d(2.0, 2, 3)));  // +x face
   EXPECT_TRUE(box.withinObstacle(Eigen::Vector3d(0.0, 2, 3)));  // -x face
@@ -111,7 +111,7 @@ TEST(PotentialFieldTest, BoxWithinInfluenceZoneAxisAligned) {
   ObstacleGeometry geom{0.0, 1.0, 1.0, 1.0};
   PotentialFieldObstacle box(
     1, center, Eigen::Quaterniond::Identity(),
-    ObstacleType::BOX, geom, 2.0, 1.0);
+    ObstacleType::BOX, ObstacleGroup::STATIC, geom, 2.0, 1.0);
   // half-dims = (1,1,1)/2 * scale = (1,1,1)
   EXPECT_TRUE(box.withinInfluenceZone(Eigen::Vector3d(1.0, 0.5, 0.0)));
   EXPECT_FALSE(box.withinInfluenceZone(Eigen::Vector3d(1.1, 0.0, 0.0)));
@@ -124,7 +124,7 @@ TEST(PotentialFieldTest, BoxWithinObstacleRotated) {
   ObstacleGeometry geom{0.0, 2.0, 2.0, 2.0};
   PotentialFieldObstacle box(
     1, center, Eigen::Quaterniond(rot),
-    ObstacleType::BOX, geom, 1.0, 1.0);
+    ObstacleType::BOX, ObstacleGroup::STATIC, geom, 1.0, 1.0);
   // In world frame, a local-axis-aligned point (1,0,0) maps to (cos45,sin45,0)
   Eigen::Vector3d query = rot * Eigen::Vector3d(1.0, 0, 0);
   EXPECT_TRUE(box.withinObstacle(query));
@@ -138,7 +138,7 @@ TEST(PotentialFieldTest, CylinderWithinObstacleAxisAligned) {
   ObstacleGeometry geom{3.0, 0.0, 0.0, 4.0};  // radius=3, height=4
   PotentialFieldObstacle cyl(
     1, center, Eigen::Quaterniond::Identity(),
-    ObstacleType::CYLINDER, geom, 1.0, 1.0);
+    ObstacleType::CYLINDER, ObstacleGroup::STATIC, geom, 1.0, 1.0);
   // radial and z within half-height=2
   EXPECT_TRUE(cyl.withinObstacle(Eigen::Vector3d(8, -5, 1.0)));
   EXPECT_FALSE(cyl.withinObstacle(Eigen::Vector3d(9, -5, 1.0)));   // outside radius
@@ -150,7 +150,7 @@ TEST(PotentialFieldTest, CylinderWithinInfluenceZoneAxisAligned) {
   ObstacleGeometry geom{1.0, 0.0, 0.0, 2.0};
   PotentialFieldObstacle cyl(
     1, center, Eigen::Quaterniond::Identity(),
-    ObstacleType::CYLINDER, geom, 3.0, 1.0);
+    ObstacleType::CYLINDER, ObstacleGroup::STATIC, geom, 3.0, 1.0);
   // effective radius=3, half-height=3
   EXPECT_TRUE(cyl.withinInfluenceZone(Eigen::Vector3d(2.9, 0, 0)));
   EXPECT_FALSE(cyl.withinInfluenceZone(Eigen::Vector3d(3.1, 0, 0)));
@@ -163,7 +163,7 @@ TEST(PotentialFieldTest, CylinderWithinObstacleRotated) {
   ObstacleGeometry geom{2.0, 0.0, 0.0, 4.0};  // radius=2, height=4
   PotentialFieldObstacle cyl(
     1, center, Eigen::Quaterniond(tilt),
-    ObstacleType::CYLINDER, geom, 1.0, 1.0);
+    ObstacleType::CYLINDER, ObstacleGroup::STATIC, geom, 1.0, 1.0);
   // In local frame this point is on the +Z face; after tilt it's along +Y
   Eigen::Vector3d worldPoint = tilt * Eigen::Vector3d(0, 0, 2.0);
   EXPECT_TRUE(cyl.withinObstacle(worldPoint));
@@ -183,7 +183,7 @@ TEST(PotentialFieldTest, NearZeroDistanceAttraction) {
 
 TEST(PotentialFieldTest, RepulsionAtSurfaceBoundary) {
   PotentialField pf(SpatialVector(Eigen::Vector3d(10.0f, 10.0f, 10.0f)), 0.0f, 0.0f);
-  PotentialFieldObstacle obs(1, Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity(), ObstacleType::SPHERE, ObstacleGeometry{1.0,0.0,0.0,0.0}, 2.0f, 10.0f);
+  PotentialFieldObstacle obs(1, Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity(), ObstacleType::SPHERE, ObstacleGroup::STATIC, ObstacleGeometry{1.0,0.0,0.0,0.0}, 2.0f, 10.0f);
   pf.addObstacle(obs);
   SpatialVector query(Eigen::Vector3d(2.0f, 0.0f, 0.0f));  // At influence radius
   SpatialVector v = pf.evaluateVelocityAtPose(query);
@@ -204,6 +204,7 @@ TEST(PotentialFieldTest, RepulsionMonotonicity) {
     Eigen::Vector3d::Zero(),
     Eigen::Quaterniond::Identity(),
     ObstacleType::SPHERE,
+    ObstacleGroup::STATIC,
     ObstacleGeometry{0.5, 0.0, 0.0, 0.0},
     4.0,
     2.0
@@ -220,8 +221,12 @@ TEST(PotentialFieldTest, RepulsionMonotonicity) {
 TEST(PotentialTest, SymmetricObstaclesCancelAxes) {
   SpatialVector goal; // Default goal at origin
   PotentialField pf(goal, 0.0, 0.0);
-  pf.addObstacle(PotentialFieldObstacle(1, Eigen::Vector3d(-1, 0, 0), Eigen::Quaterniond::Identity(), ObstacleType::SPHERE, ObstacleGeometry{0.5, 0.0, 0.0, 0.0}, 6.0, 5.0));
-  pf.addObstacle(PotentialFieldObstacle(2, Eigen::Vector3d(1, 0, 0), Eigen::Quaterniond::Identity(), ObstacleType::SPHERE, ObstacleGeometry{0.5, 0.0, 0.0, 0.0}, 6.0, 5.0));
+  pf.addObstacle(PotentialFieldObstacle(
+    1, Eigen::Vector3d(-1, 0, 0), Eigen::Quaterniond::Identity(), ObstacleType::SPHERE, ObstacleGroup::STATIC, ObstacleGeometry{0.5, 0.0, 0.0, 0.0}, 6.0, 5.0)
+  );
+  pf.addObstacle(PotentialFieldObstacle(
+    2, Eigen::Vector3d(1, 0, 0), Eigen::Quaterniond::Identity(), ObstacleType::SPHERE, ObstacleGroup::STATIC, ObstacleGeometry{0.5, 0.0, 0.0, 0.0}, 6.0, 5.0)
+  );
   SpatialVector q(Eigen::Vector3d(0, 2.0, 0));  // directly above both
   auto vel = pf.evaluateVelocityAtPose(q);
   // x‐components should cancel, only y‐component remains
@@ -234,7 +239,7 @@ TEST(PotentialFieldTest, RotationalAttraction) {
   SpatialVector goal;
   SpatialVector query; // Same position, different orientation
   goal.setOrientationEuler(0, 0, 0);
-  query.setOrientationEuler(0, 0, M_PI_2);  // 90 degrees yaw 
+  query.setOrientationEuler(0, 0, M_PI_2);  // 90 degrees yaw
 
   PotentialField pf(goal, 0.0f, 10.0f);  // No translation pull
   SpatialVector vel = pf.evaluateVelocityAtPose(query);

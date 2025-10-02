@@ -30,6 +30,7 @@ endif()
 rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/Obstacle.msg"
   "srv/PlanPath.srv"
+  "srv/ComputeAutonomyVector.srv"
   DEPENDENCIES builtin_interfaces std_msgs geometry_msgs nav_msgs
 )
 

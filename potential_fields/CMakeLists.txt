@@ -17,8 +17,10 @@ find_package(rclcpp REQUIRED)
 find_package(potential_fields_interfaces REQUIRED)
 find_package(Doxygen)
 find_package(geometry_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
 find_package(visualization_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(trajectory_msgs REQUIRED)
 find_package(tf2_ros REQUIRED)
 find_package(tf2_eigen REQUIRED)
 find_package(urdf REQUIRED)
@@ -32,13 +34,31 @@ ament_add_gtest(test_pfields
   test/test_pfields.cpp
 )
 
+target_link_libraries(test_spatial_vector pfield_lib)
+target_link_libraries(test_pfields pfield_lib)
+
 include_directories(
   include/potential_fields
   ${potential_fields_interfaces_INCLUDE_DIRS}
 )
 
-add_executable(pfield_manager src/pfield_manager.cpp)
-add_executable(robot_parser src/robot_parser.cpp)
+add_library(pfield_lib SHARED
+  src/pfield/pf_obstacle.cpp
+  src/pfield/pfield.cpp
+  src/pfield/spatial_vector.cpp
+)
+
+target_include_directories(pfield_lib PUBLIC
+  include
+  ${EIGEN3_INCLUDE_DIRS}
+)
+
+ament_target_dependencies(pfield_lib
+  Eigen3
+)
+
+add_executable(pfield_manager src/ros/pfield_manager.cpp)
+add_executable(robot_parser src/ros/robot_parser.cpp)
 ament_target_dependencies(pfield_manager
   rclcpp
   Eigen3
@@ -46,6 +66,7 @@ ament_target_dependencies(pfield_manager
   geometry_msgs
   visualization_msgs
   nav_msgs
+  trajectory_msgs
   tf2_ros
   tf2_eigen
   urdf
@@ -56,6 +77,7 @@ ament_target_dependencies(robot_parser
   Eigen3
   potential_fields_interfaces
   geometry_msgs
+  sensor_msgs
   visualization_msgs
   nav_msgs
   tf2_ros
@@ -65,6 +87,7 @@ ament_target_dependencies(robot_parser
 
 target_link_libraries(pfield_manager
   ${potential_fields_interfaces_LIBRARIES}
+  pfield_lib
 )
 
 target_link_libraries(robot_parser

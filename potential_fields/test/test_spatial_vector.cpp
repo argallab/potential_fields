@@ -1,6 +1,6 @@
 #include <gtest/gtest.h>
-#include "spatial_vector.hpp"
 #include <eigen3/Eigen/Dense>
+#include "pfield/spatial_vector.hpp"
 
 
 TEST(SpatialVectorTest, ConstructorAndAccessors) {

@@ -21,18 +21,15 @@ class SpatialVector {
 public:
   SpatialVector() :
     position(Eigen::Vector3d::Zero()),
-    orientation(Eigen::Quaterniond::Identity()) {
-  }
+    orientation(Eigen::Quaterniond::Identity()) {}
 
   SpatialVector(const Eigen::Vector3d& position) :
     position(position),
-    orientation(Eigen::Quaterniond::Identity()) {
-  }
+    orientation(Eigen::Quaterniond::Identity()) {}
 
   SpatialVector(const Eigen::Vector3d& position, const Eigen::Quaterniond& orientation) :
     position(position),
-    orientation(orientation) {
-  }
+    orientation(orientation) {}
 
   ~SpatialVector() = default;
 
@@ -44,10 +41,7 @@ public:
    *
    * @return Eigen::Vector3d The euler angles representing the orientation as [yaw, pitch, roll]
    */
-  Eigen::Vector3d getOrientationEuler() const {
-    // Returns the Euler angles (yaw, pitch, roll) from the quaternion
-    return this->orientation.toRotationMatrix().eulerAngles(2, 1, 0);
-  }
+  Eigen::Vector3d getOrientationEuler() const;
 
   void setPosition(const Eigen::Vector3d& position) { this->position = position; }
 
@@ -58,10 +52,7 @@ public:
    *
    * @param orientation The Eigen::Quaterniond representing the orientation
    */
-  void setOrientation(const Eigen::Quaterniond& orientation) {
-    this->orientation = orientation;
-    this->orientation.normalize();
-  }
+  void setOrientation(const Eigen::Quaterniond& orientation);
 
   /**
    * @brief Sets the internal quaternion rotation given an euler angle representation
@@ -72,13 +63,9 @@ public:
    * @param pitch The rotation around the Y-axis [rad]
    * @param roll The rotation around the X-axis [rad]
    */
-  void setOrientationEuler(double yaw, double pitch, double roll) {
-    this->orientation =
-      Eigen::AngleAxisd(yaw, Eigen::Vector3d::UnitZ()) *
-      Eigen::AngleAxisd(pitch, Eigen::Vector3d::UnitY()) *
-      Eigen::AngleAxisd(roll, Eigen::Vector3d::UnitX());
-    this->orientation.normalize();
-  }
+  void setOrientationEuler(double yaw, double pitch, double roll);
+
+  void normalizePosition();
 
   /**
    * @brief Computes the euclidean distance between this spatial vector's position
@@ -87,11 +74,7 @@ public:
    * @param other the other spatial vector to compare its position
    * @return double  the euclidean distance in the same units as the position vector [m]
    */
-  double euclideanDistance(const SpatialVector& other) const {
-    return (this->position - other.position).norm();
-  }
-
-  void normalizePosition() { this->position.normalize(); }
+  double euclideanDistance(const SpatialVector& other) const;
 
   /**
    * @brief Returns the geodesic (angular) distance between this spatial vector's orientation
@@ -102,17 +85,10 @@ public:
    * @param other the other spatial vector to compare its orientation
    * @return double the geodesic distance [rad]
    */
-  double angularDistance(const SpatialVector& other) {
-    return this->orientation.angularDistance(other.getOrientation());
-  }
+  double angularDistance(const SpatialVector& other);
 
-  bool operator==(const SpatialVector& other) const {
-    return  this->position == other.position && this->orientation == other.orientation;
-  }
-
-  bool operator!=(const SpatialVector& other) const {
-    return !(*this == other);
-  }
+  bool operator==(const SpatialVector& other) const { return  this->position == other.position && this->orientation == other.orientation; }
+  bool operator!=(const SpatialVector& other) const { return !(*this == other); }
 
 private:
   // Position Vector

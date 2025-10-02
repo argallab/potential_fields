@@ -52,6 +52,7 @@ These nodes will be reimplemented in ROS 2 written in C++. The project proposal 
     - Computationally slower than precomputation but would work well with small set of obstacles. Uses less memory since we aren't maintaining a huge 3D HashMap
     - Can use meshes to represent obstacles for more complex obstacles
 
+
 # Robots to test
 - Franka Emika Panda 7-DOF (ROS2 MoveIt)
 - Ufactory X Arm 7-DOF (ROS2)
@@ -75,3 +76,39 @@ These nodes will be reimplemented in ROS 2 written in C++. The project proposal 
 The Demo Node currently publishes a static transform that is intended to be the transform between the fixed frame and the robot’s base link and this should be handled in the launch file of the PF package instead of in the user node. The arguments for the frame and the transformation can be accepted as user args so the user can define it easily without writing code, but configuring the launch arguments.
 
 The objects being parsed directly into PF obstacles are of type `urdf::Collision`, and the publisher for the obstacles should be adjusted to use a standard ROS type for obstacles instead of the custom type. This might require parameters for default PF obstacles to be defined elsewhere instead of through the ROS message. This will be helpful for _any_ ROS node to be able to publish obstacles to the potential field.
+
+# Motion Interface
+The `MotionInterface` will bridge the computed PF velocity/path to a robot's motion controller. This should be universal enough so users can adapt it to their robot and can be done in a few ways:
+
+1. Building the entire path by providing PF parameters (goal, obstacles, start pose) and obtaining a path to follow
+2. "Real-time" velocity request by providing a setup PF (goal, obstacles) with a current pose to produce the computed velocity vector
+3. Discretizing the path with velocity vectors with respective time stamps, requesting the current velocity vector by providing a current time stamp (and a start time).
+
+
+# Franka Emika Panda Notes
+[`libfranka`](https://github.com/frankarobotics/libfranka) is a C++ library to control the robot. The output from the potential fields will be an end-effector velocity, so we will need an analagous control method within `libfranka` to send velocity commands to the robot.
+
+Another library is [`franky`](https://github.com/TimSchneider42/franky), which can be used to control the robot in Python and C++ using a high-level interface.
+
+## Generate Cartesian Velocity Commands Example
+The [Cartesian Velocity Motion Example](https://github.com/frankarobotics/libfranka/blob/main/examples/generate_cartesian_velocity_motion_external_control_loop.cpp) demonstrates how to apply cartesian velocity commands to the robot with an external control loop.
+
+
+Stick to Moveit compatible msgs for planning path using position control. Trajectory_msgs/JointTrajectory
+Update PF when robot moves to build path.
+Think about replan timer.
+Build-path should be able to do moving+planning or planning and then moving later.
+Convert to JointTrajectory from plan.
+Parrallize planning.
+Send JT to JTAS when running MoveIt Franka demo. Doesn't matter if MoveIt.
+Generic programming (Policy based design) for different IK solvers.
+
+## IK
+[GeoFIK](https://arxiv.org/abs/2503.03992)
+TrackIK
+KDL (ROS1 XArm)
+Pinocchio (ROS2 XArm)
+Custom IK Solver (GeoFIK for Franka)
+
+This week:
+Pinnochio as IK to get JointTrajectory from a planned path.
