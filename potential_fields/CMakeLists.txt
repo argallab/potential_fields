@@ -152,6 +152,13 @@ if(BUILD_TESTING)
     DESTINATION lib/${PROJECT_NAME}
   )
 
+  find_package(ament_cmake_cpplint REQUIRED)
+  # Runs cpplint over your C/C++ sources as a CTest
+  ament_cpplint(
+    EXCLUDE
+    include/potential_fields/robot_plugins/geofik.h
+  )
+
   # the following line skips the linter which checks for copyrights
   # comment the line when a copyright and license is added to all source files
   # set(ament_cmake_copyright_FOUND TRUE)
