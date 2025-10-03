@@ -5,10 +5,23 @@
   <arg name="rviz_fixed_frame" default="world" description="The fixed frame for RVIZ"/>
   <arg name="robot_urdf_xacro" default = "robot.urdf.xacro" description="The URDF Xacro file for the robot"/>
   <arg name="robot_urdf" default = "robot.urdf" description="The URDF file for the robot if not using xacro"/>
+  <!-- Static transform config from fixed frame to robot base frame -->
+  <arg name="base_frame" default="base" description="Robot base frame (child)"/>
+  <arg name="base_x" default="0.0"/>
+  <arg name="base_y" default="0.0"/>
+  <arg name="base_z" default="0.0"/>
+  <!-- Note: static_transform_publisher 6-arg form expects roll pitch yaw (RPY) -->
+  <arg name="base_roll" default="0.0"/>
+  <arg name="base_pitch" default="0.0"/>
+  <arg name="base_yaw" default="0.0"/>
 
   <node pkg="pfields_demo" exec="pf_demo" name="pf_demo_node" output="screen">
     <param name="fixed_frame" value="$(var rviz_fixed_frame)"/>
   </node>
+
+  <!-- Static TF: $(var rviz_fixed_frame) -> $(var base_frame) -->
+  <node pkg="tf2_ros" exec="static_transform_publisher" name="fixed_to_base_broadcaster" output="screen"
+        args="$(var base_x) $(var base_y) $(var base_z) $(var base_roll) $(var base_pitch) $(var base_yaw) $(var rviz_fixed_frame) $(var base_frame)"/>
 
   <!-- Robot State Publisher -->
   <node pkg="robot_state_publisher" exec="robot_state_publisher" name="robot_state_publisher" if="$(var use_xacro)" >
