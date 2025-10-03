@@ -45,11 +45,6 @@ private:
     urdf::CollisionSharedPtr col; // collision element
   };
   std::vector<CollisionEntry> collisions; // pre-collected collisions
-  // NOTE: We purposefully DO NOT cache link transforms long-term anymore so that
-  // obstacle poses update dynamically with joint motion. 50-100 TF lookups at 50 Hz
-  // is inexpensive compared to the correctness hit of stale poses. If performance
-  // becomes an issue later, introduce a short-lived (single cycle) cache.
-  double tfLookupTimeoutSec = 0.0; // Per-link lookup timeout (0 => no wait); exposed as param
 
 
   rclcpp::TimerBase::SharedPtr timer;
@@ -60,7 +55,7 @@ private:
 
   void timerCallback();
 
-  std::vector<Obstacle> parseURDF();
+  std::vector<Obstacle> extractObstaclesFromCatalog();
   void buildCollisionCatalog();
 
   Obstacle obstacleFromCollisionObject(const std::string& frameID, const urdf::Collision& collisionObject,

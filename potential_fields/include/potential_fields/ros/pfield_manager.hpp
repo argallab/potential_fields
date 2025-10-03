@@ -77,9 +77,6 @@ private:
   // Publisher for visualization markers
   rclcpp::Publisher<MarkerArray>::SharedPtr markerPub;
 
-  // Publisher for the path of the query point to visualize its trajectory
-  rclcpp::Publisher<Path>::SharedPtr pathPub;
-
   // Subscriber for the goal pose
   rclcpp::Subscription<PoseStamped>::SharedPtr goalPoseSub;
 

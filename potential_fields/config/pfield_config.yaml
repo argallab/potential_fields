@@ -8,7 +8,7 @@ pfield_manager:
     influence_zone_scale: 2.0 # Influence zone scaling factor
 robot_parser:
   ros__parameters:
-    robot_geometry_update_frequency: 50.0 # [Hz]
+    robot_geometry_update_frequency: 100.0 # [Hz]
 motion_interface:
   ros__parameters:
     robot_plugin: "franka"

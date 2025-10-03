@@ -16,13 +16,11 @@ RobotParser::RobotParser() : Node("robot_parser") {
   this->robotDescription = this->get_parameter("robot_description").as_string();
   this->fixedFrame = this->get_parameter("fixed_frame").as_string();
 
-  // Declare optional TF timeout parameter (seconds); default 0 for low latency
-  this->tfLookupTimeoutSec = this->declare_parameter("tf_lookup_timeout", this->tfLookupTimeoutSec);
 
   // Setup obstacle publisher (smaller queue reduces latency/buffering)
-  rclcpp::QoS qos(rclcpp::KeepLast(20));
-  qos.reliability(RMW_QOS_POLICY_RELIABILITY_RELIABLE);
-  qos.durability(RMW_QOS_POLICY_DURABILITY_VOLATILE);
+  auto qos = rclcpp::QoS(rclcpp::KeepLast(10))
+    .best_effort()
+    .durability_volatile();
   this->obstaclePub = this->create_publisher<ObstacleArray>("pfield/obstacles", qos);
 
   // Setup TF2 broadcaster, buffer, and listener
@@ -57,9 +55,12 @@ RobotParser::RobotParser() : Node("robot_parser") {
   const size_t numLinks = this->robotModel.links_.size();
   RCLCPP_INFO(this->get_logger(), "Robot has %zu links", numLinks);
 
+  // Before we start the timer, ensure we can use TF
+  while (!this->tfBuffer->canTransform(this->fixedFrame, this->fixedFrame, tf2::TimePointZero, tf2::durationFromSec(0.1))) {}
+
   // Run the timer to periodically update the robot state
   this->timer = this->create_wall_timer(
-    std::chrono::milliseconds(static_cast<int>(1000.0 / this->robotUpdateFrequency)),
+    std::chrono::duration<double>(1.0 / this->robotUpdateFrequency),
     std::bind(&RobotParser::timerCallback, this)
   );
 }
@@ -68,7 +69,7 @@ void RobotParser::timerCallback() {
   if (!this->modelLoaded) {
     return;
   }
-  std::vector<Obstacle> obstacles = this->parseURDF();
+  std::vector<Obstacle> obstacles = this->extractObstaclesFromCatalog();
   ObstacleArray obstacleArray;
   obstacleArray.header.frame_id = this->fixedFrame;
   obstacleArray.header.stamp = this->get_clock()->now();
@@ -78,33 +79,32 @@ void RobotParser::timerCallback() {
   this->obstaclePub->publish(obstacleArray);
 }
 
-std::vector<Obstacle> RobotParser::parseURDF() {
+std::vector<Obstacle> RobotParser::extractObstaclesFromCatalog() {
   std::vector<Obstacle> collisionObjects;
   collisionObjects.reserve(this->collisions.size());
   // Collect unique link names first
   std::unordered_map<std::string, Eigen::Affine3d> linkPoses;
   linkPoses.reserve(this->collisions.size());
   size_t tfSuccess = 0, tfFail = 0;
-  rclcpp::Time query_time(0, 0, this->get_clock()->get_clock_type());
-  rclcpp::Duration timeout = rclcpp::Duration::from_seconds(this->tfLookupTimeoutSec);
+  rclcpp::Time queryTime(0, 0, this->get_clock()->get_clock_type());
   for (const auto& entry : this->collisions) {
     if (linkPoses.find(entry.link_name) != linkPoses.end()) continue; // already looked up
     try {
-      auto tf = this->tfBuffer->lookupTransform(this->fixedFrame, entry.link_name, query_time, timeout);
+      auto tf = this->tfBuffer->lookupTransform(this->fixedFrame, entry.link_name, tf2::TimePointZero);
       linkPoses.emplace(entry.link_name, tf2::transformToEigen(tf.transform));
       tfSuccess++;
     }
     catch (const tf2::TransformException& ex) {
       tfFail++;
       // Only warn occasionally to avoid spam but still surface systemic issues
-      RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
-        "TF miss (%s -> %s): %s", this->fixedFrame.c_str(), entry.link_name.c_str(), ex.what());
+      RCLCPP_WARN(this->get_logger(),
+        "Failed to find TF (%s -> %s): %s", this->fixedFrame.c_str(), entry.link_name.c_str(), ex.what());
     }
   }
   // Build obstacles for links whose transforms we obtained
   for (const auto& entry : this->collisions) {
     auto it = linkPoses.find(entry.link_name);
-    if (it == linkPoses.end()) continue; // skip missing transform
+    if (it == linkPoses.end()) continue;
     const urdf::Pose& origin = entry.col->origin;
     Eigen::Affine3d link_T_col =
       Eigen::Translation3d(origin.position.x, origin.position.y, origin.position.z) *
@@ -114,8 +114,8 @@ std::vector<Obstacle> RobotParser::parseURDF() {
     Eigen::Quaterniond obstOrientation(world_T_col.rotation());
     collisionObjects.push_back(this->obstacleFromCollisionObject(entry.id, *entry.col, obstCenter, obstOrientation));
   }
-  RCLCPP_DEBUG_THROTTLE(this->get_logger(), *this->get_clock(), 3000,
-    "parseURDF: links_ok=%zu links_fail=%zu obstacles=%zu", tfSuccess, tfFail, collisionObjects.size());
+  RCLCPP_DEBUG(this->get_logger(),
+    "extractObstaclesFromCatalog: links_ok=%zu links_fail=%zu collision_objects=%zu", tfSuccess, tfFail, collisionObjects.size());
   return collisionObjects;
 }
 

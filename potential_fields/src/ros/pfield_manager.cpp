@@ -19,7 +19,6 @@
 ///
 /// PUBLISHERS:
 ///   ~/visualization_marker_array (visualization_msgs::msg::MarkerArray): Publishes markers for visualization in RViz
-///   ~/nav_msgs/msg/Path (nav_msgs::msg::Path): Publishes the path of the query point to visualize its trajectory
 
 #include "ros/pfield_manager.hpp"
 
@@ -53,12 +52,9 @@ PotentialFieldManager::PotentialFieldManager()
   RCLCPP_INFO(this->get_logger(), "TF2 broadcaster, buffer, and listener initialized");
 
   // Setup marker publisher
-  this->markerPub = this->create_publisher<MarkerArray>("visualization_marker_array", 10);
+  auto markerPubQos = rclcpp::QoS(rclcpp::KeepLast(10)).best_effort().durability_volatile();
+  this->markerPub = this->create_publisher<MarkerArray>("visualization_marker_array", markerPubQos);
   RCLCPP_INFO(this->get_logger(), "Markers publishing on: %s", this->markerPub->get_topic_name());
-
-  // Setup path publisher
-  this->pathPub = this->create_publisher<Path>("nav_msgs/msg/Path", 10);
-  RCLCPP_INFO(this->get_logger(), "Query point path publishing on: %s", this->pathPub->get_topic_name());
 
   // Setup goal pose subscriber
   this->goalPoseSub = this->create_subscription<geometry_msgs::msg::PoseStamped>(
@@ -76,10 +72,8 @@ PotentialFieldManager::PotentialFieldManager()
   );
 
   // Setup obstacle subscriber
-  rclcpp::QoS qos(rclcpp::KeepLast(200));
-  qos.reliability(RMW_QOS_POLICY_RELIABILITY_RELIABLE);
-  qos.durability(RMW_QOS_POLICY_DURABILITY_VOLATILE);
-  this->obstacleSub = this->create_subscription<ObstacleArray>("pfield/obstacles", qos,
+  auto obstacleSubQos = rclcpp::QoS(rclcpp::KeepLast(10)).best_effort().durability_volatile();
+  this->obstacleSub = this->create_subscription<ObstacleArray>("pfield/obstacles", obstacleSubQos,
     [this](const ObstacleArray::SharedPtr msg) {
     const auto& obstacles = msg->obstacles;
     for (const auto& obst : obstacles) {
@@ -217,7 +211,6 @@ Path PotentialFieldManager::interpolatePath(const SpatialVector& start, double d
 
 void PotentialFieldManager::visualizePF() {
   MarkerArray markerArray;
-  // markerArray.markers.push_back(this->createGoalMarker());
   MarkerArray goalMarkerArray = this->createGoalMarker();
   markerArray.markers.insert(markerArray.markers.cend(), goalMarkerArray.markers.cbegin(), goalMarkerArray.markers.cend());
   auto obstacleMarkers = this->createObstacleMarkers();
@@ -226,10 +219,6 @@ void PotentialFieldManager::visualizePF() {
   auto potentialVectorMarkers = this->createPotentialVectorMarkers();
   markerArray.markers.insert(markerArray.markers.cend(), potentialVectorMarkers.markers.cbegin(),
     potentialVectorMarkers.markers.cend());
-  // auto queryPointMarker = this->createQueryPointMarker();
-  // markerArray.markers.insert(markerArray.markers.cend(), queryPointMarker.markers.cbegin(),
-  //   queryPointMarker.markers.cend());
-  // Publish the marker array
   this->markerPub->publish(markerArray);
 }
 
@@ -241,6 +230,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers() {
     Marker obstacleMarker;
     obstacleMarker.header.frame_id = this->fixedFrame;
     obstacleMarker.header.stamp = this->now();
+    obstacleMarker.frame_locked = true;
     obstacleMarker.ns = "obstacle";
     obstacleMarker.id = hashID;
     obstacleMarker.action = Marker::ADD;
@@ -307,6 +297,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers() {
     Marker influenceMarker;
     influenceMarker.header.frame_id = this->fixedFrame;
     influenceMarker.header.stamp = this->now();
+    influenceMarker.frame_locked = true;
     influenceMarker.ns = "obstacle_influence";
     influenceMarker.id = hashID; // mirror id for influence volume
     influenceMarker.action = Marker::ADD;
@@ -371,6 +362,7 @@ MarkerArray PotentialFieldManager::createGoalMarker() {
   Marker goalMarker;
   goalMarker.header.frame_id = this->fixedFrame;
   goalMarker.header.stamp = this->now();
+  goalMarker.frame_locked = true;
   goalMarker.ns = "goal";
   goalMarker.id = 0;
   goalMarker.type = Marker::SPHERE;
@@ -471,9 +463,9 @@ MarkerArray PotentialFieldManager::createPotentialVectorMarkers() {
         // Set the orientation of the arrow to point in the direction of the velocity vector
         double yaw = std::atan2(velocity.getPosition().y(), velocity.getPosition().x());
         vectorMarker.pose.orientation = PotentialFieldManager::getQuaternionFromYaw(yaw);
-        vectorMarker.scale.x = 0.2f; // Length of the arrow
-        vectorMarker.scale.y = 0.1f; // Shaft diameter
-        vectorMarker.scale.z = 0.15f;// Head diameter
+        vectorMarker.scale.x = 0.15f; // Length of the arrow
+        vectorMarker.scale.y = 0.05f; // Shaft diameter
+        vectorMarker.scale.z = 0.1f; // Head diameter
         // Color the arrows using a gradient depending on
         // the magnitude of the velocity vector
         // maxForce is red and 0 is blue
