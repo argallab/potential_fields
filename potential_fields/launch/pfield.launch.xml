@@ -21,11 +21,11 @@
   <node pkg="potential_fields" exec="robot_parser" name="robot_parser" output="screen" if="$(eval \'$(var use_xacro)\'==\'false\')">
     <param from="$(find-pkg-share potential_fields)/config/pfield_config.yaml"/>
     <param name="fixed_frame" value="$(var rviz_fixed_frame)"/>
-    <param name="robot_description" value="$(var robot_urdf)"/>
+    <param name="robot_description" value="$(command 'cat $(var robot_urdf)')" type="str"/>
   </node>
   <node pkg="potential_fields" exec="robot_parser" name="robot_parser" output="screen" if="$(var use_xacro)">
     <param from="$(find-pkg-share potential_fields)/config/pfield_config.yaml"/>
     <param name="fixed_frame" value="$(var rviz_fixed_frame)"/>
-    <param name="robot_description" value="$(command 'xacro $(var robot_urdf_xacro)')"/>
+    <param name="robot_description" value="$(command 'xacro $(var robot_urdf_xacro)')" type="str"/>
   </node>
 </launch>

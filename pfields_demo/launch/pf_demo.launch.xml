@@ -3,8 +3,8 @@
   <arg name="use_rviz" default="true" description="Whether to launch RViz or not."/>
   <arg name="use_xacro" default="true" description="Whether to use xacro to process the URDF file."/>
   <arg name="rviz_fixed_frame" default="world" description="The fixed frame for RVIZ"/>
-  <arg name="robot_urdf_xacro" default="robot.urdf.xacro" description="The URDF Xacro file for the robot"/>
-  <arg name="robot_urdf" default="robot.urdf" description="The URDF file for the robot if not using xacro"/>
+  <arg name="robot_urdf_xacro" default = "robot.urdf.xacro" description="The URDF Xacro file for the robot"/>
+  <arg name="robot_urdf" default = "robot.urdf" description="The URDF file for the robot if not using xacro"/>
 
   <node pkg="pfields_demo" exec="pf_demo" name="pf_demo_node" output="screen">
     <param name="fixed_frame" value="$(var rviz_fixed_frame)"/>
@@ -12,10 +12,10 @@
 
   <!-- Robot State Publisher -->
   <node pkg="robot_state_publisher" exec="robot_state_publisher" name="robot_state_publisher" if="$(var use_xacro)" >
-    <param name="robot_description" value="$(command 'xacro $(find-pkg-share pfields_demo)/urdf/$(var robot_urdf_xacro)')"/>
+    <param name="robot_description" value="$(command 'xacro $(find-pkg-share pfields_demo)/urdf/$(var robot_urdf_xacro)')" type="str"/>
   </node>
   <node pkg="robot_state_publisher" exec="robot_state_publisher" name="robot_state_publisher" if="$(eval \'$(var use_xacro)\'==\'false\')" >
-    <param name="robot_description" value="$(find-pkg-share pfields_demo)/urdf/$(var robot_urdf)"/>
+    <param name="robot_description" value="$(command 'cat $(find-pkg-share pfields_demo)/urdf/$(var robot_urdf)')" type="str"/>
   </node>
 
   <!-- Joint State Publisher -->
@@ -27,7 +27,7 @@
     <arg name="rviz_fixed_frame" value="$(var rviz_fixed_frame)"/>
     <arg name="use_rviz" value="$(var use_rviz)"/>
     <arg name="use_xacro" value="$(var use_xacro)"/>
-    <arg name="robot_urdf_xacro" value="$(var robot_urdf_xacro)"/>
-    <arg name="robot_urdf" value="$(var robot_urdf)"/>
+    <arg name="robot_urdf_xacro" value="$(find-pkg-share pfields_demo)/urdf/$(var robot_urdf_xacro)"/>
+    <arg name="robot_urdf" value="$(find-pkg-share pfields_demo)/urdf/$(var robot_urdf)"/>
   </include>
 </launch>
