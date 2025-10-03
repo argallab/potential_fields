@@ -11,41 +11,43 @@ void PotentialField::updateAttractiveGain(double newAttractiveGain) {
 }
 
 void PotentialField::addObstacle(PotentialFieldObstacle obstacle) {
-  int id = obstacle.getID();
-  const auto it = std::find_if(this->obstacles.begin(), this->obstacles.end(),
-    [id](const PotentialFieldObstacle& obs) {return obs.getID() == id;});
-  if (it != this->obstacles.end()) {
-    // Obstacle with the same ID already exists, update it
-    *it = obstacle;
-    return;
+  const std::string frameID = obstacle.getFrameID();
+  auto itIndex = this->obstacleIndex.find(frameID);
+  if (itIndex != this->obstacleIndex.end()) {
+    // Update existing obstacle in place
+    this->obstacles[itIndex->second] = obstacle;
   }
   else {
-    // New obstacle, add it to the list
+    // Append new obstacle and record index
     this->obstacles.push_back(obstacle);
+    this->obstacleIndex.emplace(frameID, this->obstacles.size() - 1);
   }
 }
 
-bool PotentialField::removeObstacle(int obstacleID) {
-  const auto it = std::remove_if(this->obstacles.begin(), this->obstacles.end(),
-    [obstacleID](const PotentialFieldObstacle& obs) {return obs.getID() == obstacleID;});
-  if (it != obstacles.end()) {
-    obstacles.erase(it, obstacles.end());
-    return true;
+bool PotentialField::removeObstacle(const std::string& obstacleFrameID) {
+  auto itIndex = this->obstacleIndex.find(obstacleFrameID);
+  if (itIndex == this->obstacleIndex.end()) { return false; }
+  size_t idx = itIndex->second;
+  // Swap erase to keep indices valid with minimal moves
+  size_t last = this->obstacles.size() - 1;
+  if (idx != last) {
+    std::swap(this->obstacles[idx], this->obstacles[last]);
+    // Update moved obstacle's index map
+    this->obstacleIndex[this->obstacles[idx].getFrameID()] = idx;
   }
-  return false;
+  this->obstacles.pop_back();
+  this->obstacleIndex.erase(itIndex);
+  return true;
 }
 
-void PotentialField::clearObstacles() { this->obstacles.clear(); }
+void PotentialField::clearObstacles() { this->obstacles.clear(); this->obstacleIndex.clear(); }
 
-PotentialFieldObstacle PotentialField::getObstacleByID(int obstacleID) const {
-  const auto it = std::find_if(this->obstacles.cbegin(), this->obstacles.cend(),
-    [obstacleID](const PotentialFieldObstacle& obs) {return obs.getID() == obstacleID;});
-  if (it != this->obstacles.cend()) {
-    return *it;
-  }
-  else {
+PotentialFieldObstacle PotentialField::getObstacleByID(const std::string& obstacleFrameID) const {
+  auto itIndex = this->obstacleIndex.find(obstacleFrameID);
+  if (itIndex == this->obstacleIndex.end()) {
     throw std::invalid_argument("Obstacle with the given ID does not exist.");
   }
+  return this->obstacles[itIndex->second];
 }
 
 SpatialVector PotentialField::evaluateVelocityAtPose(SpatialVector queryPose) {

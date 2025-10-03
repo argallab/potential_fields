@@ -20,8 +20,11 @@
 #include "urdf_parser/urdf_parser.h"
 #include <fstream>
 #include "potential_fields_interfaces/msg/obstacle.hpp"
+#include "potential_fields_interfaces/msg/obstacle_array.hpp"
+#include <unordered_map>
 
 using Obstacle = potential_fields_interfaces::msg::Obstacle;
+using ObstacleArray = potential_fields_interfaces::msg::ObstacleArray;
 using TransformStamped = geometry_msgs::msg::TransformStamped;
 
 class RobotParser : public rclcpp::Node {
@@ -30,12 +33,27 @@ public:
   ~RobotParser() = default;
 
 private:
-  double timerFreq; // Timer frequency [Hz]
+  double robotUpdateFrequency; // Frequency for updating Robot's TF frames [Hz]
   std::string robotDescription; // Robot Description
   std::string fixedFrame; // RViz fixed frame
+  urdf::Model robotModel; // Parsed URDF model
+  bool modelLoaded = false; // Whether URDF parsed successfully
+
+  struct CollisionEntry {
+    std::string id;         // unique obstacle id (link::name or link::colN)
+    std::string link_name;  // link this collision belongs to
+    urdf::CollisionSharedPtr col; // collision element
+  };
+  std::vector<CollisionEntry> collisions; // pre-collected collisions
+  // NOTE: We purposefully DO NOT cache link transforms long-term anymore so that
+  // obstacle poses update dynamically with joint motion. 50-100 TF lookups at 50 Hz
+  // is inexpensive compared to the correctness hit of stale poses. If performance
+  // becomes an issue later, introduce a short-lived (single cycle) cache.
+  double tfLookupTimeoutSec = 0.0; // Per-link lookup timeout (0 => no wait); exposed as param
+
 
   rclcpp::TimerBase::SharedPtr timer;
-  rclcpp::Publisher<Obstacle>::SharedPtr obstaclePub;
+  rclcpp::Publisher<ObstacleArray>::SharedPtr obstaclePub;
   std::shared_ptr<tf2_ros::TransformBroadcaster> dynamicTfBroadcaster;
   std::shared_ptr<tf2_ros::Buffer> tfBuffer;
   std::shared_ptr<tf2_ros::TransformListener> tfListener;
@@ -43,8 +61,9 @@ private:
   void timerCallback();
 
   std::vector<Obstacle> parseURDF();
+  void buildCollisionCatalog();
 
-  Obstacle obstacleFromCollisionObject(int id, const urdf::Collision& collisionObject,
+  Obstacle obstacleFromCollisionObject(const std::string& frameID, const urdf::Collision& collisionObject,
     const Eigen::Vector3d& position, const Eigen::Quaterniond& orientation);
 };
 

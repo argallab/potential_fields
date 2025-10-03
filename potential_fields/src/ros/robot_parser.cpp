@@ -8,16 +8,22 @@ RobotParser::RobotParser() : Node("robot_parser") {
   RCLCPP_INFO(this->get_logger(), "RobotParser Initialized");
 
   // Declare parameters
-  this->timerFreq = this->declare_parameter("timer_frequency", 50.0f); // [Hz]
+  this->robotUpdateFrequency = this->declare_parameter("robot_geometry_update_frequency", 50.0f); // [Hz]
   this->robotDescription = this->declare_parameter("robot_description", "urdf/robot.urdf");
   this->fixedFrame = this->declare_parameter("fixed_frame", "world"); // RViz fixed frame
   // Get parameters from yaml file
-  this->timerFreq = this->get_parameter("timer_frequency").as_double();
+  this->robotUpdateFrequency = this->get_parameter("robot_geometry_update_frequency").as_double();
   this->robotDescription = this->get_parameter("robot_description").as_string();
   this->fixedFrame = this->get_parameter("fixed_frame").as_string();
 
-  // Setup obstacle publisher
-  this->obstaclePub = this->create_publisher<Obstacle>("pfield/obstacles", 10);
+  // Declare optional TF timeout parameter (seconds); default 0 for low latency
+  this->tfLookupTimeoutSec = this->declare_parameter("tf_lookup_timeout", this->tfLookupTimeoutSec);
+
+  // Setup obstacle publisher (smaller queue reduces latency/buffering)
+  rclcpp::QoS qos(rclcpp::KeepLast(20));
+  qos.reliability(RMW_QOS_POLICY_RELIABILITY_RELIABLE);
+  qos.durability(RMW_QOS_POLICY_DURABILITY_VOLATILE);
+  this->obstaclePub = this->create_publisher<ObstacleArray>("pfield/obstacles", qos);
 
   // Setup TF2 broadcaster, buffer, and listener
   this->dynamicTfBroadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(this);
@@ -25,81 +31,126 @@ RobotParser::RobotParser() : Node("robot_parser") {
   this->tfListener = std::make_shared<tf2_ros::TransformListener>(*this->tfBuffer, this);
   RCLCPP_INFO(this->get_logger(), "TF2 broadcaster, buffer, and listener initialized");
 
+  // Parse URDF once to build the collision catalog
+  if (!this->robotModel.initString(this->robotDescription)) {
+    RCLCPP_ERROR(this->get_logger(), "Failed to load URDF model");
+    this->modelLoaded = false;
+  }
+  else {
+    this->modelLoaded = true;
+    this->buildCollisionCatalog();
+    RCLCPP_INFO(this->get_logger(), "URDF model loaded: %zu collision elements cached", this->collisions.size());
+    // Emit a one-time detailed listing of expected collision-derived obstacles
+    for (const auto& entry : this->collisions) {
+      if (!entry.col || !entry.col->geometry) {
+        RCLCPP_WARN(this->get_logger(), "Collision entry '%s' has no geometry", entry.id.c_str());
+        continue;
+      }
+      std::string gType = "Unknown";
+      if (dynamic_cast<urdf::Box*>(entry.col->geometry.get())) gType = "Box";
+      else if (dynamic_cast<urdf::Sphere*>(entry.col->geometry.get())) gType = "Sphere";
+      else if (dynamic_cast<urdf::Cylinder*>(entry.col->geometry.get())) gType = "Cylinder";
+      else if (dynamic_cast<urdf::Mesh*>(entry.col->geometry.get())) gType = "Mesh";
+      RCLCPP_INFO(this->get_logger(), "Catalog: id=%s link=%s type=%s", entry.id.c_str(), entry.link_name.c_str(), gType.c_str());
+    }
+  }
+  const size_t numLinks = this->robotModel.links_.size();
+  RCLCPP_INFO(this->get_logger(), "Robot has %zu links", numLinks);
+
   // Run the timer to periodically update the robot state
   this->timer = this->create_wall_timer(
-    std::chrono::milliseconds(static_cast<int>(1000.0 / this->timerFreq)),
+    std::chrono::milliseconds(static_cast<int>(1000.0 / this->robotUpdateFrequency)),
     std::bind(&RobotParser::timerCallback, this)
   );
 }
 
 void RobotParser::timerCallback() {
-  std::vector<Obstacle> obstacles = this->parseURDF();
-  for (const auto& obstacle : obstacles) {
-    this->obstaclePub->publish(obstacle);
+  if (!this->modelLoaded) {
+    return;
   }
+  std::vector<Obstacle> obstacles = this->parseURDF();
+  ObstacleArray obstacleArray;
+  obstacleArray.header.frame_id = this->fixedFrame;
+  obstacleArray.header.stamp = this->get_clock()->now();
+  for (const auto& obstacle : obstacles) {
+    obstacleArray.obstacles.push_back(obstacle);
+  }
+  this->obstaclePub->publish(obstacleArray);
 }
 
 std::vector<Obstacle> RobotParser::parseURDF() {
   std::vector<Obstacle> collisionObjects;
-  urdf::Model robotModel;
-  if (!robotModel.initString(this->robotDescription)) {
-    RCLCPP_ERROR(this->get_logger(), "Failed to load URDF model");
-  }
-  else {
-    // Extract collision geometries from the URDF model and add them as obstacles
-    int obstacleID = 0;
-    for (const auto& link : robotModel.links_) {
-      // Create a potential field obstacle from the collision geometry
-      // Get the link's transform in the world frame
-      std::string link_name = link.second->name;
-      if (!link.second->collision) {
-        RCLCPP_WARN(this->get_logger(), "Link '%s' has no collision geometry, skipping", link_name.c_str());
-        continue;
-      }
-      // Get the transform from the world frame to the link's frame
-      // Since robot_state_publisher should be publishing transforms
-      TransformStamped linkTransform;
-      try {
-        linkTransform = this->tfBuffer->lookupTransform(this->fixedFrame, link_name, tf2::TimePointZero);
-      }
-      catch (const tf2::TransformException& ex) {
-        RCLCPP_WARN(this->get_logger(), "Failed to get transform for link '%s': %s", link_name.c_str(), ex.what());
-      }
-      const urdf::Pose& collisionOrigin = link.second->collision->origin;
-      // Convert TF to Eigen::Affine3d
-      Eigen::Affine3d world_T_link = tf2::transformToEigen(linkTransform.transform);
-      // Construct link_T_collision from URDF collision origin
-      Eigen::Affine3d link_T_col =
-        Eigen::Translation3d(
-          collisionOrigin.position.x,
-          collisionOrigin.position.y,
-          collisionOrigin.position.z) *
-        Eigen::Quaterniond(
-          collisionOrigin.rotation.w,
-          collisionOrigin.rotation.x,
-          collisionOrigin.rotation.y,
-          collisionOrigin.rotation.z);
-
-      // Compose to get world_T_collision
-      Eigen::Affine3d world_T_col = world_T_link * link_T_col;
-
-      // Extract final obstacle pose
-      Eigen::Vector3d obstCenter = world_T_col.translation();
-      Eigen::Quaterniond obstOrientation(world_T_col.rotation());
-      Obstacle obst = this->obstacleFromCollisionObject(
-        obstacleID++,
-        *link.second->collision,
-        obstCenter,
-        obstOrientation
-      );
-      collisionObjects.push_back(obst);
+  collisionObjects.reserve(this->collisions.size());
+  // Collect unique link names first
+  std::unordered_map<std::string, Eigen::Affine3d> linkPoses;
+  linkPoses.reserve(this->collisions.size());
+  size_t tfSuccess = 0, tfFail = 0;
+  rclcpp::Time query_time(0, 0, this->get_clock()->get_clock_type());
+  rclcpp::Duration timeout = rclcpp::Duration::from_seconds(this->tfLookupTimeoutSec);
+  for (const auto& entry : this->collisions) {
+    if (linkPoses.find(entry.link_name) != linkPoses.end()) continue; // already looked up
+    try {
+      auto tf = this->tfBuffer->lookupTransform(this->fixedFrame, entry.link_name, query_time, timeout);
+      linkPoses.emplace(entry.link_name, tf2::transformToEigen(tf.transform));
+      tfSuccess++;
+    }
+    catch (const tf2::TransformException& ex) {
+      tfFail++;
+      // Only warn occasionally to avoid spam but still surface systemic issues
+      RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
+        "TF miss (%s -> %s): %s", this->fixedFrame.c_str(), entry.link_name.c_str(), ex.what());
     }
   }
+  // Build obstacles for links whose transforms we obtained
+  for (const auto& entry : this->collisions) {
+    auto it = linkPoses.find(entry.link_name);
+    if (it == linkPoses.end()) continue; // skip missing transform
+    const urdf::Pose& origin = entry.col->origin;
+    Eigen::Affine3d link_T_col =
+      Eigen::Translation3d(origin.position.x, origin.position.y, origin.position.z) *
+      Eigen::Quaterniond(origin.rotation.w, origin.rotation.x, origin.rotation.y, origin.rotation.z);
+    Eigen::Affine3d world_T_col = it->second * link_T_col;
+    Eigen::Vector3d obstCenter = world_T_col.translation();
+    Eigen::Quaterniond obstOrientation(world_T_col.rotation());
+    collisionObjects.push_back(this->obstacleFromCollisionObject(entry.id, *entry.col, obstCenter, obstOrientation));
+  }
+  RCLCPP_DEBUG_THROTTLE(this->get_logger(), *this->get_clock(), 3000,
+    "parseURDF: links_ok=%zu links_fail=%zu obstacles=%zu", tfSuccess, tfFail, collisionObjects.size());
   return collisionObjects;
 }
 
+void RobotParser::buildCollisionCatalog() {
+  this->collisions.clear();
+  for (const auto& [link_name, link] : this->robotModel.links_) {
+    if (!link) { continue; }
+
+    auto add_one = [&](const urdf::CollisionSharedPtr& col_ptr, size_t index) {
+      if (!col_ptr || !col_ptr->geometry) { return; }
+      CollisionEntry e;
+      e.link_name = link_name;
+      if (!col_ptr->name.empty()) {
+        e.id = link_name + "::" + col_ptr->name;
+      }
+      else {
+        e.id = link_name + "::col" + std::to_string(index);
+      }
+      e.col = col_ptr;
+      this->collisions.push_back(std::move(e));
+    };
+
+    if (!link->collision_array.empty()) {
+      for (size_t i = 0; i < link->collision_array.size(); ++i) {
+        add_one(link->collision_array[i], i);
+      }
+    }
+    else if (link->collision) {
+      add_one(link->collision, 0);
+    }
+  }
+}
+
 Obstacle RobotParser::obstacleFromCollisionObject(
-  int id, const urdf::Collision& collisionObject,
+  const std::string& frameID, const urdf::Collision& collisionObject,
   const Eigen::Vector3d& position, const Eigen::Quaterniond& orientation) {
   ObstacleType type;
   ObstacleGeometry geom;
@@ -130,10 +181,10 @@ Obstacle RobotParser::obstacleFromCollisionObject(
   }
   else {
     RCLCPP_ERROR(this->get_logger(),
-      "Unhandled URDF geometry type for collision object with id %d", id);
+      "Unhandled URDF geometry type for collision object with id: %s", frameID.c_str());
   }
   Obstacle obstacle;
-  obstacle.id = id;
+  obstacle.frame_id = frameID;
   obstacle.type = obstacleTypeToString(type);
   obstacle.group = obstacleGroupToString(ObstacleGroup::ROBOT);
   obstacle.pose.position.x = position.x();

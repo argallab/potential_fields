@@ -21,6 +21,7 @@
 #include "pf_obstacle.hpp"
 #include <eigen3/Eigen/Dense>
 #include <unordered_set>
+#include <unordered_map>
 
 class PotentialField {
 public:
@@ -93,17 +94,17 @@ public:
    * @brief Attempts to remove an obstacle by ID.
    *
    * @note If the obstacle is not found, no action is taken.
-   * @param obstacleID  the ID of the obstacle obtained on obstacle creation.
+   * @param obstacleFrameID  the frame ID of the obstacle obtained on obstacle creation.
    * @return true if the obstacle was removed successfully.
    */
-  bool removeObstacle(int obstacleID);
+  bool removeObstacle(const std::string& obstacleFrameID);
 
   /**
    * @brief Clears all obstacles from the potential field.
    */
   void clearObstacles();
 
-  PotentialFieldObstacle getObstacleByID(int obstacleID) const;
+  PotentialFieldObstacle getObstacleByID(const std::string& obstacleFrameID) const;
 
   /**
    * @brief Given a 3D position, computes the velocity vector
@@ -168,6 +169,8 @@ private:
   double rotationalThreshold = 0.06; // Threshold for rotational geodesic distance
   SpatialVector goalPose;
   std::vector<PotentialFieldObstacle> obstacles;
+  // Fast lookup for obstacle updates/removals by ID
+  std::unordered_map<std::string, size_t> obstacleIndex;
 
   /**
    * @brief Computes the attractive force towards the goal pose. Also computes the

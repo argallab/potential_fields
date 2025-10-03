@@ -27,18 +27,20 @@ PotentialFieldManager::PotentialFieldManager()
   : Node("potential_field_manager") {
   RCLCPP_INFO(this->get_logger(), "PotentialFieldManager Initialized");
   // Declare parameters
-  this->timerFreq = this->declare_parameter("timer_frequency", 100.0f); // [Hz]
+  this->visualizerFrequency = this->declare_parameter("visualize_pf_frequency", 100.0f); // [Hz]
   this->attractiveGain = this->declare_parameter("attractive_gain", 1.0f); // [Ns/m]
   this->rotationalAttractiveGain = this->declare_parameter("rotational_attractive_gain", 0.7f); // [Ns/m]
   this->repulsiveGain = this->declare_parameter("repulsive_gain", 1.0f); // [Ns/m]
   this->maxForce = this->declare_parameter("max_force", 10.0f); // [N]
+  this->influenceZoneScale = this->declare_parameter("influence_zone_scale", 2.0f); // Influence zone scaling factor
   this->fixedFrame = this->declare_parameter("fixed_frame", "world"); // RViz fixed frame
   // Get parameters from yaml file
-  this->timerFreq = this->get_parameter("timer_frequency").as_double();
+  this->visualizerFrequency = this->get_parameter("visualize_pf_frequency").as_double();
   this->attractiveGain = this->get_parameter("attractive_gain").as_double();
   this->rotationalAttractiveGain = this->get_parameter("rotational_attractive_gain").as_double();
   this->repulsiveGain = this->get_parameter("repulsive_gain").as_double();
   this->maxForce = this->get_parameter("max_force").as_double();
+  this->influenceZoneScale = this->get_parameter("influence_zone_scale").as_double();
   this->fixedFrame = this->get_parameter("fixed_frame").as_string();
 
   // Initialize the potential field
@@ -74,21 +76,28 @@ PotentialFieldManager::PotentialFieldManager()
   );
 
   // Setup obstacle subscriber
-  this->obstacleSub = this->create_subscription<Obstacle>("pfield/obstacles", 10,
-    [this](const Obstacle::SharedPtr msg) {
-    PotentialFieldObstacle obstacle(
-      msg->id,
-      Eigen::Vector3d(msg->pose.position.x, msg->pose.position.y, msg->pose.position.z),
-      Eigen::Quaterniond(msg->pose.orientation.w, msg->pose.orientation.x, msg->pose.orientation.y, msg->pose.orientation.z),
-      stringToObstacleType(msg->type),
-      stringToObstacleGroup(msg->group),
-      ObstacleGeometry{msg->radius, msg->length, msg->width, msg->height},
-      2.0, // influence zone scale
-      this->repulsiveGain,
-      msg->mesh_resource,
-      Eigen::Vector3d(msg->scale_x, msg->scale_y, msg->scale_z)
-    );
-    this->pField.addObstacle(obstacle);
+  rclcpp::QoS qos(rclcpp::KeepLast(200));
+  qos.reliability(RMW_QOS_POLICY_RELIABILITY_RELIABLE);
+  qos.durability(RMW_QOS_POLICY_DURABILITY_VOLATILE);
+  this->obstacleSub = this->create_subscription<ObstacleArray>("pfield/obstacles", qos,
+    [this](const ObstacleArray::SharedPtr msg) {
+    const auto& obstacles = msg->obstacles;
+    for (const auto& obst : obstacles) {
+      PotentialFieldObstacle obstacle(
+        obst.frame_id,
+        Eigen::Vector3d(obst.pose.position.x, obst.pose.position.y, obst.pose.position.z),
+        Eigen::Quaterniond(obst.pose.orientation.w, obst.pose.orientation.x, obst.pose.orientation.y, obst.pose.orientation.z),
+        stringToObstacleType(obst.type),
+        stringToObstacleGroup(obst.group),
+        ObstacleGeometry{obst.radius, obst.length, obst.width, obst.height},
+        this->influenceZoneScale,
+        this->repulsiveGain,
+        obst.mesh_resource,
+        Eigen::Vector3d(obst.scale_x, obst.scale_y, obst.scale_z)
+      );
+      RCLCPP_DEBUG(this->get_logger(), "Added/Updated obstacle: %s", obst.frame_id.c_str());
+      this->pField.addObstacle(obstacle);
+    }
   }
   );
 
@@ -156,7 +165,7 @@ PotentialFieldManager::PotentialFieldManager()
 
   // Run the timer for visualizing the potential field
   this->timer = this->create_wall_timer(
-    std::chrono::duration<double>(1.0 / this->timerFreq), // Timer period based on frequency
+    std::chrono::duration<double>(1.0 / this->visualizerFrequency), // Timer period based on frequency
     std::bind(&PotentialFieldManager::timerCallback, this)
   );
 }
@@ -226,13 +235,14 @@ void PotentialFieldManager::visualizePF() {
 
 MarkerArray PotentialFieldManager::createObstacleMarkers() {
   MarkerArray markerArray;
-  int id = 0;
-  for (const auto& obstacle : this->pField.getObstacles()) {
+  std::vector<PotentialFieldObstacle> obstacles = this->pField.getObstacles();
+  for (const auto& obstacle : obstacles) {
+    int hashID = createHashID(obstacle);
     Marker obstacleMarker;
     obstacleMarker.header.frame_id = this->fixedFrame;
     obstacleMarker.header.stamp = this->now();
     obstacleMarker.ns = "obstacle";
-    obstacleMarker.id = id;
+    obstacleMarker.id = hashID;
     obstacleMarker.action = Marker::ADD;
     auto position = obstacle.getPosition();
     auto orientation = obstacle.getOrientation();
@@ -298,7 +308,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers() {
     influenceMarker.header.frame_id = this->fixedFrame;
     influenceMarker.header.stamp = this->now();
     influenceMarker.ns = "obstacle_influence";
-    influenceMarker.id = id;
+    influenceMarker.id = hashID; // mirror id for influence volume
     influenceMarker.action = Marker::ADD;
     influenceMarker.pose.position.x = position.x();
     influenceMarker.pose.position.y = position.y();
@@ -352,7 +362,6 @@ MarkerArray PotentialFieldManager::createObstacleMarkers() {
     influenceMarker.color.a = 0.5f; // Semi-transparent
     influenceMarker.lifetime = rclcpp::Duration(0, 0); // No lifetime
     markerArray.markers.push_back(influenceMarker);
-    id++;
   }
   return markerArray;
 }
@@ -374,9 +383,9 @@ MarkerArray PotentialFieldManager::createGoalMarker() {
   goalMarker.pose.orientation.y = goalPose.getOrientation().y();
   goalMarker.pose.orientation.z = goalPose.getOrientation().z();
   goalMarker.pose.orientation.w = goalPose.getOrientation().w();
-  goalMarker.scale.x = 0.5;
-  goalMarker.scale.y = 0.5;
-  goalMarker.scale.z = 0.5;
+  goalMarker.scale.x = 0.15;
+  goalMarker.scale.y = 0.15;
+  goalMarker.scale.z = 0.15;
   goalMarker.color.r = 0.0f;
   goalMarker.color.g = 1.0f;
   goalMarker.color.b = 0.0f;

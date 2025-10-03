@@ -116,13 +116,16 @@ struct ObstacleGeometry {
 class PotentialFieldObstacle {
 public:
   PotentialFieldObstacle() = delete;
-  PotentialFieldObstacle(int id,
+  ~PotentialFieldObstacle() = default;
+
+  PotentialFieldObstacle(
+    std::string frameID,
     Eigen::Vector3d centerPosition, Eigen::Quaterniond orientation,
     ObstacleType type, ObstacleGroup group, ObstacleGeometry geometry,
     double influenceZoneScale, double repulsiveGain,
     const std::string& meshResource = std::string(),
     const Eigen::Vector3d& meshScale = Eigen::Vector3d::Ones())
-    : id(id),
+    : frameID(frameID),
     position(centerPosition),
     orientation(orientation),
     orientationConjugate(orientation.conjugate()),
@@ -133,9 +136,51 @@ public:
     repulsiveGain(repulsiveGain),
     meshResource(meshResource),
     meshScale(meshScale) {}
-  ~PotentialFieldObstacle() = default;
 
-  int getID() const { return this->id; }
+  PotentialFieldObstacle(const PotentialFieldObstacle& other) :
+    frameID(other.frameID),
+    position(other.position),
+    orientation(other.orientation),
+    orientationConjugate(other.orientationConjugate),
+    type(other.type),
+    group(other.group),
+    geometry(other.geometry),
+    influenceZoneScale(other.influenceZoneScale),
+    repulsiveGain(other.repulsiveGain),
+    meshResource(other.meshResource),
+    meshScale(other.meshScale) {}
+
+  PotentialFieldObstacle(PotentialFieldObstacle&& other) noexcept :
+    frameID(std::move(other.frameID)),
+    position(std::move(other.position)),
+    orientation(std::move(other.orientation)),
+    orientationConjugate(std::move(other.orientationConjugate)),
+    type(other.type),
+    group(other.group),
+    geometry(std::move(other.geometry)),
+    influenceZoneScale(other.influenceZoneScale),
+    repulsiveGain(other.repulsiveGain),
+    meshResource(std::move(other.meshResource)),
+    meshScale(std::move(other.meshScale)) {}
+
+  PotentialFieldObstacle& operator=(const PotentialFieldObstacle& other) {
+    if (this != &other) {
+      this->frameID = other.frameID;
+      this->position = other.position;
+      this->orientation = other.orientation;
+      this->orientationConjugate = other.orientationConjugate;
+      this->type = other.type;
+      this->group = other.group;
+      this->geometry = other.geometry;
+      this->influenceZoneScale = other.influenceZoneScale;
+      this->repulsiveGain = other.repulsiveGain;
+      this->meshResource = other.meshResource;
+      this->meshScale = other.meshScale;
+    }
+    return *this;
+  }
+
+  std::string getFrameID() const { return this->frameID; }
   ObstacleGroup getGroup() const { return this->group; }
   Eigen::Vector3d getPosition() const { return this->position; }
   Eigen::Quaterniond getOrientation() const { return this->orientation; }
@@ -165,7 +210,7 @@ public:
   }
 
 private:
-  int id; // Unique ID for the obstacle
+  std::string frameID; // Frame ID for the obstacle
   Eigen::Vector3d position; // Center Position of the obstacle in 3D space
   Eigen::Quaterniond orientation; // Orientation of the obstacle in 3D space
   Eigen::Quaterniond orientationConjugate; // Cached conjugate of the orientation for efficiency
@@ -185,10 +230,15 @@ private:
 
 struct PotentialFieldObstacleHash {
   std::size_t operator()(const PotentialFieldObstacle& obstacle) const {
-    return std::hash<int>()(obstacle.getID()) ^
+    return std::hash<std::string>()(obstacle.getFrameID()) ^
       std::hash<std::string>()(obstacleTypeToString(obstacle.getType())) ^
       std::hash<std::string>()(obstacleGroupToString(obstacle.getGroup()));
   }
 };
+
+static int inline createHashID(const PotentialFieldObstacle& obstacle) {
+  PotentialFieldObstacleHash hasher;
+  return static_cast<int>(hasher(obstacle) & 0x7FFFFFFF); // keep positive
+}
 
 #endif // PF_OBSTACLE_HPP

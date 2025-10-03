@@ -6,6 +6,10 @@ Panels:
       Expanded:
         - /Global Options1
         - /Status1
+        - /MarkerArray1
+        - /MarkerArray1/Namespaces1
+        - /TF1
+        - /RobotModel1
       Splitter Ratio: 0.5
     Tree Height: 707
   - Class: rviz_common/Selection
@@ -53,9 +57,8 @@ Visualization Manager:
       Namespaces:
         goal: true
         obstacle: true
-        obstacle_influence: true
+        obstacle_influence: false
         potential_vectors: true
-        query_point: true
       Topic:
         Depth: 5
         Durability Policy: Volatile
@@ -70,19 +73,96 @@ Visualization Manager:
       Frame Timeout: 15
       Frames:
         All Enabled: false
-        map:
-          Value: false
+        base:
+          Value: true
+        fer_hand:
+          Value: true
+        fer_hand_sc:
+          Value: true
+        fer_hand_tcp:
+          Value: true
+        fer_leftfinger:
+          Value: true
+        fer_link0:
+          Value: true
+        fer_link0_sc:
+          Value: true
+        fer_link1:
+          Value: true
+        fer_link1_sc:
+          Value: true
+        fer_link2:
+          Value: true
+        fer_link2_sc:
+          Value: true
+        fer_link3:
+          Value: true
+        fer_link3_sc:
+          Value: true
+        fer_link4:
+          Value: true
+        fer_link4_sc:
+          Value: true
+        fer_link5:
+          Value: true
+        fer_link5_sc:
+          Value: true
+        fer_link6:
+          Value: true
+        fer_link6_sc:
+          Value: true
+        fer_link7:
+          Value: true
+        fer_link7_sc:
+          Value: true
+        fer_link8:
+          Value: true
+        fer_rightfinger:
+          Value: true
         world:
           Value: true
-      Marker Scale: 3
+      Marker Scale: 1
       Name: TF
       Show Arrows: true
       Show Axes: true
       Show Names: true
       Tree:
         world:
-          map:
-            {}
+          base:
+            fer_link0:
+              fer_link0_sc:
+                {}
+              fer_link1:
+                fer_link1_sc:
+                  {}
+                fer_link2:
+                  fer_link2_sc:
+                    {}
+                  fer_link3:
+                    fer_link3_sc:
+                      {}
+                    fer_link4:
+                      fer_link4_sc:
+                        {}
+                      fer_link5:
+                        fer_link5_sc:
+                          {}
+                        fer_link6:
+                          fer_link6_sc:
+                            {}
+                          fer_link7:
+                            fer_link7_sc:
+                              {}
+                            fer_link8:
+                              fer_hand:
+                                fer_hand_sc:
+                                  {}
+                                fer_hand_tcp:
+                                  {}
+                                fer_leftfinger:
+                                  {}
+                                fer_rightfinger:
+                                  {}
       Update Interval: 0
       Value: true
     - Alpha: 1
@@ -113,6 +193,144 @@ Visualization Manager:
         Reliability Policy: Reliable
         Value: /nav_msgs/msg/Path
       Value: true
+    - Alpha: 1
+      Class: rviz_default_plugins/RobotModel
+      Collision Enabled: false
+      Description File: ""
+      Description Source: Topic
+      Description Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /robot_description
+      Enabled: true
+      Links:
+        All Links Enabled: true
+        Expand Joint Details: false
+        Expand Link Details: false
+        Expand Tree: false
+        Link Tree Style: Links in Alphabetic Order
+        base:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        fer_hand:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        fer_hand_sc:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        fer_hand_tcp:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        fer_leftfinger:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        fer_link0:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        fer_link0_sc:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        fer_link1:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        fer_link1_sc:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        fer_link2:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        fer_link2_sc:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        fer_link3:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        fer_link3_sc:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        fer_link4:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        fer_link4_sc:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        fer_link5:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        fer_link5_sc:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        fer_link6:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        fer_link6_sc:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        fer_link7:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        fer_link7_sc:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+        fer_link8:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+        fer_rightfinger:
+          Alpha: 1
+          Show Axes: false
+          Show Trail: false
+          Value: true
+      Mass Properties:
+        Inertia: false
+        Mass: false
+      Name: RobotModel
+      TF Prefix: ""
+      Update Interval: 0
+      Value: true
+      Visual Enabled: true
   Enabled: true
   Global Options:
     Background Color: 48; 48; 48
@@ -159,25 +377,25 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 15.65097427368164
+      Distance: 3.0175375938415527
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
         Swap Stereo Eyes: false
         Value: false
       Focal Point:
-        X: 0
-        Y: 0
-        Z: 0
+        X: 0.06745076924562454
+        Y: 0.1518152803182602
+        Z: 0.06545792520046234
       Focal Shape Fixed Size: true
       Focal Shape Size: 0.05000000074505806
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.695398211479187
+      Pitch: 0.6303982734680176
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 0.8153924942016602
+      Yaw: 5.513576984405518
     Saved: ~
 Window Geometry:
   Displays:

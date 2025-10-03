@@ -1,4 +1,4 @@
-int32 id
+string frame_id
 string type
 string group
 geometry_msgs/Pose pose

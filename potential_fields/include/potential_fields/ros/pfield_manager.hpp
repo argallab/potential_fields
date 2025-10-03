@@ -18,6 +18,7 @@
 #include "tf2_ros/transform_listener.h"
 #include "tf2_eigen/tf2_eigen.hpp"
 #include "potential_fields_interfaces/msg/obstacle.hpp"
+#include "potential_fields_interfaces/msg/obstacle_array.hpp"
 #include "potential_fields_interfaces/srv/plan_path.hpp"
 #include "potential_fields_interfaces/srv/compute_autonomy_vector.hpp"
 #include <vector>
@@ -32,6 +33,7 @@ using Quaternion = geometry_msgs::msg::Quaternion;
 using Path = nav_msgs::msg::Path;
 using TransformStamped = geometry_msgs::msg::TransformStamped;
 using Obstacle = potential_fields_interfaces::msg::Obstacle;
+using ObstacleArray = potential_fields_interfaces::msg::ObstacleArray;
 using PlanPath = potential_fields_interfaces::srv::PlanPath;
 using ComputeAutonomyVector = potential_fields_interfaces::srv::ComputeAutonomyVector;
 
@@ -50,11 +52,12 @@ public:
   }
 
 private:
-  double timerFreq; // Timer frequency [Hz]
+  double visualizerFrequency; // frequency for updating visualization [Hz]
   double attractiveGain; // Attractive gain [Ns/m]
   double rotationalAttractiveGain; // Rotational attractive gain [Ns/m]
   double repulsiveGain; // Repulsive gain [Ns/m]
   double maxForce; // Maximum force [N]
+  double influenceZoneScale; // Influence zone scaling factor
   std::string fixedFrame; // RViz fixed frame for visualization and PF computation
   PotentialField pField; // Potential field instance
   PotentialField planningPField; // PF instance for path planning
@@ -81,7 +84,7 @@ private:
   rclcpp::Subscription<PoseStamped>::SharedPtr goalPoseSub;
 
   // Subscriber for obstacles
-  rclcpp::Subscription<Obstacle>::SharedPtr obstacleSub;
+  rclcpp::Subscription<ObstacleArray>::SharedPtr obstacleSub;
 
   // Service to obtain a path from a query point to the goal
   rclcpp::Service<PlanPath>::SharedPtr pathPlanningService;
