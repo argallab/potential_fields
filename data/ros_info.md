@@ -1,0 +1,199 @@
+# ROS Nodes
+/fixed_to_base_broadcaster
+/joint_state_publisher
+/pf_demo_node
+/pfield_manager
+/robot_parser
+/robot_state_publisher
+/rviz
+/transform_listener_impl_62f61d579420
+
+# ROS Topics
+/clicked_point
+/clock
+/goal_pose
+/initialpose
+/joint_states
+/nav_msgs/msg/Path
+/parameter_events
+/pfield/obstacles
+/robot_description
+/rosout
+/tf
+/tf_static
+/visualization_marker_array
+
+# ROS Services
+/fixed_to_base_broadcaster/describe_parameters
+/fixed_to_base_broadcaster/get_parameter_types
+/fixed_to_base_broadcaster/get_parameters
+/fixed_to_base_broadcaster/get_type_description
+/fixed_to_base_broadcaster/list_parameters
+/fixed_to_base_broadcaster/set_parameters
+/fixed_to_base_broadcaster/set_parameters_atomically
+/joint_state_publisher/describe_parameters
+/joint_state_publisher/get_parameter_types
+/joint_state_publisher/get_parameters
+/joint_state_publisher/get_type_description
+/joint_state_publisher/list_parameters
+/joint_state_publisher/set_parameters
+/joint_state_publisher/set_parameters_atomically
+/pf_demo_node/describe_parameters
+/pf_demo_node/get_parameter_types
+/pf_demo_node/get_parameters
+/pf_demo_node/get_type_description
+/pf_demo_node/list_parameters
+/pf_demo_node/set_parameters
+/pf_demo_node/set_parameters_atomically
+/pfield/compute_autonomy_vector
+/pfield/plan_path
+/pfield_manager/describe_parameters
+/pfield_manager/get_parameter_types
+/pfield_manager/get_parameters
+/pfield_manager/get_type_description
+/pfield_manager/list_parameters
+/pfield_manager/set_parameters
+/pfield_manager/set_parameters_atomically
+/robot_parser/describe_parameters
+/robot_parser/get_parameter_types
+/robot_parser/get_parameters
+/robot_parser/get_type_description
+/robot_parser/list_parameters
+/robot_parser/set_parameters
+/robot_parser/set_parameters_atomically
+/robot_state_publisher/describe_parameters
+/robot_state_publisher/get_parameter_types
+/robot_state_publisher/get_parameters
+/robot_state_publisher/get_type_description
+/robot_state_publisher/list_parameters
+/robot_state_publisher/set_parameters
+/robot_state_publisher/set_parameters_atomically
+/rviz/describe_parameters
+/rviz/get_parameter_types
+/rviz/get_parameters
+/rviz/get_type_description
+/rviz/list_parameters
+/rviz/reset_time
+/rviz/set_parameters
+/rviz/set_parameters_atomically
+/transform_listener_impl_62f61d579420/get_type_description
+
+# ROS Parameters
+/fixed_to_base_broadcaster:
+  child_frame_id
+  frame_id
+  qos_overrides./parameter_events.publisher.depth
+  qos_overrides./parameter_events.publisher.durability
+  qos_overrides./parameter_events.publisher.history
+  qos_overrides./parameter_events.publisher.reliability
+  qos_overrides./tf_static.publisher.depth
+  qos_overrides./tf_static.publisher.history
+  qos_overrides./tf_static.publisher.reliability
+  rotation.w
+  rotation.x
+  rotation.y
+  rotation.z
+  start_type_description_service
+  translation.x
+  translation.y
+  translation.z
+  use_sim_time
+/joint_state_publisher:
+  delta
+  publish_default_efforts
+  publish_default_positions
+  publish_default_velocities
+  rate
+  source_list
+  start_type_description_service
+  use_mimic_tags
+  use_sim_time
+  use_smallest_joint_limits
+/pf_demo_node:
+  fixed_frame
+  qos_overrides./parameter_events.publisher.depth
+  qos_overrides./parameter_events.publisher.durability
+  qos_overrides./parameter_events.publisher.history
+  qos_overrides./parameter_events.publisher.reliability
+  start_type_description_service
+  use_sim_time
+/pfield_manager:
+  attractive_gain
+  fixed_frame
+  influence_zone_scale
+  max_force
+  qos_overrides./parameter_events.publisher.depth
+  qos_overrides./parameter_events.publisher.durability
+  qos_overrides./parameter_events.publisher.history
+  qos_overrides./parameter_events.publisher.reliability
+  qos_overrides./tf.publisher.depth
+  qos_overrides./tf.publisher.durability
+  qos_overrides./tf.publisher.history
+  qos_overrides./tf.publisher.reliability
+  qos_overrides./tf.subscription.depth
+  qos_overrides./tf.subscription.durability
+  qos_overrides./tf.subscription.history
+  qos_overrides./tf.subscription.reliability
+  qos_overrides./tf_static.subscription.depth
+  qos_overrides./tf_static.subscription.history
+  qos_overrides./tf_static.subscription.reliability
+  repulsive_gain
+  rotational_attractive_gain
+  start_type_description_service
+  use_sim_time
+  visualize_pf_frequency
+/robot_parser:
+  fixed_frame
+  qos_overrides./parameter_events.publisher.depth
+  qos_overrides./parameter_events.publisher.durability
+  qos_overrides./parameter_events.publisher.history
+  qos_overrides./parameter_events.publisher.reliability
+  qos_overrides./tf.publisher.depth
+  qos_overrides./tf.publisher.durability
+  qos_overrides./tf.publisher.history
+  qos_overrides./tf.publisher.reliability
+  qos_overrides./tf.subscription.depth
+  qos_overrides./tf.subscription.durability
+  qos_overrides./tf.subscription.history
+  qos_overrides./tf.subscription.reliability
+  qos_overrides./tf_static.subscription.depth
+  qos_overrides./tf_static.subscription.history
+  qos_overrides./tf_static.subscription.reliability
+  robot_description
+  robot_geometry_update_frequency
+  start_type_description_service
+  use_sim_time
+/robot_state_publisher:
+  frame_prefix
+  ignore_timestamp
+  publish_frequency
+  qos_overrides./joint_states.subscription.depth
+  qos_overrides./joint_states.subscription.history
+  qos_overrides./joint_states.subscription.reliability
+  qos_overrides./parameter_events.publisher.depth
+  qos_overrides./parameter_events.publisher.durability
+  qos_overrides./parameter_events.publisher.history
+  qos_overrides./parameter_events.publisher.reliability
+  qos_overrides./tf.publisher.depth
+  qos_overrides./tf.publisher.durability
+  qos_overrides./tf.publisher.history
+  qos_overrides./tf.publisher.reliability
+  qos_overrides./tf_static.publisher.depth
+  qos_overrides./tf_static.publisher.history
+  qos_overrides./tf_static.publisher.reliability
+  robot_description
+  start_type_description_service
+  use_sim_time
+/rviz:
+  qos_overrides./clock.subscription.depth
+  qos_overrides./clock.subscription.durability
+  qos_overrides./clock.subscription.history
+  qos_overrides./clock.subscription.reliability
+  qos_overrides./parameter_events.publisher.depth
+  qos_overrides./parameter_events.publisher.durability
+  qos_overrides./parameter_events.publisher.history
+  qos_overrides./parameter_events.publisher.reliability
+  start_type_description_service
+  tf_buffer_cache_time_ms
+  use_sim_time
+Wait for service timed out waiting for parameter services for node NodeName(name='transform_listener_impl_62f61d579420', namespace='/', full_name='/transform_listener_impl_62f61d579420')
