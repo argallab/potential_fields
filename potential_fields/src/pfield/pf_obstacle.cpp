@@ -1,5 +1,9 @@
 #include "pfield/pf_obstacle.hpp"
 
+// TODO: Use actual Mesh collision detection for both withinObstacle and withinInfluenceZone
+// Instead of approximating mesh as a box
+
+
 bool PotentialFieldObstacle::withinInfluenceZone(Eigen::Vector3d pos) const {
   Eigen::Vector3d localPos = this->toObstacleFrame(pos);
   // influenceZoneScale is the scalar that applies to each dimension of the obstacle's geometry

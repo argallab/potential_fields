@@ -52,7 +52,10 @@ PotentialFieldManager::PotentialFieldManager()
   RCLCPP_INFO(this->get_logger(), "TF2 broadcaster, buffer, and listener initialized");
 
   // Setup marker publisher
-  auto markerPubQos = rclcpp::QoS(rclcpp::KeepLast(10)).best_effort().durability_volatile();
+  // Use reliable and transient_local QoS for RViz MarkerArray publisher
+  auto markerPubQos = rclcpp::QoS(rclcpp::KeepLast(10))
+    .reliable()
+    .transient_local();
   this->markerPub = this->create_publisher<MarkerArray>("visualization_marker_array", markerPubQos);
   RCLCPP_INFO(this->get_logger(), "Markers publishing on: %s", this->markerPub->get_topic_name());
 
@@ -332,18 +335,11 @@ MarkerArray PotentialFieldManager::createObstacleMarkers() {
     }
     case ObstacleType::MESH: {
       // Represent mesh influence as a scaled bounding box around the mesh
-      influenceMarker.type = Marker::CUBE;
-      // If geometry bbox provided, use it; otherwise derive from meshScale
-      double lx = obstacle.getGeometry().length;
-      double ly = obstacle.getGeometry().width;
-      double lz = obstacle.getGeometry().height;
-      if (lx <= 0.0 || ly <= 0.0 || lz <= 0.0) {
-        Eigen::Vector3d s = obstacle.getMeshScale();
-        lx = s.x(); ly = s.y(); lz = s.z();
-      }
-      influenceMarker.scale.x = obstacle.getInfluenceZoneScale() * lx;
-      influenceMarker.scale.y = obstacle.getInfluenceZoneScale() * ly;
-      influenceMarker.scale.z = obstacle.getInfluenceZoneScale() * lz;
+      influenceMarker.type = Marker::MESH_RESOURCE;
+      Eigen::Vector3d scale = obstacle.getMeshScale();
+      influenceMarker.scale.x = obstacle.getInfluenceZoneScale() * scale.x();
+      influenceMarker.scale.y = obstacle.getInfluenceZoneScale() * scale.y();
+      influenceMarker.scale.z = obstacle.getInfluenceZoneScale() * scale.z();
       break;
     }
     }

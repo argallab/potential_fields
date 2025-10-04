@@ -97,7 +97,7 @@ std::vector<Obstacle> RobotParser::extractObstaclesFromCatalog() {
     catch (const tf2::TransformException& ex) {
       tfFail++;
       // Only warn occasionally to avoid spam but still surface systemic issues
-      RCLCPP_WARN(this->get_logger(),
+      RCLCPP_DEBUG(this->get_logger(),
         "Failed to find TF (%s -> %s): %s", this->fixedFrame.c_str(), entry.link_name.c_str(), ex.what());
     }
   }
