@@ -24,22 +24,29 @@ find_package(tf2_ros REQUIRED)
 find_package(tf2_eigen REQUIRED)
 find_package(urdf REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(geometric_shapes REQUIRED)
+find_package(fcl REQUIRED)
 
-# Setup testing files (moved under BUILD_TESTING below)
 
 # Setup pfield_lib library
 add_library(pfield_lib SHARED
+  src/pfield/mesh_collision.cpp
   src/pfield/pf_obstacle.cpp
   src/pfield/pfield.cpp
   src/pfield/spatial_vector.cpp
 )
-target_include_directories(pfield_lib PUBLIC
-  include/potential_fields
-  ${EIGEN3_INCLUDE_DIRS}
+target_link_libraries(pfield_lib
+  fcl
 )
 ament_target_dependencies(pfield_lib
   Eigen3
+  geometric_shapes
+  fcl
 )
+target_include_directories(pfield_lib PUBLIC
+  include/potential_fields
+)
+
 
 # Optional: use precompiled headers to speed up builds (CMake >= 3.16)
 if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.16)
@@ -49,10 +56,9 @@ if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.16)
     <vector>
     <string>
     <cmath>
+    <memory>
   )
 endif()
-
-## Tests link against pfield_lib (see BUILD_TESTING section)
 
 include_directories(
   include/potential_fields

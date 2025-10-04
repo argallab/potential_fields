@@ -1,7 +1,10 @@
 #include "pfield/pf_obstacle.hpp"
+#include "pfield/mesh_collision.hpp"
 
 // TODO: Use actual Mesh collision detection for both withinObstacle and withinInfluenceZone
 // Instead of approximating mesh as a box
+// NOTE: meshCollisionData must be populated externally (e.g., when constructing obstacle from mesh resource)
+// and meshInfluenceMargin should be set (e.g., fraction of meshCollisionData->maxExtent)
 
 
 bool PotentialFieldObstacle::withinInfluenceZone(Eigen::Vector3d pos) const {
@@ -23,9 +26,17 @@ bool PotentialFieldObstacle::withinInfluenceZone(Eigen::Vector3d pos) const {
       std::abs(localPos.z()) <= (this->geometry.height * this->influenceZoneScale / 2.0);
   }
   case ObstacleType::MESH: {
-    // Approximate mesh as a box for influence zone using provided geometry (length/width/height)
-    Eigen::Vector3d halfDimensions = this->halfDimensions() * this->influenceZoneScale;
-    return (localPos.array().abs() <= halfDimensions.array()).all();
+    // Inside test first (triangles stored inside meshCollisionData if available)
+    if (!this->meshCollisionData.triangles.empty() &&
+      pointInsideMesh(this->meshCollisionData, localPos)) {
+      return true;
+    }
+    // Distance test with influence margin
+    Eigen::Isometry3d world_T_mesh = Eigen::Isometry3d::Identity();
+    world_T_mesh.translate(this->position);
+    world_T_mesh.rotate(this->orientation);
+    double dist = distanceToMesh(this->meshCollisionData, localPos);
+    return dist <= this->meshInfluenceMargin;
   }
   default:
     // return false;
@@ -51,9 +62,7 @@ bool PotentialFieldObstacle::withinObstacle(Eigen::Vector3d pos) const {
       std::abs(localPos.z()) <= (this->geometry.height / 2.0);
   }
   case ObstacleType::MESH: {
-    // Approximate mesh collision as a box using geometry length/width/height
-    Eigen::Vector3d halfDimensions = this->halfDimensions();
-    return (localPos.array().abs() <= halfDimensions.array()).all();
+    return pointInsideMesh(this->meshCollisionData, localPos);
   }
   default:
     // return false;
@@ -62,7 +71,6 @@ bool PotentialFieldObstacle::withinObstacle(Eigen::Vector3d pos) const {
 }
 
 Eigen::Vector3d PotentialFieldObstacle::toObstacleFrame(const Eigen::Vector3d& point) const {
-  // Rotate the point to the obstacle's frame of reference
   return this->orientationConjugate * (point - this->position);
 }
 

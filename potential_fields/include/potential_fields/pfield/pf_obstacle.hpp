@@ -1,6 +1,7 @@
 #ifndef PF_OBSTACLE_HPP
 #define PF_OBSTACLE_HPP
 #include "spatial_vector.hpp"
+#include "mesh_collision.hpp"
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 #include <vector>
@@ -12,7 +13,7 @@ enum class ObstacleType {
   SPHERE, // [center, radius]
   BOX, // [center, length, width, height]
   CYLINDER, // [center, radius, height]
-  MESH // [center, scale_x, scale_y, scale_z] - Treat geometry as box
+  MESH // [center, scale_x, scale_y, scale_z]
 };
 
 enum class ObstacleGroup {
@@ -112,7 +113,6 @@ struct ObstacleGeometry {
   }
 };
 
-
 class PotentialFieldObstacle {
 public:
   PotentialFieldObstacle() = delete;
@@ -135,7 +135,13 @@ public:
     influenceZoneScale(influenceZoneScale),
     repulsiveGain(repulsiveGain),
     meshResource(meshResource),
-    meshScale(meshScale) {}
+    meshScale(meshScale) {
+    if (type == ObstacleType::MESH && !meshResource.empty()) {
+      meshCollisionData = loadMesh(meshResource);
+      // Derive margin from scale factor and extent
+      meshInfluenceMargin = (influenceZoneScale - 1.0) * 0.5 * meshCollisionData.maxExtent;
+    }
+  }
 
   PotentialFieldObstacle(const PotentialFieldObstacle& other) :
     frameID(other.frameID),
@@ -148,7 +154,13 @@ public:
     influenceZoneScale(other.influenceZoneScale),
     repulsiveGain(other.repulsiveGain),
     meshResource(other.meshResource),
-    meshScale(other.meshScale) {}
+    meshScale(other.meshScale) {
+    if (type == ObstacleType::MESH && !meshResource.empty()) {
+      meshCollisionData = loadMesh(meshResource);
+      // Derive margin from scale factor and extent
+      meshInfluenceMargin = (influenceZoneScale - 1.0) * 0.5 * meshCollisionData.maxExtent;
+    }
+  }
 
   PotentialFieldObstacle(PotentialFieldObstacle&& other) noexcept :
     frameID(std::move(other.frameID)),
@@ -161,7 +173,13 @@ public:
     influenceZoneScale(other.influenceZoneScale),
     repulsiveGain(other.repulsiveGain),
     meshResource(std::move(other.meshResource)),
-    meshScale(std::move(other.meshScale)) {}
+    meshScale(std::move(other.meshScale)) {
+    if (type == ObstacleType::MESH && !meshResource.empty()) {
+      meshCollisionData = loadMesh(meshResource);
+      // Derive margin from scale factor and extent
+      meshInfluenceMargin = (influenceZoneScale - 1.0) * 0.5 * meshCollisionData.maxExtent;
+    }
+  }
 
   PotentialFieldObstacle& operator=(const PotentialFieldObstacle& other) {
     if (this != &other) {
@@ -176,6 +194,11 @@ public:
       this->repulsiveGain = other.repulsiveGain;
       this->meshResource = other.meshResource;
       this->meshScale = other.meshScale;
+      if (type == ObstacleType::MESH && !meshResource.empty()) {
+        this->meshCollisionData = loadMesh(meshResource);
+        // Derive margin from scale factor and extent
+        meshInfluenceMargin = (influenceZoneScale - 1.0) * 0.5 * meshCollisionData.maxExtent;
+      }
     }
     return *this;
   }
@@ -219,12 +242,28 @@ private:
   ObstacleGeometry geometry; // Geometry of the obstacle, containing relevant dimensions
   double influenceZoneScale; // The scale value of the volume of the obstacle that becomes the influence zone for repulsive forces
   double repulsiveGain; // Gain for the repulsive force
-  // Mesh specific metadata (optional)
   std::string meshResource; // URI or file path to the mesh resource (e.g., package://, file://)
   Eigen::Vector3d meshScale; // Scale for mesh visualization if using MESH_RESOURCE
+  MeshCollisionData meshCollisionData; // populated when mesh resource loaded
+  double meshInfluenceMargin = 0.0; // Additional margin for mesh influence zone
 
+  /**
+   * @brief Rotate the given point to the obstacle's frame of reference
+   *
+   * @note Useful for computing distances and collision checks in the obstacle's local frame
+   *
+   * @param point the point to transform into obstacle frame
+   * @return Eigen::Vector3d the point in the obstacle's local frame
+   */
   Eigen::Vector3d toObstacleFrame(const Eigen::Vector3d& point) const;
 
+  /**
+   * @brief Get the half dimensions of the obstacle
+   *
+   * @note Used for collision checking for "radius" style measurements
+   *
+   * @return Eigen::Vector3d Half dimensions [half_length, half_width, half_height]
+   */
   Eigen::Vector3d halfDimensions() const;
 };
 

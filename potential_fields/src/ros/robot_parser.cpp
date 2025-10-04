@@ -152,32 +152,35 @@ void RobotParser::buildCollisionCatalog() {
 Obstacle RobotParser::obstacleFromCollisionObject(
   const std::string& frameID, const urdf::Collision& collisionObject,
   const Eigen::Vector3d& position, const Eigen::Quaterniond& orientation) {
-  ObstacleType type;
-  ObstacleGeometry geom;
+  std::string obstacleType;
+  double radius = 0.0;
+  double length = 0.0;
+  double width = 0.0;
+  double height = 0.0;
 
   auto* geometry = collisionObject.geometry.get();
   if (urdf::Box* b = dynamic_cast<urdf::Box*>(geometry)) {
-    type = ObstacleType::BOX;
-    geom.length = b->dim.x;
-    geom.width = b->dim.y;
-    geom.height = b->dim.z;
+    obstacleType = "Box";
+    length = b->dim.x;
+    width = b->dim.y;
+    height = b->dim.z;
   }
   else if (urdf::Sphere* s = dynamic_cast<urdf::Sphere*>(geometry)) {
-    type = ObstacleType::SPHERE;
-    geom.radius = s->radius;
+    obstacleType = "Sphere";
+    radius = s->radius;
   }
   else if (urdf::Cylinder* c = dynamic_cast<urdf::Cylinder*>(geometry)) {
-    type = ObstacleType::CYLINDER;
-    geom.radius = c->radius;
-    geom.height = c->length;
+    obstacleType = "Cylinder";
+    radius = c->radius;
+    height = c->length;
   }
   else if (urdf::Mesh* m = dynamic_cast<urdf::Mesh*>(geometry)) {
     // Treat mesh as MESH type but approximate PF collision as its scale bounding box
-    type = ObstacleType::MESH;
+    obstacleType = "Mesh";
     // Some URDF meshes may have default scale (1,1,1); we store both the visual scale and use as approximate bbox if no dims provided
-    geom.length = m->scale.x;
-    geom.width = m->scale.y;
-    geom.height = m->scale.z;
+    length = m->scale.x;
+    width = m->scale.y;
+    height = m->scale.z;
   }
   else {
     RCLCPP_ERROR(this->get_logger(),
@@ -185,8 +188,8 @@ Obstacle RobotParser::obstacleFromCollisionObject(
   }
   Obstacle obstacle;
   obstacle.frame_id = frameID;
-  obstacle.type = obstacleTypeToString(type);
-  obstacle.group = obstacleGroupToString(ObstacleGroup::ROBOT);
+  obstacle.type = obstacleType;
+  obstacle.group = "Robot";
   obstacle.pose.position.x = position.x();
   obstacle.pose.position.y = position.y();
   obstacle.pose.position.z = position.z();
@@ -194,10 +197,10 @@ Obstacle RobotParser::obstacleFromCollisionObject(
   obstacle.pose.orientation.y = orientation.y();
   obstacle.pose.orientation.z = orientation.z();
   obstacle.pose.orientation.w = orientation.w();
-  obstacle.radius = geom.radius;
-  obstacle.length = geom.length;
-  obstacle.width = geom.width;
-  obstacle.height = geom.height;
+  obstacle.radius = radius;
+  obstacle.length = length;
+  obstacle.width = width;
+  obstacle.height = height;
   if (auto* m = dynamic_cast<urdf::Mesh*>(geometry)) {
     obstacle.mesh_resource = m->filename;
     obstacle.scale_x = static_cast<float>(m->scale.x);
