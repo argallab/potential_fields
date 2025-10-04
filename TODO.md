@@ -10,3 +10,11 @@
 ---
 
 - A `MotionInterface` to bridge the computed PF velocity/path to a robot's motion controller. This should be universal enough so users can adapt it to their robot. Services, topics, and actions should be provided to interface with the PF planner to set goals, start/stop planning, and get status updates.
+- Finish "Planning World" pipeline
+  - PF Obstacles reflect RobotState and JointStates
+  - IKSolver interface for converting poses in the PF world to joint space (for planning a path)
+  - JointTrajectory (and Pose) trajectory planner interface using `trajectory_msgs/JointTrajectory`
+  - Interface to hand `JointTrajectory` to a robot controller (libfranka for example) to execute the planned path
+- Mesh collision for `withinObstacle` and `withinInfluenceZone` methods in `pf_obstacle.cpp` to replace the current box approximation.
+- Better PF Visualization that is dynamic depending on "workspace" around the robot and obstacles, instead of a static grid. Also more visualization options but that can be added later.
+- Configure CPPLint CI/CD Github Actions for PRs
