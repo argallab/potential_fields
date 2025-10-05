@@ -1,6 +1,9 @@
 #ifndef MOTION_PLUGIN_HPP
 #define MOTION_PLUGIN_HPP
 
+#include <memory>
+#include <utility>
+
 #include "rclcpp/clock.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/twist.hpp"

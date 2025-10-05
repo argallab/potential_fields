@@ -28,7 +28,7 @@ bool FrankaPlugin::initializeRobot(const std::string& hostname) {
 
 bool FrankaPlugin::startControlLoop(const franka::Duration& movementDuration) {
   if (!this->currentEEVelocity) {
-    std::cerr << "No end-effector velocity command set. Please send a velocity command before starting the control loop." << std::endl;
+    std::cerr << "No end-effector velocity command set" << std::endl;
     return false;
   }
 

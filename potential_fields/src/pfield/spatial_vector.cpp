@@ -20,6 +20,10 @@ void SpatialVector::setOrientationEuler(double yaw, double pitch, double roll) {
 
 void SpatialVector::normalizePosition() { this->position.normalize(); }
 
-double SpatialVector::euclideanDistance(const SpatialVector& other) const { return (this->position - other.position).norm(); }
+double SpatialVector::euclideanDistance(const SpatialVector& other) const {
+  return (this->position - other.position).norm();
+}
 
-double SpatialVector::angularDistance(const SpatialVector& other) { return this->orientation.angularDistance(other.getOrientation()); }
+double SpatialVector::angularDistance(const SpatialVector& other) {
+  return this->orientation.angularDistance(other.getOrientation());
+}

@@ -7,6 +7,8 @@
 
 
 #include <cmath>
+#include <memory>
+#include <string>
 #include <iostream>
 
 #include <franka/active_control.h>
@@ -34,7 +36,7 @@ private:
 
 class FrankaPlugin : public MotionPlugin {
 public:
-  FrankaPlugin(const std::string& hostname);
+  explicit FrankaPlugin(const std::string& hostname);
   ~FrankaPlugin() override = default;
 
   bool sendCartesianTwist(const geometry_msgs::msg::Twist& endEffectorTwist) override;

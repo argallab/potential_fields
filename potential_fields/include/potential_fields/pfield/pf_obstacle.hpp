@@ -1,14 +1,18 @@
 #ifndef PF_OBSTACLE_HPP
 #define PF_OBSTACLE_HPP
-#include "spatial_vector.hpp"
-#include "mesh_collision.hpp"
-#include <Eigen/Core>
-#include <Eigen/Geometry>
-#include <vector>
+
+#include <cmath>
 #include <memory>
 #include <stdexcept>
-#include <cmath>
 #include <string>
+#include <utility>
+#include <vector>
+
+#include <Eigen/Core>
+#include <Eigen/Geometry>
+
+#include "spatial_vector.hpp"
+#include "mesh_collision.hpp"
 
 enum class ObstacleType {
   SPHERE, // [center, radius]

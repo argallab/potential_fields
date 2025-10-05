@@ -1,28 +1,35 @@
 #ifndef PFIELD_MANAGER_HPP
 #define PFIELD_MANAGER_HPP
 
-#include "rclcpp/rclcpp.hpp"
-#include "geometry_msgs/msg/pose.hpp"
-#include "geometry_msgs/msg/pose_stamped.hpp"
-#include "geometry_msgs/msg/point.hpp"
-#include "geometry_msgs/msg/quaternion.hpp"
-#include "geometry_msgs/msg/transform_stamped.hpp"
-#include "visualization_msgs/msg/marker.hpp"
-#include "visualization_msgs/msg/marker_array.hpp"
-#include "nav_msgs/msg/path.hpp"
-#include "pfield/pfield.hpp"
+#include <fstream>
+#include <memory>
+#include <string>
+#include <vector>
+
 #include <Eigen/Core>
 #include <Eigen/Geometry>
-#include "tf2_ros/transform_broadcaster.h"
-#include "tf2_ros/buffer.h"
-#include "tf2_ros/transform_listener.h"
-#include "tf2_eigen/tf2_eigen.hpp"
+
+#include "geometry_msgs/msg/point.hpp"
+#include "geometry_msgs/msg/pose.hpp"
+#include "geometry_msgs/msg/pose_stamped.hpp"
+#include "geometry_msgs/msg/quaternion.hpp"
+#include "geometry_msgs/msg/transform_stamped.hpp"
+#include "nav_msgs/msg/path.hpp"
+#include "visualization_msgs/msg/marker.hpp"
+#include "visualization_msgs/msg/marker_array.hpp"
+
 #include "potential_fields_interfaces/msg/obstacle.hpp"
 #include "potential_fields_interfaces/msg/obstacle_array.hpp"
 #include "potential_fields_interfaces/srv/plan_path.hpp"
 #include "potential_fields_interfaces/srv/compute_autonomy_vector.hpp"
-#include <vector>
-#include <fstream>
+
+#include "pfield/pfield.hpp"
+
+#include "rclcpp/rclcpp.hpp"
+#include "tf2_eigen/tf2_eigen.hpp"
+#include "tf2_ros/buffer.h"
+#include "tf2_ros/transform_broadcaster.h"
+#include "tf2_ros/transform_listener.h"
 
 using Marker = visualization_msgs::msg::Marker;
 using MarkerArray = visualization_msgs::msg::MarkerArray;

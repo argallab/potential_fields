@@ -11,7 +11,7 @@
 ///
 /// SERVICES:
 ///   ~/pfield/plan_path (potential_fields_interfaces::srv::PlanPath): Interpolates a path from a start pose to the goal pose
-///   ~/pfield/compute_autonomy_vector (potential_fields_interfaces::srv::ComputeAutonomyVector): Computes the autonomy vector at a given pose
+///   ~/pfield/compute_autonomy_vector (potential_fields_interfaces::srv::ComputeAutonomyVector): Computes velocity vector at pose
 ///
 /// SUBSCRIBERS:
 ///   ~/goal_pose (geometry_msgs::msg::PoseStamped): Updates the goal pose in the potential field
@@ -33,7 +33,7 @@ PotentialFieldManager::PotentialFieldManager()
   this->maxForce = this->declare_parameter("max_force", 10.0f); // [N]
   this->influenceZoneScale = this->declare_parameter("influence_zone_scale", 2.0f); // Influence zone scaling factor
   this->fixedFrame = this->declare_parameter("fixed_frame", "world"); // RViz fixed frame
-  this->visualizerBufferArea = this->declare_parameter("visualizer_buffer_area", 1.0f); // Extra area around obstacles and goal to visualize the PF [m]
+  this->visualizerBufferArea = this->declare_parameter("visualizer_buffer_area", 1.0f); // Extra area to visualize the PF [m]
   this->fieldResolution = this->declare_parameter("field_resolution", 0.5f); // Resolution of the potential field grid [m]
   // Get parameters from yaml file
   this->visualizerFrequency = this->get_parameter("visualize_pf_frequency").as_double();
@@ -69,12 +69,21 @@ PotentialFieldManager::PotentialFieldManager()
     10,
     [this](const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
     RCLCPP_INFO(this->get_logger(), "Received goal pose");
-    // Update the goal pose in the potential field
-    this->pField.updateGoalPosition(Eigen::Vector3d(
-      msg->pose.position.x,
-      msg->pose.position.y,
-      msg->pose.position.z
-    ));
+    this->pField.updateGoalPosition(
+      SpatialVector(
+        Eigen::Vector3d(
+          msg->pose.position.x,
+          msg->pose.position.y,
+          msg->pose.position.z
+        ),
+        Eigen::Quaterniond(
+          msg->pose.orientation.w,
+          msg->pose.orientation.x,
+          msg->pose.orientation.y,
+          msg->pose.orientation.z
+        )
+      )
+    );
   }
   );
 
@@ -482,8 +491,6 @@ MarkerArray PotentialFieldManager::createGoalMarker() {
 MarkerArray PotentialFieldManager::createPotentialVectorMarkers() {
   MarkerArray markerArray;
   int id = 0;
-  // TODO: Decide limits based on farthest entity in the field
-  // TODO: Parameterize these limits and resolution
   double minX, maxX, minY, maxY, minZ, maxZ;
   this->getPFLimits(minX, maxX, minY, maxY, minZ, maxZ);
   for (double x = minX; x <= maxX; x += this->fieldResolution) {
@@ -555,7 +562,6 @@ void PotentialFieldManager::exportFieldDataToCSV(const std::string& base_filenam
   std::ofstream vectors_file(vectors_filename);
   if (vectors_file.is_open()) {
     vectors_file << "grid_x,grid_y,grid_z,vel_x,vel_y,vel_z\n";
-    //TODO: Parameterize the grid resolution and limits
     const double z = 0.0;
     const double res = 1.0; // 10x10 grid from -5 to 5
     for (double x = -5.0; x <= 5.0; x += res) {

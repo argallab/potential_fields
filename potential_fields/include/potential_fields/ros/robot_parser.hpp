@@ -1,26 +1,29 @@
 #ifndef ROBOT_PARSER_HP
 #define ROBOT_PARSER_HP
 
-#include "rclcpp/rclcpp.hpp"
+#include <fstream>
+#include <memory>
+#include <string>
+#include <unordered_map>
 #include <vector>
+
+#include "geometry_msgs/msg/point.hpp"
 #include "geometry_msgs/msg/pose.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
-#include "geometry_msgs/msg/point.hpp"
 #include "geometry_msgs/msg/quaternion.hpp"
 #include "geometry_msgs/msg/transform_stamped.hpp"
-#include "visualization_msgs/msg/marker.hpp"
-#include "visualization_msgs/msg/marker_array.hpp"
 #include "nav_msgs/msg/path.hpp"
-#include "tf2_ros/transform_broadcaster.h"
-#include "tf2_ros/buffer.h"
-#include "tf2_ros/transform_listener.h"
-#include "tf2_eigen/tf2_eigen.hpp"
-#include "urdf/model.h"
-#include "urdf_parser/urdf_parser.h"
-#include <fstream>
 #include "potential_fields_interfaces/msg/obstacle.hpp"
 #include "potential_fields_interfaces/msg/obstacle_array.hpp"
-#include <unordered_map>
+#include "rclcpp/rclcpp.hpp"
+#include "tf2_eigen/tf2_eigen.hpp"
+#include "tf2_ros/buffer.h"
+#include "tf2_ros/transform_broadcaster.h"
+#include "tf2_ros/transform_listener.h"
+#include "urdf/model.h"
+#include "urdf_parser/urdf_parser.h"
+#include "visualization_msgs/msg/marker.hpp"
+#include "visualization_msgs/msg/marker_array.hpp"
 
 using Obstacle = potential_fields_interfaces::msg::Obstacle;
 using ObstacleArray = potential_fields_interfaces::msg::ObstacleArray;

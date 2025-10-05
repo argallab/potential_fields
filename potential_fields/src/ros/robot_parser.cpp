@@ -175,10 +175,7 @@ Obstacle RobotParser::obstacleFromCollisionObject(
     height = c->length;
   }
   else if (urdf::Mesh* m = dynamic_cast<urdf::Mesh*>(geometry)) {
-    // Treat mesh as MESH type but approximate PF collision as its scale bounding box
     obstacleType = "Mesh";
-    // Some URDF meshes may have default scale (1,1,1); we store both the visual scale and use as approximate bbox if no dims provided
-    length = m->scale.x;
     width = m->scale.y;
     height = m->scale.z;
   }

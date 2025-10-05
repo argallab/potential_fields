@@ -1,6 +1,8 @@
 #ifndef MOTION_INTERFACE_HPP
 #define MOTION_INTERFACE_HPP
 
+#include <memory>
+
 #include "rclcpp/rclcpp.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/twist.hpp"

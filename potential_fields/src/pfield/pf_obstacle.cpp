@@ -1,11 +1,8 @@
 #include "pfield/pf_obstacle.hpp"
 #include "pfield/mesh_collision.hpp"
 
-// TODO: Use actual Mesh collision detection for both withinObstacle and withinInfluenceZone
-// Instead of approximating mesh as a box
 // NOTE: meshCollisionData must be populated externally (e.g., when constructing obstacle from mesh resource)
 // and meshInfluenceMargin should be set (e.g., fraction of meshCollisionData->maxExtent)
-
 
 bool PotentialFieldObstacle::withinInfluenceZone(Eigen::Vector3d pos) const {
   Eigen::Vector3d localPos = this->toObstacleFrame(pos);
