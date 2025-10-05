@@ -57,7 +57,7 @@ Visualization Manager:
       Namespaces:
         goal: true
         obstacle: true
-        obstacle_influence: false
+        obstacle_influence: true
         potential_vectors: true
       Topic:
         Depth: 5
@@ -377,7 +377,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 3.0175375938415527
+      Distance: 2.180485963821411
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
