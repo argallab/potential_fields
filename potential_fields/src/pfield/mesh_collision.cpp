@@ -6,10 +6,24 @@
 #include <fcl/fcl.h>
 #include <geometric_shapes/mesh_operations.h>      // createMeshFromResource
 #include <geometric_shapes/shape_operations.h>     // shapes::...
+#include <unordered_map>
+#include <mutex>
 
 
-MeshCollisionData loadMesh(const std::string& uri) {
-  if (uri.empty()) return MeshCollisionData();
+// Simple cache so identical mesh resources share BVH + triangles
+std::shared_ptr<MeshCollisionData> loadMesh(const std::string& uri) {
+  if (uri.empty()) return nullptr;
+  static std::unordered_map<std::string, std::weak_ptr<MeshCollisionData>> cache;
+  static std::mutex cacheMutex;
+  {
+    std::lock_guard<std::mutex> lk(cacheMutex);
+    auto it = cache.find(uri);
+    if (it != cache.end()) {
+      if (auto existing = it->second.lock()) {
+        return existing;
+      }
+    }
+  }
   shapes::Mesh* shapeMesh = shapes::createMeshFromResource(uri);
   if (!shapeMesh) throw std::runtime_error("Failed to load mesh: " + uri);
 
@@ -39,26 +53,48 @@ MeshCollisionData loadMesh(const std::string& uri) {
 
   Eigen::Vector3d minB = Eigen::Vector3d::Constant(std::numeric_limits<double>::max());
   Eigen::Vector3d maxB = -minB;
+  double maxRadiusSq = 0.0;
   for (auto& v : verts) {
     minB = minB.cwiseMin(Eigen::Vector3d(v[0], v[1], v[2]));
     maxB = maxB.cwiseMax(Eigen::Vector3d(v[0], v[1], v[2]));
+    Eigen::Vector3d diff = Eigen::Vector3d(v[0], v[1], v[2]) - centroid;
+    double d2 = diff.squaredNorm();
+    if (d2 > maxRadiusSq) maxRadiusSq = d2;
   }
   double maxExtent = (maxB - minB).maxCoeff();
 
-  MeshCollisionData result;
-  result.bvh = model;
-  result.centroid = centroid;
-  result.maxExtent = maxExtent;
-  result.vertices.reserve(verts.size());
-  for (auto& v : verts) result.vertices.emplace_back(v[0], v[1], v[2]);
-  result.triangles.reserve(tris.size());
-  for (auto& t : tris) result.triangles.emplace_back(t[0], t[1], t[2]);
+  auto result = std::make_shared<MeshCollisionData>();
+  result->bvh = model;
+  result->centroid = centroid;
+  result->maxExtent = maxExtent;
+  result->aabbMin = minB;
+  result->aabbMax = maxB;
+  result->radius = std::sqrt(maxRadiusSq);
+  result->vertices.reserve(verts.size());
+  for (auto& v : verts) result->vertices.emplace_back(v[0], v[1], v[2]);
+  result->triangles.reserve(tris.size());
+  for (auto& t : tris) result->triangles.emplace_back(t[0], t[1], t[2]);
+  // Pre-create collision object for distance queries
+  result->meshObj = std::make_shared<fcl::CollisionObjectd>(result->bvh, fcl::Transform3d::Identity());
   delete shapeMesh;
+  {
+    std::lock_guard<std::mutex> lk(cacheMutex);
+    cache[uri] = result;
+  }
   return result;
 }
 
 
 bool pointInsideMesh(const MeshCollisionData& meshData, const Eigen::Vector3d& pointInMeshFrame) {
+  // Cheap broad-phase rejections: AABB then bounding sphere
+  if ((pointInMeshFrame.array() < meshData.aabbMin.array()).any() ||
+    (pointInMeshFrame.array() > meshData.aabbMax.array()).any()) {
+    return false;
+  }
+  Eigen::Vector3d rel = pointInMeshFrame - meshData.centroid;
+  if (rel.squaredNorm() > meshData.radius * meshData.radius) {
+    return false;
+  }
   // Ray cast in +X direction using Möller–Trumbore intersection
   const Eigen::Vector3d dir(1, 0, 0);
   int crossings = 0;
@@ -90,13 +126,21 @@ bool pointInsideMesh(const MeshCollisionData& meshData, const Eigen::Vector3d& p
 }
 
 double distanceToMesh(const MeshCollisionData& meshData, const Eigen::Vector3d& pointInMeshFrame) {
-  fcl::CollisionObjectd meshObj(meshData.bvh, fcl::Transform3d::Identity());
-  auto sphere_ptr = std::make_shared<fcl::Sphere<double>>(0.0);
+  if (!meshData.bvh) return std::numeric_limits<double>::infinity();
+  // Lazy create point sphere shape (radius 0)
+  static std::shared_ptr<fcl::Sphere<double>> sphere_ptr = std::make_shared<fcl::Sphere<double>>(0.0);
   fcl::Transform3d pt_tf = fcl::Transform3d::Identity();
   pt_tf.translation() = pointInMeshFrame;
   fcl::CollisionObjectd ptObj(sphere_ptr, pt_tf);
   fcl::DistanceRequestd req;
   fcl::DistanceResultd res;
-  fcl::distance(&meshObj, &ptObj, req, res);
+  const fcl::CollisionObjectd* meshObjPtr = meshData.meshObj ? meshData.meshObj.get() : nullptr;
+  if (!meshObjPtr) {
+    fcl::CollisionObjectd temp(meshData.bvh, fcl::Transform3d::Identity());
+    fcl::distance(&temp, &ptObj, req, res);
+  }
+  else {
+    fcl::distance(meshObjPtr, &ptObj, req, res);
+  }
   return res.min_distance;
 }

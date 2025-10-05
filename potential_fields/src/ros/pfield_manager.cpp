@@ -53,7 +53,7 @@ PotentialFieldManager::PotentialFieldManager()
 
   // Setup marker publisher
   // Use reliable and transient_local QoS for RViz MarkerArray publisher
-  auto markerPubQos = rclcpp::QoS(rclcpp::KeepLast(10))
+  auto markerPubQos = rclcpp::QoS(rclcpp::KeepLast(100))
     .reliable()
     .transient_local();
   this->markerPub = this->create_publisher<MarkerArray>("visualization_marker_array", markerPubQos);

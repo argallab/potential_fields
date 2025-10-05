@@ -5,6 +5,7 @@
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 #include <vector>
+#include <memory>
 #include <stdexcept>
 #include <cmath>
 #include <string>
@@ -137,9 +138,15 @@ public:
     meshResource(meshResource),
     meshScale(meshScale) {
     if (type == ObstacleType::MESH && !meshResource.empty()) {
-      meshCollisionData = loadMesh(meshResource);
-      // Derive margin from scale factor and extent
-      meshInfluenceMargin = (influenceZoneScale - 1.0) * 0.5 * meshCollisionData.maxExtent;
+      try {
+        meshCollisionData = loadMesh(meshResource);
+        if (meshCollisionData) {
+          meshInfluenceMargin = (influenceZoneScale - 1.0) * 0.5 * meshCollisionData->maxExtent;
+        }
+      }
+      catch (const std::exception&) {
+        meshCollisionData.reset();
+      }
     }
   }
 
@@ -155,11 +162,9 @@ public:
     repulsiveGain(other.repulsiveGain),
     meshResource(other.meshResource),
     meshScale(other.meshScale) {
-    if (type == ObstacleType::MESH && !meshResource.empty()) {
-      meshCollisionData = loadMesh(meshResource);
-      // Derive margin from scale factor and extent
-      meshInfluenceMargin = (influenceZoneScale - 1.0) * 0.5 * meshCollisionData.maxExtent;
-    }
+    // Shallow copy of shared mesh data
+    this->meshCollisionData = other.meshCollisionData;
+    this->meshInfluenceMargin = other.meshInfluenceMargin;
   }
 
   PotentialFieldObstacle(PotentialFieldObstacle&& other) noexcept :
@@ -174,11 +179,8 @@ public:
     repulsiveGain(other.repulsiveGain),
     meshResource(std::move(other.meshResource)),
     meshScale(std::move(other.meshScale)) {
-    if (type == ObstacleType::MESH && !meshResource.empty()) {
-      meshCollisionData = loadMesh(meshResource);
-      // Derive margin from scale factor and extent
-      meshInfluenceMargin = (influenceZoneScale - 1.0) * 0.5 * meshCollisionData.maxExtent;
-    }
+    this->meshCollisionData = std::move(other.meshCollisionData);
+    this->meshInfluenceMargin = other.meshInfluenceMargin;
   }
 
   PotentialFieldObstacle& operator=(const PotentialFieldObstacle& other) {
@@ -194,11 +196,8 @@ public:
       this->repulsiveGain = other.repulsiveGain;
       this->meshResource = other.meshResource;
       this->meshScale = other.meshScale;
-      if (type == ObstacleType::MESH && !meshResource.empty()) {
-        this->meshCollisionData = loadMesh(meshResource);
-        // Derive margin from scale factor and extent
-        meshInfluenceMargin = (influenceZoneScale - 1.0) * 0.5 * meshCollisionData.maxExtent;
-      }
+      this->meshCollisionData = other.meshCollisionData; // share existing (may be null)
+      this->meshInfluenceMargin = other.meshInfluenceMargin;
     }
     return *this;
   }
@@ -244,7 +243,7 @@ private:
   double repulsiveGain; // Gain for the repulsive force
   std::string meshResource; // URI or file path to the mesh resource (e.g., package://, file://)
   Eigen::Vector3d meshScale; // Scale for mesh visualization if using MESH_RESOURCE
-  MeshCollisionData meshCollisionData; // populated when mesh resource loaded
+  std::shared_ptr<MeshCollisionData> meshCollisionData; // populated when mesh resource loaded (shared to avoid deep copies)
   double meshInfluenceMargin = 0.0; // Additional margin for mesh influence zone
 
   /**

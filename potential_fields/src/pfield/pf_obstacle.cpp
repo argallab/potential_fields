@@ -26,16 +26,13 @@ bool PotentialFieldObstacle::withinInfluenceZone(Eigen::Vector3d pos) const {
       std::abs(localPos.z()) <= (this->geometry.height * this->influenceZoneScale / 2.0);
   }
   case ObstacleType::MESH: {
-    // Inside test first (triangles stored inside meshCollisionData if available)
-    if (!this->meshCollisionData.triangles.empty() &&
-      pointInsideMesh(this->meshCollisionData, localPos)) {
+    if (!this->meshCollisionData) return false;
+    // Inside test first
+    if (!this->meshCollisionData->triangles.empty() &&
+      pointInsideMesh(*this->meshCollisionData, localPos)) {
       return true;
     }
-    // Distance test with influence margin
-    Eigen::Isometry3d world_T_mesh = Eigen::Isometry3d::Identity();
-    world_T_mesh.translate(this->position);
-    world_T_mesh.rotate(this->orientation);
-    double dist = distanceToMesh(this->meshCollisionData, localPos);
+    double dist = distanceToMesh(*this->meshCollisionData, localPos);
     return dist <= this->meshInfluenceMargin;
   }
   default:
@@ -62,7 +59,8 @@ bool PotentialFieldObstacle::withinObstacle(Eigen::Vector3d pos) const {
       std::abs(localPos.z()) <= (this->geometry.height / 2.0);
   }
   case ObstacleType::MESH: {
-    return pointInsideMesh(this->meshCollisionData, localPos);
+    if (!this->meshCollisionData) return false;
+    return pointInsideMesh(*this->meshCollisionData, localPos);
   }
   default:
     // return false;
