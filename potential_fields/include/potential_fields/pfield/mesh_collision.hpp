@@ -1,8 +1,12 @@
 #ifndef MESH_COLLISION_HPP
 #define MESH_COLLISION_HPP
-#include <Eigen/Core>
-#include <vector>
+
+#include <memory>
 #include <string>
+#include <utility>
+#include <vector>
+
+#include <Eigen/Core>
 #include <fcl/fcl.h>
 
 struct MeshCollisionData {

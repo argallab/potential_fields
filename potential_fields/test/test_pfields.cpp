@@ -6,12 +6,30 @@
 
 TEST(PotentialFieldTest, AddAndRemoveObstacles) {
   PotentialField pf;
-  PotentialFieldObstacle o1("o1", Eigen::Vector3d(1.0f, 1.0f, 1.0f), Eigen::Quaterniond::Identity(), ObstacleType::SPHERE, ObstacleGroup::STATIC, ObstacleGeometry{1.0f, 0.0f, 0.0f, 0.0f}, 2.0f, 10.0f);
+  PotentialFieldObstacle o1(
+    "o1",
+    Eigen::Vector3d(1.0f, 1.0f, 1.0f),
+    Eigen::Quaterniond::Identity(),
+    ObstacleType::SPHERE,
+    ObstacleGroup::STATIC,
+    ObstacleGeometry{1.0f, 0.0f, 0.0f, 0.0f},
+    2.0f,
+    10.0f
+  );
   pf.addObstacle(o1);
   EXPECT_EQ(pf.getObstacles().size(), 1);
 
   // Overwrite same ID
-  PotentialFieldObstacle o1b("o1", Eigen::Vector3d(2.0f, 2.0f, 2.0f), Eigen::Quaterniond::Identity(), ObstacleType::SPHERE, ObstacleGroup::STATIC, ObstacleGeometry{1.5f, 0.0f, 0.0f, 0.0f}, 2.5f, 12.0f);
+  PotentialFieldObstacle o1b(
+    "o1",
+    Eigen::Vector3d(2.0f, 2.0f, 2.0f),
+    Eigen::Quaterniond::Identity(),
+    ObstacleType::SPHERE,
+    ObstacleGroup::STATIC,
+    ObstacleGeometry{1.5f, 0.0f, 0.0f, 0.0f},
+    2.5f,
+    12.0f
+  );
   pf.addObstacle(o1b);
   EXPECT_EQ(pf.getObstacles().size(), 1);
   EXPECT_EQ(pf.getObstacles()[0].getType(), ObstacleType::SPHERE);
@@ -23,7 +41,16 @@ TEST(PotentialFieldTest, AddAndRemoveObstacles) {
   EXPECT_EQ(pf.getObstacles()[0].getRepulsiveGain(), 12.0f);
 
   // Add another and remove
-  pf.addObstacle(PotentialFieldObstacle("o2", Eigen::Vector3d(-1.0f, -1.0f, 0.0f), Eigen::Quaterniond::Identity(), ObstacleType::BOX, ObstacleGroup::STATIC, ObstacleGeometry{1.0f, 2.0f, 8.0f, 1.0f}, 2.0f, 8.0f));
+  pf.addObstacle(PotentialFieldObstacle(
+    "o2",
+    Eigen::Vector3d(-1.0f, -1.0f, 0.0f),
+    Eigen::Quaterniond::Identity(),
+    ObstacleType::BOX,
+    ObstacleGroup::STATIC,
+    ObstacleGeometry{1.0f, 2.0f, 8.0f, 1.0f},
+    2.0f,
+    8.0f
+  ));
   EXPECT_EQ(pf.getObstacles().size(), 2);
   EXPECT_TRUE(pf.removeObstacle("o2"));
   EXPECT_FALSE(pf.removeObstacle("o99"));  // nonexistent
@@ -32,8 +59,26 @@ TEST(PotentialFieldTest, AddAndRemoveObstacles) {
 
 TEST(PotentialFieldTest, ClearObstacles) {
   PotentialField pf;
-  pf.addObstacle(PotentialFieldObstacle("o1", Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity(), ObstacleType::SPHERE, ObstacleGroup::STATIC, ObstacleGeometry{2.0, 0.0, 0.0, 0.0}, 2.0, 10.0f));
-  pf.addObstacle(PotentialFieldObstacle("o2", Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity(), ObstacleType::SPHERE, ObstacleGroup::STATIC, ObstacleGeometry{2.0, 0.0, 0.0, 0.0}, 2.0, 10.0f));
+  pf.addObstacle(PotentialFieldObstacle(
+    "o1",
+    Eigen::Vector3d::Zero(),
+    Eigen::Quaterniond::Identity(),
+    ObstacleType::SPHERE,
+    ObstacleGroup::STATIC,
+    ObstacleGeometry{2.0, 0.0, 0.0, 0.0},
+    2.0,
+    10.0f
+  ));
+  pf.addObstacle(PotentialFieldObstacle(
+    "o2",
+    Eigen::Vector3d::Zero(),
+    Eigen::Quaterniond::Identity(),
+    ObstacleType::SPHERE,
+    ObstacleGroup::STATIC,
+    ObstacleGeometry{2.0, 0.0, 0.0, 0.0},
+    2.0,
+    10.0f
+  ));
   pf.clearObstacles();
   EXPECT_TRUE(pf.getObstacles().empty());
 }
@@ -69,9 +114,36 @@ TEST(PotentialFieldTest, AttractiveGainScaling) {
 TEST(PotentialFieldTest, RepulsiveFieldPushesAwayFromObstacle) {
   Eigen::Vector3d goalPosition(0.0f, 0.0f, 0.0f);
   PotentialField pf(SpatialVector(goalPosition), 0.0f, 0.0f);  // no attraction
-  auto sphereObst = PotentialFieldObstacle("o0", goalPosition, Eigen::Quaterniond::Identity(), ObstacleType::SPHERE, ObstacleGroup::STATIC, ObstacleGeometry{2.0,0.0,0.0,0.0}, 2.0f, 10.0f);
-  auto boxObst = PotentialFieldObstacle("o1", goalPosition, Eigen::Quaterniond::Identity(), ObstacleType::BOX, ObstacleGroup::STATIC, ObstacleGeometry{2.0, 2.0, 2.0, 0.0}, 2.0f, 10.0f);
-  auto cylinderObst = PotentialFieldObstacle("o2", goalPosition, Eigen::Quaterniond::Identity(), ObstacleType::CYLINDER, ObstacleGroup::STATIC, ObstacleGeometry{1.0, 0.0, 0.0, 2.0}, 2.0f, 10.0f);
+  auto sphereObst = PotentialFieldObstacle(
+    "o0",
+    goalPosition,
+    Eigen::Quaterniond::Identity(),
+    ObstacleType::SPHERE,
+    ObstacleGroup::STATIC,
+    ObstacleGeometry{2.0, 0.0, 0.0, 0.0},
+    2.0f,
+    10.0f
+  );
+  auto boxObst = PotentialFieldObstacle(
+    "o1",
+    goalPosition,
+    Eigen::Quaterniond::Identity(),
+    ObstacleType::BOX,
+    ObstacleGroup::STATIC,
+    ObstacleGeometry{2.0, 2.0, 2.0, 0.0},
+    2.0f,
+    10.0f
+  );
+  auto cylinderObst = PotentialFieldObstacle(
+    "o2",
+    goalPosition,
+    Eigen::Quaterniond::Identity(),
+    ObstacleType::CYLINDER,
+    ObstacleGroup::STATIC,
+    ObstacleGeometry{1.0, 0.0, 0.0, 2.0},
+    2.0f,
+    10.0f
+  );
   pf.addObstacle(sphereObst);
   SpatialVector query(Eigen::Vector3d(1.0, 0.0, 0.0));
   SpatialVector vel = pf.evaluateVelocityAtPose(query);
@@ -183,7 +255,16 @@ TEST(PotentialFieldTest, NearZeroDistanceAttraction) {
 
 TEST(PotentialFieldTest, RepulsionAtSurfaceBoundary) {
   PotentialField pf(SpatialVector(Eigen::Vector3d(10.0f, 10.0f, 10.0f)), 0.0f, 0.0f);
-  PotentialFieldObstacle obs("o1", Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity(), ObstacleType::SPHERE, ObstacleGroup::STATIC, ObstacleGeometry{1.0,0.0,0.0,0.0}, 2.0f, 10.0f);
+  PotentialFieldObstacle obs(
+    "o1",
+    Eigen::Vector3d::Zero(),
+    Eigen::Quaterniond::Identity(),
+    ObstacleType::SPHERE,
+    ObstacleGroup::STATIC,
+    ObstacleGeometry{1.0, 0.0, 0.0, 0.0},
+    2.0f,
+    10.0f
+  );
   pf.addObstacle(obs);
   SpatialVector query(Eigen::Vector3d(2.0f, 0.0f, 0.0f));  // At influence radius
   SpatialVector v = pf.evaluateVelocityAtPose(query);
@@ -222,11 +303,25 @@ TEST(PotentialFieldTest, SymmetricObstaclesCancelAxes) {
   SpatialVector goal; // Default goal at origin
   PotentialField pf(goal, 0.0, 0.0);
   pf.addObstacle(PotentialFieldObstacle(
-    "o1", Eigen::Vector3d(-1, 0, 0), Eigen::Quaterniond::Identity(), ObstacleType::SPHERE, ObstacleGroup::STATIC, ObstacleGeometry{0.5, 0.0, 0.0, 0.0}, 6.0, 5.0)
-  );
+    "o1",
+    Eigen::Vector3d(-1, 0, 0),
+    Eigen::Quaterniond::Identity(),
+    ObstacleType::SPHERE,
+    ObstacleGroup::STATIC,
+    ObstacleGeometry{0.5, 0.0, 0.0, 0.0},
+    6.0,
+    5.0
+  ));
   pf.addObstacle(PotentialFieldObstacle(
-    "o2", Eigen::Vector3d(1, 0, 0), Eigen::Quaterniond::Identity(), ObstacleType::SPHERE, ObstacleGroup::STATIC, ObstacleGeometry{0.5, 0.0, 0.0, 0.0}, 6.0, 5.0)
-  );
+    "o2",
+    Eigen::Vector3d(1, 0, 0),
+    Eigen::Quaterniond::Identity(),
+    ObstacleType::SPHERE,
+    ObstacleGroup::STATIC,
+    ObstacleGeometry{0.5, 0.0, 0.0, 0.0},
+    6.0,
+    5.0
+  ));
   SpatialVector q(Eigen::Vector3d(0, 2.0, 0));  // directly above both
   auto vel = pf.evaluateVelocityAtPose(q);
   // x‐components should cancel, only y‐component remains

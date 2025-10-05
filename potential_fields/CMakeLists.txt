@@ -148,6 +148,11 @@ if(BUILD_TESTING)
   )
   target_link_libraries(test_pfields pfield_lib)
 
+  ament_add_gtest(test_mesh_obstacle
+    test/test_mesh_obstacle.cpp
+  )
+  target_link_libraries(test_mesh_obstacle pfield_lib)
+
   install(
     TARGETS test_spatial_vector
     DESTINATION lib/${PROJECT_NAME}
@@ -158,11 +163,19 @@ if(BUILD_TESTING)
     DESTINATION lib/${PROJECT_NAME}
   )
 
+  install(
+    TARGETS test_mesh_obstacle
+    DESTINATION lib/${PROJECT_NAME}
+  )
+
   find_package(ament_cmake_cpplint REQUIRED)
   # Runs cpplint over your C/C++ sources as a CTest
   ament_cpplint(
     EXCLUDE
+    include/potential_fields/robot_plugins/examples_common.h
     include/potential_fields/robot_plugins/geofik.h
+    src/robot_plugins/geofik.cpp
+    src/robot_plugins/examples_common.cpp
   )
 
   # the following line skips the linter which checks for copyrights
