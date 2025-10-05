@@ -17,6 +17,7 @@
 #include "nav_msgs/msg/path.hpp"
 #include "visualization_msgs/msg/marker.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
+#include "sensor_msgs/msg/joint_state.hpp"
 
 #include "potential_fields_interfaces/msg/obstacle.hpp"
 #include "potential_fields_interfaces/msg/obstacle_array.hpp"
@@ -43,6 +44,7 @@ using Obstacle = potential_fields_interfaces::msg::Obstacle;
 using ObstacleArray = potential_fields_interfaces::msg::ObstacleArray;
 using PlanPath = potential_fields_interfaces::srv::PlanPath;
 using ComputeAutonomyVector = potential_fields_interfaces::srv::ComputeAutonomyVector;
+using JointState = sensor_msgs::msg::JointState;
 
 class PotentialFieldManager : public rclcpp::Node {
 public:
@@ -71,32 +73,16 @@ private:
   double visualizerBufferArea; // Extra area around obstacles and goal to visualize the PF [m]
   double fieldResolution; // Resolution of the potential field grid [m]
 
-  // Timer to periodically update the potential field
-  rclcpp::TimerBase::SharedPtr timer;
-
-  // Dynamic transform broadcaster
-  std::shared_ptr<tf2_ros::TransformBroadcaster> dynamicTfBroadcaster;
-
-  // TF buffer
-  std::shared_ptr<tf2_ros::Buffer> tfBuffer;
-
-  // TF Listener
-  std::shared_ptr<tf2_ros::TransformListener> tfListener;
-
-  // Publisher for visualization markers
-  rclcpp::Publisher<MarkerArray>::SharedPtr markerPub;
-
-  // Subscriber for the goal pose
-  rclcpp::Subscription<PoseStamped>::SharedPtr goalPoseSub;
-
-  // Subscriber for obstacles
-  rclcpp::Subscription<ObstacleArray>::SharedPtr obstacleSub;
-
-  // Service to obtain a path from a query point to the goal
-  rclcpp::Service<PlanPath>::SharedPtr pathPlanningService;
-
-  // Service to compute the autonomy vector at a given pose
-  rclcpp::Service<ComputeAutonomyVector>::SharedPtr autonomyVectorService;
+  rclcpp::TimerBase::SharedPtr timer; // Timer to periodically update the potential field
+  std::shared_ptr<tf2_ros::TransformBroadcaster> dynamicTfBroadcaster; // Dynamic transform broadcaster
+  std::shared_ptr<tf2_ros::Buffer> tfBuffer; // TF buffer for transform lookups
+  std::shared_ptr<tf2_ros::TransformListener> tfListener; // TF Listener for populating the TF buffer
+  rclcpp::Publisher<JointState>::SharedPtr planningJointStatePub; // Publisher for planning-copy of JointStates
+  rclcpp::Publisher<MarkerArray>::SharedPtr markerPub; // Publisher for visualization markers
+  rclcpp::Subscription<PoseStamped>::SharedPtr goalPoseSub; // Subscriber for the goal pose
+  rclcpp::Subscription<ObstacleArray>::SharedPtr obstacleSub; // Subscriber for obstacles
+  rclcpp::Service<PlanPath>::SharedPtr pathPlanningService; // Service to obtain a path from a query point to the goal
+  rclcpp::Service<ComputeAutonomyVector>::SharedPtr autonomyVectorService; // Service to compute velocity vector at a given pose
 
   /**
    * @brief Interpolates a path from a start pose to the goal pose.

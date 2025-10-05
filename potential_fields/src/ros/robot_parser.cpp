@@ -22,6 +22,8 @@ RobotParser::RobotParser() : Node("robot_parser") {
     .best_effort()
     .durability_volatile();
   this->obstaclePub = this->create_publisher<ObstacleArray>("pfield/obstacles", qos);
+  this->planningObstaclePub = this->create_publisher<ObstacleArray>("pfield/planning_obstacles", qos);
+  this->planningRobotDescriptionPub = this->create_publisher<std_msgs::msg::String>("pfield/planning_robot_description", 1);
 
   // Setup TF2 broadcaster, buffer, and listener
   this->dynamicTfBroadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(this);
@@ -36,10 +38,17 @@ RobotParser::RobotParser() : Node("robot_parser") {
   }
   else {
     this->modelLoaded = true;
-    this->buildCollisionCatalog();
-    RCLCPP_INFO(this->get_logger(), "URDF model loaded: %zu collision elements cached", this->collisions.size());
+    // Publish the planning robot description (with modified collision, link, and joint names)
+    const std::string planningRobotDesc = this->createPlanningRobotDescription(this->robotDescription);
+    std_msgs::msg::String planningRobotDescMsg;
+    planningRobotDescMsg.data = planningRobotDesc;
+    this->planningRobotDescriptionPub->publish(planningRobotDescMsg);
+    this->planningRobotModel.initString(planningRobotDesc);
+    this->collisionCatalog = this->buildCollisionCatalog(this->robotModel, false);
+    this->planningCollisionCatalog = this->buildCollisionCatalog(this->planningRobotModel, true);
+    RCLCPP_INFO(this->get_logger(), "URDF model loaded: %zu collision elements cached", this->collisionCatalog.size());
     // Emit a one-time detailed listing of expected collision-derived obstacles
-    for (const auto& entry : this->collisions) {
+    for (const auto& entry : this->collisionCatalog) {
       if (!entry.col || !entry.col->geometry) {
         RCLCPP_WARN(this->get_logger(), "Collision entry '%s' has no geometry", entry.id.c_str());
         continue;
@@ -49,27 +58,31 @@ RobotParser::RobotParser() : Node("robot_parser") {
       else if (dynamic_cast<urdf::Sphere*>(entry.col->geometry.get())) gType = "Sphere";
       else if (dynamic_cast<urdf::Cylinder*>(entry.col->geometry.get())) gType = "Cylinder";
       else if (dynamic_cast<urdf::Mesh*>(entry.col->geometry.get())) gType = "Mesh";
-      RCLCPP_INFO(this->get_logger(), "Catalog: id=%s link=%s type=%s", entry.id.c_str(), entry.link_name.c_str(), gType.c_str());
+      RCLCPP_INFO(this->get_logger(), "Catalog: id=%s link=%s type=%s", entry.id.c_str(), entry.linkName.c_str(), gType.c_str());
     }
+    RCLCPP_INFO(this->get_logger(), "Robot has %zu links", this->robotModel.links_.size());
   }
-  const size_t numLinks = this->robotModel.links_.size();
-  RCLCPP_INFO(this->get_logger(), "Robot has %zu links", numLinks);
 
-  // Before we start the timer, ensure we can use TF
-  while (!this->tfBuffer->canTransform(this->fixedFrame, this->fixedFrame, tf2::TimePointZero, tf2::durationFromSec(0.1))) {}
+  if (!this->modelLoaded) {
+    RCLCPP_ERROR(this->get_logger(), "RobotParser failed to load URDF Model, shutting down node...");
+    rclcpp::shutdown();
+  }
+  else {
+    // Before we start the timer, ensure we can use TF
+    while (!this->tfBuffer->canTransform(this->fixedFrame, this->fixedFrame, tf2::TimePointZero, tf2::durationFromSec(0.1))) {}
 
-  // Run the timer to periodically update the robot state
-  this->timer = this->create_wall_timer(
-    std::chrono::duration<double>(1.0 / this->robotUpdateFrequency),
-    std::bind(&RobotParser::timerCallback, this)
-  );
+    // Run the timer to periodically update the robot state
+    this->timer = this->create_wall_timer(
+      std::chrono::duration<double>(1.0 / this->robotUpdateFrequency),
+      std::bind(&RobotParser::timerCallback, this)
+    );
+  }
 }
 
 void RobotParser::timerCallback() {
-  if (!this->modelLoaded) {
-    return;
-  }
-  std::vector<Obstacle> obstacles = this->extractObstaclesFromCatalog();
+  if (!this->modelLoaded) { return; }
+  // Publish Obstacles from Robot Collision Geometry (Using links in the Catalog we already built)
+  std::vector<Obstacle> obstacles = this->extractObstaclesFromCatalog(this->collisionCatalog);
   ObstacleArray obstacleArray;
   obstacleArray.header.frame_id = this->fixedFrame;
   obstacleArray.header.stamp = this->get_clock()->now();
@@ -77,33 +90,43 @@ void RobotParser::timerCallback() {
     obstacleArray.obstacles.push_back(obstacle);
   }
   this->obstaclePub->publish(obstacleArray);
+
+  // Publish Obstacles for Planning (with "planning::" prefix in the id)
+  std::vector<Obstacle> planningObstacles = this->extractObstaclesFromCatalog(this->planningCollisionCatalog);
+  ObstacleArray planningObstacleArray;
+  planningObstacleArray.header.frame_id = this->fixedFrame;
+  planningObstacleArray.header.stamp = this->get_clock()->now();
+  for (const auto& obstacle : planningObstacles) {
+    planningObstacleArray.obstacles.push_back(obstacle);
+  }
+  this->planningObstaclePub->publish(planningObstacleArray);
 }
 
-std::vector<Obstacle> RobotParser::extractObstaclesFromCatalog() {
+std::vector<Obstacle> RobotParser::extractObstaclesFromCatalog(const std::vector<CollisionCatalogEntry>& catalog) {
   std::vector<Obstacle> collisionObjects;
-  collisionObjects.reserve(this->collisions.size());
+  collisionObjects.reserve(catalog.size());
   // Collect unique link names first
   std::unordered_map<std::string, Eigen::Affine3d> linkPoses;
-  linkPoses.reserve(this->collisions.size());
+  linkPoses.reserve(catalog.size());
   size_t tfSuccess = 0, tfFail = 0;
   rclcpp::Time queryTime(0, 0, this->get_clock()->get_clock_type());
-  for (const auto& entry : this->collisions) {
-    if (linkPoses.find(entry.link_name) != linkPoses.end()) continue; // already looked up
+  for (const auto& entry : catalog) {
+    if (linkPoses.find(entry.linkName) != linkPoses.end()) continue; // already looked up
     try {
-      auto tf = this->tfBuffer->lookupTransform(this->fixedFrame, entry.link_name, tf2::TimePointZero);
-      linkPoses.emplace(entry.link_name, tf2::transformToEigen(tf.transform));
+      auto tf = this->tfBuffer->lookupTransform(this->fixedFrame, entry.linkName, tf2::TimePointZero);
+      linkPoses.emplace(entry.linkName, tf2::transformToEigen(tf.transform));
       tfSuccess++;
     }
     catch (const tf2::TransformException& ex) {
       tfFail++;
       // Only warn occasionally to avoid spam but still surface systemic issues
       RCLCPP_DEBUG(this->get_logger(),
-        "Failed to find TF (%s -> %s): %s", this->fixedFrame.c_str(), entry.link_name.c_str(), ex.what());
+        "Failed to find TF (%s -> %s): %s", this->fixedFrame.c_str(), entry.linkName.c_str(), ex.what());
     }
   }
   // Build obstacles for links whose transforms we obtained
-  for (const auto& entry : this->collisions) {
-    auto it = linkPoses.find(entry.link_name);
+  for (const auto& entry : this->collisionCatalog) {
+    auto it = linkPoses.find(entry.linkName);
     if (it == linkPoses.end()) continue;
     const urdf::Pose& origin = entry.col->origin;
     Eigen::Affine3d link_T_col =
@@ -119,23 +142,33 @@ std::vector<Obstacle> RobotParser::extractObstaclesFromCatalog() {
   return collisionObjects;
 }
 
-void RobotParser::buildCollisionCatalog() {
-  this->collisions.clear();
-  for (const auto& [link_name, link] : this->robotModel.links_) {
+std::vector<CollisionCatalogEntry> RobotParser::buildCollisionCatalog(urdf::Model& model, bool forPlanning) {
+  std::vector<CollisionCatalogEntry> catalog;
+  for (const auto& [link_name, link] : model.links_) {
     if (!link) { continue; }
 
     auto add_one = [&](const urdf::CollisionSharedPtr& col_ptr, size_t index) {
       if (!col_ptr || !col_ptr->geometry) { return; }
-      CollisionEntry e;
-      e.link_name = link_name;
+      CollisionCatalogEntry e;
+      e.linkName = link_name;
       if (!col_ptr->name.empty()) {
-        e.id = link_name + "::" + col_ptr->name;
+        if (forPlanning) {
+          e.id = "planning::" + link_name + "::" + col_ptr->name;
+        }
+        else {
+          e.id = link_name + "::" + col_ptr->name;
+        }
       }
       else {
-        e.id = link_name + "::col" + std::to_string(index);
+        if (forPlanning) {
+          e.id = "planning::" + link_name + "::col" + std::to_string(index);
+        }
+        else {
+          e.id = link_name + "::col" + std::to_string(index);
+        }
       }
       e.col = col_ptr;
-      this->collisions.push_back(std::move(e));
+      catalog.push_back(std::move(e));
     };
 
     if (!link->collision_array.empty()) {
@@ -147,6 +180,7 @@ void RobotParser::buildCollisionCatalog() {
       add_one(link->collision, 0);
     }
   }
+  return catalog;
 }
 
 Obstacle RobotParser::obstacleFromCollisionObject(
@@ -211,6 +245,15 @@ Obstacle RobotParser::obstacleFromCollisionObject(
     obstacle.scale_z = 1.0f;
   }
   return obstacle;
+}
+
+std::string RobotParser::createPlanningRobotDescription(const std::string& originalRobotDescription) {
+  // From the original RD, create a copy robot that we can use for planning
+  // We need a copy of the joints for a planning-JSP to publish joints to
+  // We need a copy of the TF frames (links) for the RobotParser to listen to and update the obstacles for
+  // This function will simply create the planning RD that we can publish to a planning/robot_description topic
+  // RobotParser will need to listen to the planning TF Tree to pfield/planning/obstacles
+  // So we will need a robot catalog (real robot) and a planning catalog (planning copy robot)
 }
 
 
