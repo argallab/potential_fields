@@ -6,6 +6,8 @@ pfield_manager:
     repulsive_gain: 20.0 # [Ns/m]
     max_force: 10.0 # [N]
     influence_zone_scale: 2.0 # Influence zone scaling factor
+    visualizer_buffer_area: 1.0 # Extra area around obstacles and goal to visualize the PF [m]
+    field_resolution: 0.5 # Resolution to show PF velocity arrows in RViz [m]
 robot_parser:
   ros__parameters:
     robot_geometry_update_frequency: 100.0 # [Hz]

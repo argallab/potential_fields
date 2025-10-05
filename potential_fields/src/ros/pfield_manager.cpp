@@ -33,6 +33,8 @@ PotentialFieldManager::PotentialFieldManager()
   this->maxForce = this->declare_parameter("max_force", 10.0f); // [N]
   this->influenceZoneScale = this->declare_parameter("influence_zone_scale", 2.0f); // Influence zone scaling factor
   this->fixedFrame = this->declare_parameter("fixed_frame", "world"); // RViz fixed frame
+  this->visualizerBufferArea = this->declare_parameter("visualizer_buffer_area", 1.0f); // Extra area around obstacles and goal to visualize the PF [m]
+  this->fieldResolution = this->declare_parameter("field_resolution", 0.5f); // Resolution of the potential field grid [m]
   // Get parameters from yaml file
   this->visualizerFrequency = this->get_parameter("visualize_pf_frequency").as_double();
   this->attractiveGain = this->get_parameter("attractive_gain").as_double();
@@ -41,6 +43,8 @@ PotentialFieldManager::PotentialFieldManager()
   this->maxForce = this->get_parameter("max_force").as_double();
   this->influenceZoneScale = this->get_parameter("influence_zone_scale").as_double();
   this->fixedFrame = this->get_parameter("fixed_frame").as_string();
+  this->visualizerBufferArea = this->get_parameter("visualizer_buffer_area").as_double();
+  this->fieldResolution = this->get_parameter("field_resolution").as_double();
 
   // Initialize the potential field
   this->pField = PotentialField(this->attractiveGain, this->rotationalAttractiveGain);
@@ -75,7 +79,7 @@ PotentialFieldManager::PotentialFieldManager()
   );
 
   // Setup obstacle subscriber
-  auto obstacleSubQos = rclcpp::QoS(rclcpp::KeepLast(10)).best_effort().durability_volatile();
+  auto obstacleSubQos = rclcpp::QoS(rclcpp::KeepLast(100)).best_effort().durability_volatile();
   this->obstacleSub = this->create_subscription<ObstacleArray>("pfield/obstacles", obstacleSubQos,
     [this](const ObstacleArray::SharedPtr msg) {
     const auto& obstacles = msg->obstacles;
@@ -105,7 +109,8 @@ PotentialFieldManager::PotentialFieldManager()
     // Interpolate the path from the start pose to the goal pose
     SpatialVector startPose(
       Eigen::Vector3d(
-        request->start.pose.position.x, request->start.pose.position.y,
+        request->start.pose.position.x,
+        request->start.pose.position.y,
         request->start.pose.position.z
       ),
       Eigen::Quaterniond(
@@ -128,7 +133,8 @@ PotentialFieldManager::PotentialFieldManager()
     // Compute the autonomy vector at the given pose
     SpatialVector queryPose(
       Eigen::Vector3d(
-        request->start.pose.position.x, request->start.pose.position.y,
+        request->start.pose.position.x,
+        request->start.pose.position.y,
         request->start.pose.position.z
       ),
       Eigen::Quaterniond(
@@ -210,6 +216,55 @@ Path PotentialFieldManager::interpolatePath(const SpatialVector& start, double d
     path.poses.push_back(newPose);
   }
   return path;
+}
+
+void PotentialFieldManager::getPFLimits(double& minX, double& maxX, double& minY, double& maxY, double& minZ, double& maxZ) {
+  // Determine the limits of the potential field based on obstacle positions and goal position
+  auto obstacles = this->pField.getObstacles();
+  Eigen::Vector3d goalPos = this->pField.getGoalPose().getPosition();
+  if (obstacles.empty()) {
+    // If no obstacles, set limits around the goal position
+    minX = goalPos.x();
+    maxX = goalPos.x();
+    minY = goalPos.y();
+    maxY = goalPos.y();
+    minZ = goalPos.z();
+    maxZ = goalPos.z();
+  }
+  else {
+    // Initialize limits based on the first obstacle
+    Eigen::Vector3d firstPos = obstacles[0].getPosition();
+    minX = firstPos.x();
+    maxX = firstPos.x();
+    minY = firstPos.y();
+    maxY = firstPos.y();
+    minZ = firstPos.z();
+    maxZ = firstPos.z();
+    // Iterate through obstacles to find overall min/max
+    for (const auto& obst : obstacles) {
+      Eigen::Vector3d pos = obst.getPosition();
+      if (pos.x() < minX) minX = pos.x();
+      if (pos.x() > maxX) maxX = pos.x();
+      if (pos.y() < minY) minY = pos.y();
+      if (pos.y() > maxY) maxY = pos.y();
+      if (pos.z() < minZ) minZ = pos.z();
+      if (pos.z() > maxZ) maxZ = pos.z();
+    }
+    // Expand limits to include the goal position if outside current bounds
+    if (goalPos.x() < minX) minX = goalPos.x();
+    if (goalPos.x() > maxX) maxX = goalPos.x();
+    if (goalPos.y() < minY) minY = goalPos.y();
+    if (goalPos.y() > maxY) maxY = goalPos.y();
+    if (goalPos.z() < minZ) minZ = goalPos.z();
+    if (goalPos.z() > maxZ) maxZ = goalPos.z();
+  }
+  // Increase the limits by a buffer area for better visualization
+  minX -= this->visualizerBufferArea;
+  maxX += this->visualizerBufferArea;
+  minY -= this->visualizerBufferArea;
+  maxY += this->visualizerBufferArea;
+  minZ -= this->visualizerBufferArea;
+  maxZ += this->visualizerBufferArea;
 }
 
 void PotentialFieldManager::visualizePF() {
@@ -429,15 +484,11 @@ MarkerArray PotentialFieldManager::createPotentialVectorMarkers() {
   int id = 0;
   // TODO: Decide limits based on farthest entity in the field
   // TODO: Parameterize these limits and resolution
-  const double lowerLimit = -5.0f; // Lower limit of the grid
-  const double upperLimit = 5.0f; // Upper limit of the grid
-  const double fieldResolution = 0.5f; // Resolution of the grid
-  const double Z = this->pField.getGoalPose().getPosition().z();
-  for (double x = lowerLimit; x <= upperLimit; x += fieldResolution) {
-    for (double y = lowerLimit; y <= upperLimit; y += fieldResolution) {
-      for (double z = lowerLimit; z <= upperLimit; z += fieldResolution) {
-        // Skip the Z-axis since we are only interested in the XY plane for now
-        if (std::abs(z - Z) > 1e-6) { continue; }
+  double minX, maxX, minY, maxY, minZ, maxZ;
+  this->getPFLimits(minX, maxX, minY, maxY, minZ, maxZ);
+  for (double x = minX; x <= maxX; x += this->fieldResolution) {
+    for (double y = minY; y <= maxY; y += this->fieldResolution) {
+      for (double z = minZ; z <= maxZ; z += this->fieldResolution) {
         // Skip any points that are inside obstacle radius
         Eigen::Vector3d point(x, y, z);
         if (this->pField.isPointInsideObstacle(point)) { continue; }

@@ -61,8 +61,10 @@ private:
   std::string fixedFrame; // RViz fixed frame for visualization and PF computation
   PotentialField pField; // Potential field instance
   PotentialField planningPField; // PF instance for path planning
+  double visualizerBufferArea; // Extra area around obstacles and goal to visualize the PF [m]
+  double fieldResolution; // Resolution of the potential field grid [m]
 
-  // Timer to perodically update the potential field
+  // Timer to periodically update the potential field
   rclcpp::TimerBase::SharedPtr timer;
 
   // Dynamic transform broadcaster
@@ -101,6 +103,8 @@ private:
    * @return Path The interpolated path from start to goal
    */
   Path interpolatePath(const SpatialVector& start, double deltaTime, double goalTolerance);
+
+  void getPFLimits(double& minX, double& maxX, double& minY, double& maxY, double& minZ, double& maxZ);
 
   void visualizePF();
   MarkerArray createObstacleMarkers();
