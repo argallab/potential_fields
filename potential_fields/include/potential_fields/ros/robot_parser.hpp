@@ -95,6 +95,12 @@ private:
     const Eigen::Vector3d& position, const Eigen::Quaterniond& orientation);
 
   std::string createPlanningRobotDescription(const std::string& originalRobotDescription);
+
+  // Helper: write text content to a file (logs success/failure)
+  void writeTextFile(const std::string& path, const std::string& contents, const std::string& label);
+  // Helper: dump both original & planning robot descriptions for inspection
+  void dumpRobotDescriptions(const std::string& original, const std::string& planning,
+    const std::string& originalPath, const std::string& planningPath);
 };
 
 #endif // ROBOT_PARSER_HP

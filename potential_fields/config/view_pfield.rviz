@@ -4,11 +4,10 @@ Panels:
     Name: Displays
     Property Tree Widget:
       Expanded:
-        - /Global Options1
-        - /Status1
-        - /MarkerArray1/Namespaces1
+        - /Real Potential Field1/Namespaces1
+        - /Planning Potential Field1/Namespaces1
         - /TF1/Frames1
-      Splitter Ratio: 0.5
+      Splitter Ratio: 0.6411764621734619
     Tree Height: 707
   - Class: rviz_common/Selection
     Name: Selection
@@ -32,7 +31,7 @@ Visualization Manager:
   Class: ""
   Displays:
     - Alpha: 0.5
-      Cell Size: 1
+      Cell Size: 0.5
       Class: rviz_default_plugins/Grid
       Color: 160; 160; 164
       Enabled: true
@@ -51,7 +50,7 @@ Visualization Manager:
       Value: true
     - Class: rviz_default_plugins/MarkerArray
       Enabled: true
-      Name: MarkerArray
+      Name: Real Potential Field
       Namespaces:
         goal: true
         obstacle: true
@@ -62,7 +61,22 @@ Visualization Manager:
         Durability Policy: Volatile
         History Policy: Keep Last
         Reliability Policy: Reliable
-        Value: /visualization_marker_array
+        Value: /pfield/markers
+      Value: true
+    - Class: rviz_default_plugins/MarkerArray
+      Enabled: true
+      Name: Planning Potential Field
+      Namespaces:
+        goal: false
+        obstacle: true
+        obstacle_influence: true
+        potential_vectors: false
+      Topic:
+        Depth: 5
+        Durability Policy: Volatile
+        History Policy: Keep Last
+        Reliability Policy: Reliable
+        Value: /pfield/planning_markers
       Value: true
     - Class: rviz_default_plugins/TF
       Enabled: true
@@ -117,6 +131,52 @@ Visualization Manager:
           Value: true
         fer_rightfinger:
           Value: true
+        planning_base:
+          Value: true
+        planning_fer_hand:
+          Value: true
+        planning_fer_hand_sc:
+          Value: true
+        planning_fer_hand_tcp:
+          Value: true
+        planning_fer_leftfinger:
+          Value: true
+        planning_fer_link0:
+          Value: true
+        planning_fer_link0_sc:
+          Value: true
+        planning_fer_link1:
+          Value: true
+        planning_fer_link1_sc:
+          Value: true
+        planning_fer_link2:
+          Value: true
+        planning_fer_link2_sc:
+          Value: true
+        planning_fer_link3:
+          Value: true
+        planning_fer_link3_sc:
+          Value: true
+        planning_fer_link4:
+          Value: true
+        planning_fer_link4_sc:
+          Value: true
+        planning_fer_link5:
+          Value: true
+        planning_fer_link5_sc:
+          Value: true
+        planning_fer_link6:
+          Value: true
+        planning_fer_link6_sc:
+          Value: true
+        planning_fer_link7:
+          Value: true
+        planning_fer_link7_sc:
+          Value: true
+        planning_fer_link8:
+          Value: true
+        planning_fer_rightfinger:
+          Value: true
         world:
           Value: true
       Marker Scale: 1
@@ -160,6 +220,41 @@ Visualization Manager:
                                 fer_leftfinger:
                                   {}
                                 fer_rightfinger:
+                                  {}
+          planning_base:
+            planning_fer_link0:
+              planning_fer_link0_sc:
+                {}
+              planning_fer_link1:
+                planning_fer_link1_sc:
+                  {}
+                planning_fer_link2:
+                  planning_fer_link2_sc:
+                    {}
+                  planning_fer_link3:
+                    planning_fer_link3_sc:
+                      {}
+                    planning_fer_link4:
+                      planning_fer_link4_sc:
+                        {}
+                      planning_fer_link5:
+                        planning_fer_link5_sc:
+                          {}
+                        planning_fer_link6:
+                          planning_fer_link6_sc:
+                            {}
+                          planning_fer_link7:
+                            planning_fer_link7_sc:
+                              {}
+                            planning_fer_link8:
+                              planning_fer_hand:
+                                planning_fer_hand_sc:
+                                  {}
+                                planning_fer_hand_tcp:
+                                  {}
+                                planning_fer_leftfinger:
+                                  {}
+                                planning_fer_rightfinger:
                                   {}
       Update Interval: 0
       Value: true
@@ -331,7 +426,7 @@ Visualization Manager:
       Visual Enabled: true
     - Alpha: 1
       Class: rviz_default_plugins/RobotModel
-      Collision Enabled: false
+      Collision Enabled: true
       Description File: ""
       Description Source: Topic
       Description Topic:
@@ -351,7 +446,7 @@ Visualization Manager:
         Inertia: false
         Mass: false
       Name: PlanningRobotModel
-      TF Prefix: plannning
+      TF Prefix: planning_
       Update Interval: 0
       Value: true
       Visual Enabled: false
@@ -401,7 +496,7 @@ Visualization Manager:
   Views:
     Current:
       Class: rviz_default_plugins/Orbit
-      Distance: 6.118918418884277
+      Distance: 4.70453405380249
       Enable Stereo Rendering:
         Stereo Eye Separation: 0.05999999865889549
         Stereo Focal Distance: 1
@@ -416,10 +511,10 @@ Visualization Manager:
       Invert Z Axis: false
       Name: Current View
       Near Clip Distance: 0.009999999776482582
-      Pitch: 0.7253979444503784
+      Pitch: 0.6197972297668457
       Target Frame: <Fixed Frame>
       Value: Orbit (rviz)
-      Yaw: 5.5235724449157715
+      Yaw: 5.443563461303711
     Saved: ~
 Window Geometry:
   Displays:

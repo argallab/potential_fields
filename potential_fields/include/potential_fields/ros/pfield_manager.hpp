@@ -70,8 +70,9 @@ private:
   double maxForce; // Maximum force [N]
   double influenceZoneScale; // Influence zone scaling factor
   std::string fixedFrame; // RViz fixed frame for visualization and PF computation
-  PotentialField pField; // Potential field instance
-  PotentialField planningPField; // PF instance for path planning
+  // Potential field instances (shared_ptr to avoid inadvertent copying when passing to visualization helpers)
+  std::shared_ptr<PotentialField> pField; // Primary Potential Field
+  std::shared_ptr<PotentialField> planningPField; // Planning Potential Field
   double visualizerBufferArea; // Extra area around obstacles and goal to visualize the PF [m]
   double fieldResolution; // Resolution of the potential field grid [m]
 
@@ -79,9 +80,11 @@ private:
   std::shared_ptr<tf2_ros::TransformBroadcaster> dynamicTfBroadcaster; // Dynamic transform broadcaster
   std::shared_ptr<tf2_ros::Buffer> tfBuffer; // TF buffer for transform lookups
   std::shared_ptr<tf2_ros::TransformListener> tfListener; // TF Listener for populating the TF buffer
-  rclcpp::Publisher<MarkerArray>::SharedPtr markerPub; // Publisher for visualization markers
+  rclcpp::Publisher<MarkerArray>::SharedPtr pFieldMarkerPub; // Publisher for PF Markers
+  rclcpp::Publisher<MarkerArray>::SharedPtr planningPFieldMarkerPub; // Publisher for Planning PF Markers
   rclcpp::Subscription<PoseStamped>::SharedPtr goalPoseSub; // Subscriber for the goal pose
   rclcpp::Subscription<ObstacleArray>::SharedPtr obstacleSub; // Subscriber for obstacles
+  rclcpp::Subscription<ObstacleArray>::SharedPtr planningObstacleSub; // Subscriber for planning obstacles
   rclcpp::Service<PlanPath>::SharedPtr pathPlanningService; // Service to obtain a path from a query point to the goal
   rclcpp::Service<ComputeAutonomyVector>::SharedPtr autonomyVectorService; // Service to compute velocity vector at a given pose
 
@@ -102,10 +105,10 @@ private:
 
   void getPFLimits(double& minX, double& maxX, double& minY, double& maxY, double& minZ, double& maxZ);
 
-  void visualizePF();
-  MarkerArray createObstacleMarkers();
-  MarkerArray createGoalMarker();
-  MarkerArray createPotentialVectorMarkers();
+  MarkerArray visualizePF(std::shared_ptr<PotentialField> pf);
+  MarkerArray createObstacleMarkers(std::shared_ptr<PotentialField> pf);
+  MarkerArray createGoalMarker(std::shared_ptr<PotentialField> pf);
+  MarkerArray createPotentialVectorMarkers(std::shared_ptr<PotentialField> pf);
 
   void exportFieldDataToCSV(const std::string& filename);
 

@@ -39,14 +39,14 @@
   <node pkg="robot_state_publisher" exec="robot_state_publisher" name="planning_robot_state_publisher" output="screen" if="$(var use_xacro)" >
     <param name="publish_frequency" value="$(var robot_state_publisher_frequency)"/>
     <param name="robot_description" value="$(command 'xacro $(var robot_urdf_xacro)')" type="str"/>
-    <!-- ROS 2 uses 'frame_prefix' (not tf_prefix) to namespace all published TF frames -->
+    <!-- ROS 2 uses 'frame_prefix' to namespace all published TF frames -->
     <param name="frame_prefix" value="$(var planning_tf_prefix)"/>
     <remap from="joint_states" to="planning_joint_states"/>
   </node>
   <node pkg="robot_state_publisher" exec="robot_state_publisher" name="planning_robot_state_publisher" output="screen" if="$(eval \'$(var use_xacro)\'==\'false\')" >
     <param name="publish_frequency" value="$(var robot_state_publisher_frequency)"/>
     <param name="robot_description" value="$(command 'cat $(var robot_urdf)')" type="str"/>
-    <!-- ROS 2 uses 'frame_prefix' (not tf_prefix) to namespace all published TF frames -->
+    <!-- ROS 2 uses 'frame_prefix' to namespace all published TF frames -->
     <param name="frame_prefix" value="$(var planning_tf_prefix)"/>
     <remap from="joint_states" to="planning_joint_states"/>
   </node>

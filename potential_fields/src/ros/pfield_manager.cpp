@@ -46,8 +46,9 @@ PotentialFieldManager::PotentialFieldManager()
   this->visualizerBufferArea = this->get_parameter("visualizer_buffer_area").as_double();
   this->fieldResolution = this->get_parameter("field_resolution").as_double();
 
-  // Initialize the potential field
-  this->pField = PotentialField(this->attractiveGain, this->rotationalAttractiveGain);
+  // Initialize the potential fields
+  this->pField = std::make_shared<PotentialField>(this->attractiveGain, this->rotationalAttractiveGain);
+  this->planningPField = std::make_shared<PotentialField>(this->attractiveGain, this->rotationalAttractiveGain);
 
   // Setup TF2 broadcaster, buffer, and listener
   this->dynamicTfBroadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(this);
@@ -60,30 +61,32 @@ PotentialFieldManager::PotentialFieldManager()
   auto markerPubQos = rclcpp::QoS(rclcpp::KeepLast(100))
     .reliable()
     .transient_local();
-  this->markerPub = this->create_publisher<MarkerArray>("visualization_marker_array", markerPubQos);
-  RCLCPP_INFO(this->get_logger(), "Markers publishing on: %s", this->markerPub->get_topic_name());
+  this->pFieldMarkerPub = this->create_publisher<MarkerArray>("pfield/markers", markerPubQos);
+  RCLCPP_INFO(this->get_logger(), "PF Markers publishing on: %s", this->pFieldMarkerPub->get_topic_name());
+  this->planningPFieldMarkerPub = this->create_publisher<MarkerArray>("pfield/planning_markers", markerPubQos);
+  RCLCPP_INFO(this->get_logger(), "Planning markers publishing on: %s", this->planningPFieldMarkerPub->get_topic_name());
 
   // Setup goal pose subscriber
   this->goalPoseSub = this->create_subscription<geometry_msgs::msg::PoseStamped>(
     "goal_pose",
     10,
     [this](const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
-    RCLCPP_INFO(this->get_logger(), "Received goal pose");
-    this->pField.updateGoalPosition(
-      SpatialVector(
-        Eigen::Vector3d(
-          msg->pose.position.x,
-          msg->pose.position.y,
-          msg->pose.position.z
-        ),
-        Eigen::Quaterniond(
-          msg->pose.orientation.w,
-          msg->pose.orientation.x,
-          msg->pose.orientation.y,
-          msg->pose.orientation.z
-        )
+    // RCLCPP_INFO(this->get_logger(), "Received goal pose");
+    const SpatialVector goalPose(
+      Eigen::Vector3d(
+        msg->pose.position.x,
+        msg->pose.position.y,
+        msg->pose.position.z
+      ),
+      Eigen::Quaterniond(
+        msg->pose.orientation.w,
+        msg->pose.orientation.x,
+        msg->pose.orientation.y,
+        msg->pose.orientation.z
       )
     );
+    this->pField->updateGoalPosition(goalPose);
+    this->planningPField->updateGoalPosition(goalPose);
   }
   );
 
@@ -106,7 +109,30 @@ PotentialFieldManager::PotentialFieldManager()
         Eigen::Vector3d(obst.scale_x, obst.scale_y, obst.scale_z)
       );
       RCLCPP_DEBUG(this->get_logger(), "Added/Updated obstacle: %s", obst.frame_id.c_str());
-      this->pField.addObstacle(obstacle);
+      this->pField->addObstacle(obstacle);
+    }
+  }
+  );
+
+  // Setup Planning Obstacle Subscriber
+  this->planningObstacleSub = this->create_subscription<ObstacleArray>("pfield/planning_obstacles", obstacleSubQos,
+    [this](const ObstacleArray::SharedPtr msg) {
+    const auto& obstacles = msg->obstacles;
+    for (const auto& obst : obstacles) {
+      PotentialFieldObstacle obstacle(
+        obst.frame_id,
+        Eigen::Vector3d(obst.pose.position.x, obst.pose.position.y, obst.pose.position.z),
+        Eigen::Quaterniond(obst.pose.orientation.w, obst.pose.orientation.x, obst.pose.orientation.y, obst.pose.orientation.z),
+        stringToObstacleType(obst.type),
+        stringToObstacleGroup(obst.group),
+        ObstacleGeometry{obst.radius, obst.length, obst.width, obst.height},
+        this->influenceZoneScale,
+        this->repulsiveGain,
+        obst.mesh_resource,
+        Eigen::Vector3d(obst.scale_x, obst.scale_y, obst.scale_z)
+      );
+      RCLCPP_DEBUG(this->get_logger(), "Added/Updated obstacle: %s", obst.frame_id.c_str());
+      this->planningPField->addObstacle(obstacle);
     }
   }
   );
@@ -151,7 +177,7 @@ PotentialFieldManager::PotentialFieldManager()
         request->start.pose.orientation.y, request->start.pose.orientation.z
       )
     );
-    SpatialVector autonomyVector = this->pField.evaluateVelocityAtPose(queryPose);
+    SpatialVector autonomyVector = this->pField->evaluateVelocityAtPose(queryPose);
     response->autonomy_vector.header.frame_id = this->fixedFrame;
     response->autonomy_vector.header.stamp = this->now();
     response->autonomy_vector.twist.linear.x = autonomyVector.getPosition().x();
@@ -183,7 +209,10 @@ PotentialFieldManager::PotentialFieldManager()
 }
 
 void PotentialFieldManager::timerCallback() {
-  this->visualizePF();
+  MarkerArray pfieldMarkers = this->visualizePF(this->pField);
+  MarkerArray planningPFMarkers = this->visualizePF(this->planningPField);
+  this->pFieldMarkerPub->publish(pfieldMarkers);
+  this->planningPFieldMarkerPub->publish(planningPFMarkers);
 }
 
 Path PotentialFieldManager::interpolatePath(const SpatialVector& start, double deltaTime, double goalTolerance) {
@@ -222,12 +251,12 @@ Path PotentialFieldManager::interpolatePath(const SpatialVector& start, double d
   path.poses.push_back(startPose);
   // Interpolate through the potential field until the goal is reached with the given delta time
   SpatialVector currentPose = start;
-  while (currentPose.euclideanDistance(this->pField.getGoalPose()) > goalTolerance) {
+  while (currentPose.euclideanDistance(this->pField->getGoalPose()) > goalTolerance) {
     // Evaluate the velocity at the current pose
-    SpatialVector velocity = this->pField.evaluateVelocityAtPose(currentPose);
+    SpatialVector velocity = this->pField->evaluateVelocityAtPose(currentPose);
     // Update the current pose based on the velocity and delta time
     Eigen::Vector3d newPosition = currentPose.getPosition() + (velocity.getPosition() * deltaTime);
-    Eigen::Quaterniond newOrientation = this->pField.integrateAngularVelocity(currentPose.getOrientation(), deltaTime);
+    Eigen::Quaterniond newOrientation = this->pField->integrateAngularVelocity(currentPose.getOrientation(), deltaTime);
     currentPose.setPosition(newPosition);
     currentPose.setOrientation(newOrientation);
     // Add the new pose to the path
@@ -248,8 +277,8 @@ Path PotentialFieldManager::interpolatePath(const SpatialVector& start, double d
 
 void PotentialFieldManager::getPFLimits(double& minX, double& maxX, double& minY, double& maxY, double& minZ, double& maxZ) {
   // Determine the limits of the potential field based on obstacle positions and goal position
-  auto obstacles = this->pField.getObstacles();
-  Eigen::Vector3d goalPos = this->pField.getGoalPose().getPosition();
+  auto obstacles = this->pField->getObstacles();
+  Eigen::Vector3d goalPos = this->pField->getGoalPose().getPosition();
   if (obstacles.empty()) {
     // If no obstacles, set limits around the goal position
     minX = goalPos.x();
@@ -295,22 +324,22 @@ void PotentialFieldManager::getPFLimits(double& minX, double& maxX, double& minY
   maxZ += this->visualizerBufferArea;
 }
 
-void PotentialFieldManager::visualizePF() {
+MarkerArray PotentialFieldManager::visualizePF(std::shared_ptr<PotentialField> pf) {
   MarkerArray markerArray;
-  MarkerArray goalMarkerArray = this->createGoalMarker();
+  MarkerArray goalMarkerArray = this->createGoalMarker(pf);
   markerArray.markers.insert(markerArray.markers.cend(), goalMarkerArray.markers.cbegin(), goalMarkerArray.markers.cend());
-  auto obstacleMarkers = this->createObstacleMarkers();
+  auto obstacleMarkers = this->createObstacleMarkers(pf);
   markerArray.markers.insert(markerArray.markers.cend(), obstacleMarkers.markers.cbegin(),
     obstacleMarkers.markers.cend());
-  auto potentialVectorMarkers = this->createPotentialVectorMarkers();
+  auto potentialVectorMarkers = this->createPotentialVectorMarkers(pf);
   markerArray.markers.insert(markerArray.markers.cend(), potentialVectorMarkers.markers.cbegin(),
     potentialVectorMarkers.markers.cend());
-  this->markerPub->publish(markerArray);
+  return markerArray;
 }
 
-MarkerArray PotentialFieldManager::createObstacleMarkers() {
+MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<PotentialField> pf) {
   MarkerArray markerArray;
-  std::vector<PotentialFieldObstacle> obstacles = this->pField.getObstacles();
+  std::vector<PotentialFieldObstacle> obstacles = pf->getObstacles();
   for (const auto& obstacle : obstacles) {
     int hashID = createHashID(obstacle);
     Marker obstacleMarker;
@@ -436,7 +465,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers() {
   return markerArray;
 }
 
-MarkerArray PotentialFieldManager::createGoalMarker() {
+MarkerArray PotentialFieldManager::createGoalMarker(std::shared_ptr<PotentialField> pf) {
   // Create a green sphere marker
   Marker goalMarker;
   goalMarker.header.frame_id = this->fixedFrame;
@@ -446,7 +475,7 @@ MarkerArray PotentialFieldManager::createGoalMarker() {
   goalMarker.id = 0;
   goalMarker.type = Marker::SPHERE;
   goalMarker.action = Marker::ADD;
-  SpatialVector goalPose = this->pField.getGoalPose();
+  SpatialVector goalPose = pf->getGoalPose();
   goalMarker.pose.position.x = goalPose.getPosition().x();
   goalMarker.pose.position.y = goalPose.getPosition().y();
   goalMarker.pose.position.z = goalPose.getPosition().z();
@@ -507,7 +536,7 @@ MarkerArray PotentialFieldManager::createGoalMarker() {
   return goalMarkerArray;
 }
 
-MarkerArray PotentialFieldManager::createPotentialVectorMarkers() {
+MarkerArray PotentialFieldManager::createPotentialVectorMarkers(std::shared_ptr<PotentialField> pf) {
   MarkerArray markerArray;
   int id = 0;
   double minX, maxX, minY, maxY, minZ, maxZ;
@@ -517,10 +546,10 @@ MarkerArray PotentialFieldManager::createPotentialVectorMarkers() {
       for (double z = minZ; z <= maxZ; z += this->fieldResolution) {
         // Skip any points that are inside obstacle radius
         Eigen::Vector3d point(x, y, z);
-        if (this->pField.isPointInsideObstacle(point)) { continue; }
+        if (pf->isPointInsideObstacle(point)) { continue; }
         Marker vectorMarker;
         SpatialVector position{point};
-        SpatialVector velocity = this->pField.evaluateVelocityAtPose(position);
+        SpatialVector velocity = pf->evaluateVelocityAtPose(position);
         double magnitude = velocity.getPosition().norm();
         // Normalize the velocity vector since we want to show direction
         velocity.normalizePosition();
@@ -561,7 +590,7 @@ void PotentialFieldManager::exportFieldDataToCSV(const std::string& base_filenam
   std::ofstream obstacles_file(obstacles_filename);
   if (obstacles_file.is_open()) {
     obstacles_file << "obstacle_x,obstacle_y,obstacle_z,type,influence,repulsive_gain,radius,length,width,height\n";
-    for (const auto& obstacle : this->pField.getObstacles()) {
+    for (const auto& obstacle : this->pField->getObstacles()) {
       const Eigen::Vector3d& position = obstacle.getPosition();
       const ObstacleGeometry& g = obstacle.getGeometry();
       obstacles_file << position.x() << "," << position.y() << "," << position.z() << ","
@@ -586,11 +615,11 @@ void PotentialFieldManager::exportFieldDataToCSV(const std::string& base_filenam
     for (double x = -5.0; x <= 5.0; x += res) {
       for (double y = -5.0; y <= 5.0; y += res) {
         Eigen::Vector3d point(x, y, z);
-        if (this->pField.isPointInsideObstacle(point)) {
+        if (this->pField->isPointInsideObstacle(point)) {
           continue;
         }
         SpatialVector position{point};
-        SpatialVector velocity = this->pField.evaluateVelocityAtPose(position);
+        SpatialVector velocity = this->pField->evaluateVelocityAtPose(position);
         vectors_file << x << "," << y << "," << z << ","
           << velocity.getPosition().x() << ","
           << velocity.getPosition().y() << ","

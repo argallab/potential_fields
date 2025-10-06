@@ -5,16 +5,14 @@
 - Re-define obstacles and planning msg types to use standard ROS msg types and/or MoveIt types for interoperability and to reduce overhead and dependence on custom types
 - Extract PF C++ library out of the ROS package so it can be used independently without installing the entire package
 - For open sourcing, we may even want to consider installing the PF C++ library as a sub-module git repo to be maintained separately (not necessary but could be relevant if we identify a strong need for it)
-- Enable converting mesh objects to PF obstacles, approximating as primitives
-- Improve approximation by enabling native mesh object to be defined as the PF obstacle
+- Configure CPPLint CI/CD Github Actions for PRs
 ---
 
-- A `MotionInterface` to bridge the computed PF velocity/path to a robot's motion controller. This should be universal enough so users can adapt it to their robot. Services, topics, and actions should be provided to interface with the PF planner to set goals, start/stop planning, and get status updates.
 - Finish "Planning World" pipeline
   - PF Obstacles reflect RobotState and JointStates
   - IKSolver interface for converting poses in the PF world to joint space (for planning a path)
   - JointTrajectory (and Pose) trajectory planner interface using `trajectory_msgs/JointTrajectory`
   - Interface to hand `JointTrajectory` to a robot controller (libfranka for example) to execute the planned path
-- Mesh collision for `withinObstacle` and `withinInfluenceZone` methods in `pf_obstacle.cpp` to replace the current box approximation.
-- Better PF Visualization that is dynamic depending on "workspace" around the robot and obstacles, instead of a static grid. Also more visualization options but that can be added later.
-- Configure CPPLint CI/CD Github Actions for PRs
+
+- Now that planning TF frames are being published, PF obstacles need to be created from those frames and published for visualization
+- In RViz, should be able to view "Real PField" and "Planning PField" as separate MarkerArray topics

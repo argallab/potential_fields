@@ -50,6 +50,9 @@ RobotParser::RobotParser() : Node("robot_parser") {
     // Cache for later param set attempts
     this->cachedPlanningRobotDescription = planningRobotDesc;
     this->cachedPlanningRobotDescriptionHash = std::hash<std::string>{}(planningRobotDesc);
+    // Dump descriptions for inspection
+    this->dumpRobotDescriptions(this->robotDescription, planningRobotDesc,
+      "/tmp/original_robot_description.xml", "/tmp/planning_robot_description.xml");
     // After publishing Planning Robot Description, set the parameter for the planning_RSP
     this->planningRobotModel.initString(planningRobotDesc);
     this->collisionCatalog = this->buildCollisionCatalog(this->robotModel, false);
@@ -398,7 +401,7 @@ std::string RobotParser::createPlanningRobotDescription(const std::string& origi
   // NOTE: We intentionally do a lightweight regex / string rewrite instead of parsing the XML into
   //       a DOM to keep dependencies minimal. This assumes reasonably well‑formed URDF XML.
 
-  static const std::string kPrefix = this->planningTFPrefix + "::";
+  static const std::string kPrefix = this->planningTFPrefix + "_";
   std::string result = originalRobotDescription; // working copy
 
   // Helper that prefixes the captured name if not already prefixed.
@@ -448,6 +451,36 @@ std::string RobotParser::createPlanningRobotDescription(const std::string& origi
   result = applyPrefix(result, mimicJoint);
 
   return result;
+}
+
+void RobotParser::writeTextFile(const std::string& path, const std::string& contents, const std::string& label) {
+  try {
+    std::ofstream ofs(path);
+    if (!ofs.is_open()) {
+      RCLCPP_WARN(this->get_logger(), "Failed to open %s for writing %s", path.c_str(), label.c_str());
+      return;
+    }
+    ofs << contents;
+    ofs.close();
+    RCLCPP_INFO(this->get_logger(), "Wrote %s to %s (%zu chars)", label.c_str(), path.c_str(), contents.size());
+  }
+  catch (const std::exception& e) {
+    RCLCPP_WARN(this->get_logger(), "Exception writing %s to %s: %s", label.c_str(), path.c_str(), e.what());
+  }
+}
+
+void RobotParser::dumpRobotDescriptions(const std::string& original, const std::string& planning,
+  const std::string& originalPath, const std::string& planningPath) {
+  this->writeTextFile(originalPath, original, "original robot_description");
+  this->writeTextFile(planningPath, planning, "planning robot_description");
+
+  // Provide guidance about potential frame prefix mismatch
+  // createPlanningRobotDescription currently uses 'prefix::name' pattern.
+  if (planning.find(this->planningTFPrefix + "::") != std::string::npos) {
+    RCLCPP_WARN(this->get_logger(),
+      "Planning URDF uses '::' separators (e.g., %s::link). If the planning robot_state_publisher is configured with frame_prefix '%s', TF frames will appear as '%s<link>', not with '::'. This will cause TF lookup failures. Consider switching to underscores or aligning naming.",
+      this->planningTFPrefix.c_str(), this->planningTFPrefix.c_str(), this->planningTFPrefix.c_str());
+  }
 }
 
 
