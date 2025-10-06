@@ -215,18 +215,18 @@ PotentialFieldManager::PotentialFieldManager()
   // Run the timer for visualizing the potential field
   this->timer = this->create_wall_timer(
     std::chrono::duration<double>(1.0 / this->visualizerFrequency), // Timer period based on frequency
-    std::bind(&PotentialFieldManager::timerCallback, this)
+    [this]() {
+    MarkerArray pfieldMarkers = this->visualizePF(this->pField);
+    MarkerArray planningPFMarkers = this->visualizePF(this->planningPField);
+    this->pFieldMarkerPub->publish(pfieldMarkers);
+    this->planningPFieldMarkerPub->publish(planningPFMarkers);
+  }
   );
-}
 
-void PotentialFieldManager::timerCallback() {
-  MarkerArray pfieldMarkers = this->visualizePF(this->pField);
-  MarkerArray planningPFMarkers = this->visualizePF(this->planningPField);
-  this->pFieldMarkerPub->publish(pfieldMarkers);
-  this->planningPFieldMarkerPub->publish(planningPFMarkers);
 }
 
 Path PotentialFieldManager::interpolatePath(const SpatialVector& start, double deltaTime, double goalTolerance) {
+  // TODO(Sharwin): Implement the new functionality here
   // interpolatePath will need to account for robot motion influencing the PF
   // during the motion so the function will need to be re-written.
   // Start is not guaranteed to be at the robot's current EE position since
@@ -286,53 +286,55 @@ Path PotentialFieldManager::interpolatePath(const SpatialVector& start, double d
   return path;
 }
 
-void PotentialFieldManager::getPFLimits(double& minX, double& maxX, double& minY, double& maxY, double& minZ, double& maxZ) {
+PFLimits PotentialFieldManager::getPFLimits(std::shared_ptr<PotentialField> pf) {
+  PFLimits limits;
   // Determine the limits of the potential field based on obstacle positions and goal position
-  auto obstacles = this->pField->getObstacles();
-  Eigen::Vector3d goalPos = this->pField->getGoalPose().getPosition();
+  auto obstacles = pf->getObstacles();
+  Eigen::Vector3d goalPos = pf->getGoalPose().getPosition();
   if (obstacles.empty()) {
     // If no obstacles, set limits around the goal position
-    minX = goalPos.x();
-    maxX = goalPos.x();
-    minY = goalPos.y();
-    maxY = goalPos.y();
-    minZ = goalPos.z();
-    maxZ = goalPos.z();
+    limits.minX = goalPos.x();
+    limits.maxX = goalPos.x();
+    limits.minY = goalPos.y();
+    limits.maxY = goalPos.y();
+    limits.minZ = goalPos.z();
+    limits.maxZ = goalPos.z();
   }
   else {
     // Initialize limits based on the first obstacle
     Eigen::Vector3d firstPos = obstacles[0].getPosition();
-    minX = firstPos.x();
-    maxX = firstPos.x();
-    minY = firstPos.y();
-    maxY = firstPos.y();
-    minZ = firstPos.z();
-    maxZ = firstPos.z();
+    limits.minX = firstPos.x();
+    limits.maxX = firstPos.x();
+    limits.minY = firstPos.y();
+    limits.maxY = firstPos.y();
+    limits.minZ = firstPos.z();
+    limits.maxZ = firstPos.z();
     // Iterate through obstacles to find overall min/max
     for (const auto& obst : obstacles) {
       Eigen::Vector3d pos = obst.getPosition();
-      if (pos.x() < minX) minX = pos.x();
-      if (pos.x() > maxX) maxX = pos.x();
-      if (pos.y() < minY) minY = pos.y();
-      if (pos.y() > maxY) maxY = pos.y();
-      if (pos.z() < minZ) minZ = pos.z();
-      if (pos.z() > maxZ) maxZ = pos.z();
+      if (pos.x() < limits.minX) limits.minX = pos.x();
+      if (pos.x() > limits.maxX) limits.maxX = pos.x();
+      if (pos.y() < limits.minY) limits.minY = pos.y();
+      if (pos.y() > limits.maxY) limits.maxY = pos.y();
+      if (pos.z() < limits.minZ) limits.minZ = pos.z();
+      if (pos.z() > limits.maxZ) limits.maxZ = pos.z();
     }
     // Expand limits to include the goal position if outside current bounds
-    if (goalPos.x() < minX) minX = goalPos.x();
-    if (goalPos.x() > maxX) maxX = goalPos.x();
-    if (goalPos.y() < minY) minY = goalPos.y();
-    if (goalPos.y() > maxY) maxY = goalPos.y();
-    if (goalPos.z() < minZ) minZ = goalPos.z();
-    if (goalPos.z() > maxZ) maxZ = goalPos.z();
+    if (goalPos.x() < limits.minX) limits.minX = goalPos.x();
+    if (goalPos.x() > limits.maxX) limits.maxX = goalPos.x();
+    if (goalPos.y() < limits.minY) limits.minY = goalPos.y();
+    if (goalPos.y() > limits.maxY) limits.maxY = goalPos.y();
+    if (goalPos.z() < limits.minZ) limits.minZ = goalPos.z();
+    if (goalPos.z() > limits.maxZ) limits.maxZ = goalPos.z();
   }
   // Increase the limits by a buffer area for better visualization
-  minX -= this->visualizerBufferArea;
-  maxX += this->visualizerBufferArea;
-  minY -= this->visualizerBufferArea;
-  maxY += this->visualizerBufferArea;
-  minZ -= this->visualizerBufferArea;
-  maxZ += this->visualizerBufferArea;
+  limits.minX -= this->visualizerBufferArea;
+  limits.maxX += this->visualizerBufferArea;
+  limits.minY -= this->visualizerBufferArea;
+  limits.maxY += this->visualizerBufferArea;
+  limits.minZ -= this->visualizerBufferArea;
+  limits.maxZ += this->visualizerBufferArea;
+  return limits;
 }
 
 MarkerArray PotentialFieldManager::visualizePF(std::shared_ptr<PotentialField> pf) {
@@ -595,13 +597,13 @@ MarkerArray PotentialFieldManager::createPotentialVectorMarkers(std::shared_ptr<
   return markerArray;
 }
 
-void PotentialFieldManager::exportFieldDataToCSV(const std::string& base_filename) {
+void PotentialFieldManager::exportFieldDataToCSV(std::shared_ptr<PotentialField> pf, const std::string& base_filename) {
   // Write obstacle positions to a CSV file
   std::string obstacles_filename = "data/" + base_filename + "_obstacles.csv";
   std::ofstream obstacles_file(obstacles_filename);
   if (obstacles_file.is_open()) {
     obstacles_file << "obstacle_x,obstacle_y,obstacle_z,type,influence,repulsive_gain,radius,length,width,height\n";
-    for (const auto& obstacle : this->pField->getObstacles()) {
+    for (const auto& obstacle : pf->getObstacles()) {
       const Eigen::Vector3d& position = obstacle.getPosition();
       const ObstacleGeometry& g = obstacle.getGeometry();
       obstacles_file << position.x() << "," << position.y() << "," << position.z() << ","
@@ -626,11 +628,11 @@ void PotentialFieldManager::exportFieldDataToCSV(const std::string& base_filenam
     for (double x = -5.0; x <= 5.0; x += res) {
       for (double y = -5.0; y <= 5.0; y += res) {
         Eigen::Vector3d point(x, y, z);
-        if (this->pField->isPointInsideObstacle(point)) {
+        if (pf->isPointInsideObstacle(point)) {
           continue;
         }
         SpatialVector position{point};
-        SpatialVector velocity = this->pField->evaluateVelocityAtPose(position);
+        SpatialVector velocity = pf->evaluateVelocityAtPose(position);
         vectors_file << x << "," << y << "," << z << ","
           << velocity.getPosition().x() << ","
           << velocity.getPosition().y() << ","

@@ -48,6 +48,15 @@ using PlanPath = potential_fields_interfaces::srv::PlanPath;
 using ComputeAutonomyVector = potential_fields_interfaces::srv::ComputeAutonomyVector;
 using JointState = sensor_msgs::msg::JointState;
 
+struct PFLimits {
+  double minX; // Minimum X coordinate of the bounding box [m]
+  double maxX; // Maximum X coordinate of the bounding box [m]
+  double minY; // Minimum Y coordinate of the bounding box [m]
+  double maxY; // Maximum Y coordinate of the bounding box [m]
+  double minZ; // Minimum Z coordinate of the bounding box [m]
+  double maxZ; // Maximum Z coordinate of the bounding box [m]
+};
+
 class PotentialFieldManager : public rclcpp::Node {
 public:
   PotentialFieldManager();
@@ -88,7 +97,6 @@ private:
   rclcpp::Subscription<ObstacleArray>::SharedPtr planningObstacleSub; // Subscriber for planning obstacles
   rclcpp::Service<PlanPath>::SharedPtr pathPlanningService; // Service to obtain a path from a query point to the goal
   rclcpp::Service<ComputeAutonomyVector>::SharedPtr autonomyVectorService; // Service to compute velocity vector at a given pose
-
   std::unique_ptr<IKSolver> ikSolver; // IK Solver Plugin instance
 
   /**
@@ -104,16 +112,59 @@ private:
    */
   Path interpolatePath(const SpatialVector& start, double deltaTime, double goalTolerance);
 
-  void getPFLimits(double& minX, double& maxX, double& minY, double& maxY, double& minZ, double& maxZ);
+  /**
+   * @brief Given a potential field, computes its spatial limits for visualization (bounding box)
+   *
+   * @note Could be used for adaptive computations in the future
+   *
+   * @param pf The potential field instance
+   * @return PFLimits The spatial limits of the potential field
+   */
+  PFLimits getPFLimits(std::shared_ptr<PotentialField> pf);
 
+  /**
+   * @brief Given a potential field, generate all visualization markers
+   *        (goal, obstacles, obstacle influence zones, velocity vectors)
+   *
+   * @param pf The potential field instance
+   * @return MarkerArray The marker array containing all visualization markers
+   */
   MarkerArray visualizePF(std::shared_ptr<PotentialField> pf);
+
+  /**
+   * @brief Get Obstacle and Obstacle Influence Zone markers from a potential field
+   *
+   * @param pf The potential field instance
+   * @return MarkerArray The marker array containing all obstacle markers
+   */
   MarkerArray createObstacleMarkers(std::shared_ptr<PotentialField> pf);
+
+  /**
+   * @brief Create a marker for the goal position in the potential field
+   *
+   * @param pf The potential field instance
+   * @return MarkerArray The marker array containing the goal marker and orientation indicator
+   */
   MarkerArray createGoalMarker(std::shared_ptr<PotentialField> pf);
+
+  /**
+   * @brief Create velocity vector markers for visualization in RViz
+   *
+   * @note The density of the vectors is determined by the field resolution parameter
+   *       and the vector sizes are normalized but the color intensity represents the magnitude
+   *
+   * @param pf The potential field instance
+   * @return MarkerArray The marker array containing all velocity vector markers
+   */
   MarkerArray createPotentialVectorMarkers(std::shared_ptr<PotentialField> pf);
 
-  void exportFieldDataToCSV(const std::string& filename);
-
-  void timerCallback();
+  /**
+   * @brief Exports the potential field data to a CSV file for external analysis or visualization.
+   *
+   * @param pf The potential field instance
+   * @param filename The name of the CSV file to export the data to
+   */
+  void exportFieldDataToCSV(std::shared_ptr<PotentialField> pf, const std::string& filename);
 };
 
 #endif // PFIELD_MANAGER_HPP

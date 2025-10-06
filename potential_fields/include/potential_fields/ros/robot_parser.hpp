@@ -46,12 +46,7 @@ public:
   ~RobotParser() = default;
 
   // Test-only lightweight constructor (skips heavy ROS/TF setup & URDF parsing)
-  explicit RobotParser(bool skipInitialization) : Node("robot_parser_test"), modelLoaded(false) {
-    if (!skipInitialization) {
-      // Fallback to full initialization if false passed inadvertently
-      robotUpdateFrequency = 50.0;
-    }
-  }
+  explicit RobotParser(bool testConstructor) : Node("robot_parser_test"), modelLoaded(false) {}
 
 private:
   friend class RobotParserTestHelper; // Grants unit tests controlled access to private members
@@ -62,38 +57,59 @@ private:
   urdf::Model robotModel; // Parsed URDF model
   urdf::Model planningRobotModel; // Parsed URDF model with modified names for planning
   bool modelLoaded = false; // Whether URDF parsed successfully
-  bool planningRSPLoaded = false;
-  bool planningJSPParamSet = false; // true once we successfully set robot_description on any planning JSP node
-  bool useJSPGui;
-  const std::string planningRSPNodeName = "planning_robot_state_publisher";
-  const std::string planningJSPNodeName = "planning_joint_state_publisher";
-  std::string cachedPlanningRobotDescription; // cached planning URDF we generated
-  size_t cachedPlanningRobotDescriptionHash = 0; // hash to avoid redundant param sets
+  bool useJSPGui; // Parameter for GUI vs non-GUI Joint State Publisher
+  std::vector<CollisionCatalogEntry> collisionCatalog; // Catalog of collision objects from URDF (Real Robot)
+  std::vector<CollisionCatalogEntry> planningCollisionCatalog; // Catalog of collision objects from URDF (Planning Robot)
 
-  std::vector<CollisionCatalogEntry> collisionCatalog;
-  std::vector<CollisionCatalogEntry> planningCollisionCatalog;
-
-  rclcpp::TimerBase::SharedPtr timer;
-  rclcpp::Publisher<ObstacleArray>::SharedPtr obstaclePub;
-  rclcpp::Publisher<ObstacleArray>::SharedPtr planningObstaclePub;
-  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr planningRobotDescriptionPub;
-  std::shared_ptr<rclcpp::AsyncParametersClient> asyncParamClientRSP; // Async client for planning RSP
-  std::shared_ptr<rclcpp::AsyncParametersClient> asyncParamClientJSP; // Async client for planning JSP
-  std::shared_ptr<tf2_ros::TransformBroadcaster> dynamicTfBroadcaster;
-  std::shared_ptr<tf2_ros::Buffer> tfBuffer;
-  std::shared_ptr<tf2_ros::TransformListener> tfListener;
-  std::shared_ptr<tf2_ros::StaticTransformBroadcaster> staticTfBroadcaster;
+  rclcpp::TimerBase::SharedPtr timer; // Timer for updating Robot and Planning TFs
+  rclcpp::Publisher<ObstacleArray>::SharedPtr obstaclePub; // Publisher for Obstacles from Robot Collision Geometry
+  rclcpp::Publisher<ObstacleArray>::SharedPtr planningObstaclePub; // Publisher for Planning Obstacles
+  rclcpp::Publisher<std_msgs::msg::String>::SharedPtr planningRobotDescriptionPub; // Publishes planning robot_description
+  std::shared_ptr<tf2_ros::TransformBroadcaster> dynamicTfBroadcaster; // Broadcaster for dynamic TFs from Robot
+  std::shared_ptr<tf2_ros::Buffer> tfBuffer; // TF buffer for listening to Robot TFs
+  std::shared_ptr<tf2_ros::TransformListener> tfListener; // TF listener for Robot TFs to populate buffer
+  std::shared_ptr<tf2_ros::StaticTransformBroadcaster> staticTfBroadcaster; // Broadcaster for static TFs from Robot
 
   void timerCallback();
-  // void trySetPlanningRobotDescriptionParam();
-  // void trySetPlanningJointStatePublisherRDParam();
 
+  /**
+   * @brief Given a catalog of collision objects, convert to a list of Obstacle msgs
+   *
+   * @param catalog Catalog of collision objects containing link names, collision objects, etc.
+   * @return std::vector<Obstacle> The extracted obstacles, ready to publish
+   */
   std::vector<Obstacle> extractObstaclesFromCatalog(const std::vector<CollisionCatalogEntry>& catalog);
+
+  /**
+   * @brief Given a URDF model, build a catalog of cached collision objects for quick access later
+   *
+   * @param model The URDF model to extract collision objects from
+   * @param forPlanning Whether to build the catalog for planning purposes (adds planning prefix if so)
+   * @return std::vector<CollisionCatalogEntry> The collision catalog which only needs to be built once
+   */
   std::vector<CollisionCatalogEntry> buildCollisionCatalog(urdf::Model& model, bool forPlanning);
 
+  /**
+   * @brief From a collision object and extra data, create an Obstacle message for publishing
+   *
+   * @param frameID The frameID the obstacle belongs to (also the frame for the pose)
+   * @param collisionObject The collision object to convert
+   * @param position The position of the obstacle
+   * @param orientation The orientation of the obstacle
+   * @return Obstacle The created Obstacle message
+   */
   Obstacle obstacleFromCollisionObject(const std::string& frameID, const urdf::Collision& collisionObject,
     const Eigen::Vector3d& position, const Eigen::Quaterniond& orientation);
 
+  /**
+   * @brief Given an original robot description, create a modified version for planning with
+   *        the appropriate TF prefixes and modified joint names.
+   *
+   * @note An example planningRobotDescription can be found in the data/ directory
+   *
+   * @param originalRobotDescription The original robot_description XML string
+   * @return std::string The modified robot_description XML string for planning
+   */
   std::string createPlanningRobotDescription(const std::string& originalRobotDescription);
 
   // Helper: write text content to a file (logs success/failure)

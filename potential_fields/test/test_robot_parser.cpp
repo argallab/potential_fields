@@ -1,7 +1,3 @@
-// Unit tests for RobotParser private functionality
-// These tests leverage the friend declaration (RobotParserTestHelper) to exercise
-// logic without spinning full ROS infrastructure (TF lookups are stubbed / skipped).
-
 #include <gtest/gtest.h>
 #include <urdf/model.h>
 #include <urdf_parser/urdf_parser.h>
@@ -11,20 +7,13 @@
 #define COMPILE_ROBOT_PARSER_NO_MAIN
 #include "ros/robot_parser.hpp"
 
-// Helper wrapper exposing selected private methods for tests.
 class RobotParserTestHelper : public RobotParser {
 public:
   RobotParserTestHelper() : RobotParser(true) {}
   using RobotParser::createPlanningRobotDescription;
   using RobotParser::buildCollisionCatalog;
   using RobotParser::obstacleFromCollisionObject;
-  using RobotParser::extractObstaclesFromCatalog; // Warning: relies on tfBuffer in real code
-  using RobotParser::collisionCatalog;
-  using RobotParser::planningCollisionCatalog;
   using RobotParser::robotModel;
-  using RobotParser::planningRobotModel;
-  using RobotParser::fixedFrame;
-  using RobotParser::tfBuffer;
 };
 
 // Minimal URDF with multiple geometry types
@@ -92,15 +81,4 @@ TEST(RobotParserTests, ObstacleFromCollisionObjectParsesBox) {
   EXPECT_FLOAT_EQ(obs.length, 0.5f);
   EXPECT_FLOAT_EQ(obs.width, 0.4f);
   EXPECT_FLOAT_EQ(obs.height, 0.3f);
-}
-
-// NOTE: extractObstaclesFromCatalog relies on TF lookups; full integration test would require
-// populating a tfBuffer with transforms. For now we validate that with an empty tfBuffer
-// it returns zero obstacles (no crashes) when catalog is present.
-TEST(RobotParserTests, ExtractObstaclesEmptyTF) {
-  RobotParserTestHelper helper;
-  ASSERT_TRUE(helper.robotModel.initString(kTestURDF));
-  auto catalog = helper.buildCollisionCatalog(helper.robotModel, false);
-  auto obstacles = helper.extractObstaclesFromCatalog(catalog);
-  EXPECT_TRUE(obstacles.empty());
 }

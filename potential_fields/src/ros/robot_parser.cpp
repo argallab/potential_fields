@@ -1,3 +1,23 @@
+/// @file robot_parser.cpp
+/// @brief Parses the robot's URDF to publish PF obstacles (real robot and planning robot)
+/// @author Sharwin Patil
+/// @date   October 6, 2025
+///
+/// PARAMETERS:
+///   robot_geometry_update_frequency (float64) : Timer frequency for regenerating obstacle arrays
+///   robot_description (string): URDF XML string (or already-resolved value) for the live robot
+///   fixed_frame (string): Global/world frame used for TF queries and obstacle frames
+///   planning_tf_prefix (string): Prefix applied to planning TF frames / generated planning URDF
+///   use_jsp (bool): Flag indicating if a Joint State Publisher GUI is expected
+
+/// SUBSCRIBERS:
+///   (none) – This node is passive with respect to subscriptions; it relies on TF and parameters.
+///
+/// PUBLISHERS:
+///   ~/pfield/obstacles (potential_fields_interfaces::msg::ObstacleArray) Collision geometry obstacles derived from the live robot's URDF & current TF transforms.
+///   ~/pfield/planning_obstacles (potential_fields_interfaces::msg::ObstacleArray) Collision geometry obstacles derived from the planning duplicate robot.
+///   ~/pfield/planning_robot_description (std_msgs::msg::String) The planning-modified URDF for downstream consumers (e.g., a planning robot_state_publisher).
+
 #include "ros/robot_parser.hpp"
 #include "urdf/model.h"
 #include "urdf_parser/urdf_parser.h"
@@ -47,9 +67,6 @@ RobotParser::RobotParser() : Node("robot_parser") {
     std_msgs::msg::String planningRobotDescMsg;
     planningRobotDescMsg.data = planningRobotDesc;
     this->planningRobotDescriptionPub->publish(planningRobotDescMsg);
-    // Cache for later param set attempts
-    this->cachedPlanningRobotDescription = planningRobotDesc;
-    this->cachedPlanningRobotDescriptionHash = std::hash<std::string>{}(planningRobotDesc);
     // Dump descriptions for inspection
     this->dumpRobotDescriptions(this->robotDescription, planningRobotDesc,
       "/tmp/original_robot_description.xml", "/tmp/planning_robot_description.xml");
@@ -109,14 +126,6 @@ RobotParser::RobotParser() : Node("robot_parser") {
 
 void RobotParser::timerCallback() {
   if (!this->modelLoaded) { return; }
-  // Attempt setting planning robot_description parameter if not yet done for the RSP and JSP
-  if (!this->planningRSPLoaded) {
-    // this->trySetPlanningRobotDescriptionParam();
-  }
-  if (!this->planningJSPParamSet) {
-    // this->trySetPlanningJointStatePublisherRDParam();
-  }
-
 
   // Publish Obstacles from Robot Collision Geometry (Using links in the Catalog we already built)
   std::vector<Obstacle> obstacles = this->extractObstaclesFromCatalog(this->collisionCatalog);
@@ -138,105 +147,6 @@ void RobotParser::timerCallback() {
   }
   this->planningObstaclePub->publish(planningObstacleArray);
 }
-
-// void RobotParser::trySetPlanningRobotDescriptionParam() {
-//   if (this->planningRSPLoaded) { return; }
-//   if (this->cachedPlanningRobotDescription.empty()) { return; }
-//   if (!this->asyncParamClientRSP) {
-//     try {
-//       this->asyncParamClientRSP = std::make_shared<rclcpp::AsyncParametersClient>(this->shared_from_this(), this->planningRSPNodeName);
-//     }
-//     catch (const std::bad_weak_ptr&) { return; }
-//   }
-//   if (!this->asyncParamClientRSP->service_is_ready()) {
-//     RCLCPP_DEBUG_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
-//       "Parameter service for %s not ready yet", this->planningRSPNodeName.c_str());
-//     return;
-//   }
-//   // Avoid redundant sets: retrieve existing param if present
-//   try {
-//     auto has_future = this->asyncParamClientRSP->has_parameter("robot_description");
-//     if (has_future.valid() && has_future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready && has_future.get()) {
-//       auto get_future = this->asyncParamClientRSP->get_parameter<std::string>("robot_description");
-//       if (get_future.valid() && get_future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
-//         auto existing = get_future.get();
-//         if (std::hash<std::string>{}(existing) == this->cachedPlanningRobotDescriptionHash) {
-//           this->planningRSPLoaded = true;
-//           RCLCPP_INFO(this->get_logger(), "Planning robot_state_publisher already has matching robot_description");
-//           return;
-//         }
-//       }
-//     }
-//   }
-//   catch (const std::exception& e) {
-//     // If get fails, we'll just attempt to set.
-//   }
-//   auto set_future = this->asyncParamClientRSP->set_parameters({rclcpp::Parameter("robot_description", this->cachedPlanningRobotDescription)});
-//   if (set_future.valid() && set_future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
-//     auto results = set_future.get();
-//     bool ok = std::all_of(results.begin(), results.end(), [](const rcl_interfaces::msg::SetParametersResult& r) { return r.successful; });
-//     if (ok) {
-//       this->planningRSPLoaded = true;
-//       RCLCPP_INFO(this->get_logger(), "Set planning robot_description on %s (%zu chars)", this->planningRSPNodeName.c_str(), this->cachedPlanningRobotDescription.size());
-//     }
-//     else {
-//       RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 10000,
-//         "Failed to set planning robot_description on %s; will retry", this->planningRSPNodeName.c_str());
-//     }
-//   }
-// }
-
-// void RobotParser::trySetPlanningJointStatePublisherRDParam() {
-//   // Attempt to set robot_description on planning joint state publisher(s)
-//   if (!this->cachedPlanningRobotDescription.empty()) {
-//     const std::string targetNode = this->useJSPGui ? (this->planningJSPNodeName + "_gui") : this->planningJSPNodeName;
-//     if (!this->asyncParamClientJSP) {
-//       try {
-//         this->asyncParamClientJSP = std::make_shared<rclcpp::AsyncParametersClient>(this->shared_from_this(), targetNode);
-//       }
-//       catch (const std::bad_weak_ptr&) { return; }
-//     }
-//     if (!this->asyncParamClientJSP->service_is_ready()) {
-//       RCLCPP_DEBUG_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
-//         "Parameter service for %s not ready yet", targetNode.c_str());
-//       return;
-//     }
-//     try {
-//       auto has_future = this->asyncParamClientJSP->get_parameters({"robot_description"});
-//       if (has_future.valid() && has_future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
-//         auto has_vec = has_future.get();
-//         if (!has_vec.empty()) {
-//           auto get_future = this->asyncParamClientJSP->get_parameters({"robot_description"});
-//           if (get_future.valid() && get_future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
-//             auto param_vec = get_future.get();
-//             if (!param_vec.empty()) {
-//               auto existing = param_vec[0].as_string();
-//               if (std::hash<std::string>{}(existing) == this->cachedPlanningRobotDescriptionHash) {
-//                 RCLCPP_DEBUG(this->get_logger(), "%s already has matching robot_description", targetNode.c_str());
-//                 this->planningJSPParamSet = true;
-//                 return;
-//               }
-//             }
-//           }
-//         }
-//       }
-//     }
-//     catch (...) {}
-//     auto set_future = this->asyncParamClientJSP->set_parameters({rclcpp::Parameter("robot_description", this->cachedPlanningRobotDescription)});
-//     if (set_future.valid() && set_future.wait_for(std::chrono::milliseconds(0)) == std::future_status::ready) {
-//       auto results = set_future.get();
-//       bool ok = std::all_of(results.begin(), results.end(), [](const rcl_interfaces::msg::SetParametersResult& r) { return r.successful; });
-//       if (ok) {
-//         this->planningJSPParamSet = true;
-//         RCLCPP_INFO(this->get_logger(), "Set planning robot_description on %s", targetNode.c_str());
-//       }
-//       else {
-//         RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 10000,
-//           "Failed to set planning robot_description on %s; will retry", targetNode.c_str());
-//       }
-//     }
-//   }
-// }
 
 std::vector<Obstacle> RobotParser::extractObstaclesFromCatalog(const std::vector<CollisionCatalogEntry>& catalog) {
   std::vector<Obstacle> collisionObjects;
