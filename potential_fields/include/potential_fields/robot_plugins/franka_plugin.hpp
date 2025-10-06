@@ -24,8 +24,20 @@ public:
   FrankaIKSolver();
   ~FrankaIKSolver() override = default;
 
-  bool computeIK(const geometry_msgs::msg::PoseStamped& endEffectorPose,
-    sensor_msgs::msg::JointState& jointState) override;
+  bool initialize(
+    const std::string& robotDescription,
+    const std::string& baseLink,
+    const std::string& tipLink) override;
+
+  bool solve(
+    const Eigen::Isometry3d& targetPose,
+    const std::vector<double>& seed,
+    std::vector<double>& solution,
+    double timeoutMilliseconds) override;
+
+  bool computeJacobian(
+    const std::vector<double>& jointPositions,
+    Eigen::Matrix<double, 6, Eigen::Dynamic>& J) override;
 
 private:
   // The joint angles of the franka in the "home" position [rad]

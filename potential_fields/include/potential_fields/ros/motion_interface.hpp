@@ -27,9 +27,6 @@ private:
   double controlLoopFreq;
   bool controlEnabled;
 
-  // Instead of storing a shared_ptr, we will need to reach into the PF Manager node
-  // via ROS interfaces to get the data and functions we need
-  // std::shared_ptr<PotentialField> pField;
   std::unique_ptr<MotionPlugin> motionPlugin;
 
   geometry_msgs::msg::Twist::SharedPtr twistLimits;
