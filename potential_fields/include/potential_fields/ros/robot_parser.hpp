@@ -22,6 +22,7 @@
 #include "tf2_ros/buffer.h"
 #include "tf2_ros/transform_broadcaster.h"
 #include "tf2_ros/transform_listener.h"
+#include "tf2_ros/static_transform_broadcaster.h"
 #include "urdf/model.h"
 #include "urdf_parser/urdf_parser.h"
 #include "visualization_msgs/msg/marker.hpp"
@@ -76,15 +77,16 @@ private:
   rclcpp::Publisher<ObstacleArray>::SharedPtr obstaclePub;
   rclcpp::Publisher<ObstacleArray>::SharedPtr planningObstaclePub;
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr planningRobotDescriptionPub;
-  std::shared_ptr<rclcpp::SyncParametersClient> syncParamClientRSP;
-  std::shared_ptr<rclcpp::SyncParametersClient> syncParamClientJSP;
+  std::shared_ptr<rclcpp::AsyncParametersClient> asyncParamClientRSP; // Async client for planning RSP
+  std::shared_ptr<rclcpp::AsyncParametersClient> asyncParamClientJSP; // Async client for planning JSP
   std::shared_ptr<tf2_ros::TransformBroadcaster> dynamicTfBroadcaster;
   std::shared_ptr<tf2_ros::Buffer> tfBuffer;
   std::shared_ptr<tf2_ros::TransformListener> tfListener;
+  std::shared_ptr<tf2_ros::StaticTransformBroadcaster> staticTfBroadcaster;
 
   void timerCallback();
-  void trySetPlanningRobotDescriptionParam();
-  void trySetPlanningJointStatePublisherRDParam();
+  // void trySetPlanningRobotDescriptionParam();
+  // void trySetPlanningJointStatePublisherRDParam();
 
   std::vector<Obstacle> extractObstaclesFromCatalog(const std::vector<CollisionCatalogEntry>& catalog);
   std::vector<CollisionCatalogEntry> buildCollisionCatalog(urdf::Model& model, bool forPlanning);
