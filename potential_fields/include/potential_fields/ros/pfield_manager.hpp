@@ -82,6 +82,7 @@ private:
   std::shared_ptr<tf2_ros::TransformListener> tfListener; // TF Listener for populating the TF buffer
   rclcpp::Publisher<MarkerArray>::SharedPtr pFieldMarkerPub; // Publisher for PF Markers
   rclcpp::Publisher<MarkerArray>::SharedPtr planningPFieldMarkerPub; // Publisher for Planning PF Markers
+  rclcpp::Publisher<JointState>::SharedPtr planningJointStatePub; // Publisher for planning joint states
   rclcpp::Subscription<PoseStamped>::SharedPtr goalPoseSub; // Subscriber for the goal pose
   rclcpp::Subscription<ObstacleArray>::SharedPtr obstacleSub; // Subscriber for obstacles
   rclcpp::Subscription<ObstacleArray>::SharedPtr planningObstacleSub; // Subscriber for planning obstacles

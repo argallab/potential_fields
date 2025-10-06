@@ -1,5 +1,7 @@
 /// @file pfield_manager.cpp
 /// @brief Manages a PotentialField instance and visualizes obstacles, the goal, and planned paths.
+/// @author Sharwin Patil
+/// @date October 6, 2025
 ///
 /// PARAMETERS:
 ///   timer_frequency (float64): The frequency for the timer updating the potential field visualization [Hz]
@@ -8,6 +10,8 @@
 ///   repulsive_gain (float64): Gain for the repulsive force from obstacles [Ns/m]
 ///   max_force (float64): Maximum force allowed by the potential field [N]
 ///   fixed_frame (string): The fixed frame for RViz visualization and potential field computation
+///   influence_zone_scale (float64): Scaling factor for the influence zone of obstacles
+///   field_resolution (float64): Resolution of the potential field grid when visualizing [m]
 ///
 /// SERVICES:
 ///   ~/pfield/plan_path (potential_fields_interfaces::srv::PlanPath): Interpolates a path from a start pose to the goal pose
@@ -15,10 +19,13 @@
 ///
 /// SUBSCRIBERS:
 ///   ~/goal_pose (geometry_msgs::msg::PoseStamped): Updates the goal pose in the potential field
-///   ~/pfield/obstacles (potential_fields_interfaces::msg::Obstacle): Obtains the obstacles to be added to the potential field
+///   ~/pfield/obstacles (potential_fields_interfaces::msg::ObstacleArray): All PF Obstacles
+///   ~/pfield/planning_obstacles (potential_fields_interfaces::msg::ObstacleArray): Planning PF Obstacles
 ///
 /// PUBLISHERS:
-///   ~/visualization_marker_array (visualization_msgs::msg::MarkerArray): Publishes markers for visualization in RViz
+///   ~/pfield/markers (visualization_msgs::msg::MarkerArray): Markers for PF visualization in RViz
+///   ~/pfield/planning_markers (visualization_msgs::msg::MarkerArray): Markers for Planning PF visualization in RViz
+///   ~/planning_joint_states (sensor_msgs::msg::JointState): Joint states for the planning robot for path planning
 
 #include "ros/pfield_manager.hpp"
 
@@ -65,6 +72,10 @@ PotentialFieldManager::PotentialFieldManager()
   RCLCPP_INFO(this->get_logger(), "PF Markers publishing on: %s", this->pFieldMarkerPub->get_topic_name());
   this->planningPFieldMarkerPub = this->create_publisher<MarkerArray>("pfield/planning_markers", markerPubQos);
   RCLCPP_INFO(this->get_logger(), "Planning markers publishing on: %s", this->planningPFieldMarkerPub->get_topic_name());
+
+  // Setup planning joint state publisher
+  this->planningJointStatePub = this->create_publisher<JointState>("planning_joint_states", 10);
+  RCLCPP_INFO(this->get_logger(), "Planning joint states publishing on: %s", this->planningJointStatePub->get_topic_name());
 
   // Setup goal pose subscriber
   this->goalPoseSub = this->create_subscription<geometry_msgs::msg::PoseStamped>(
