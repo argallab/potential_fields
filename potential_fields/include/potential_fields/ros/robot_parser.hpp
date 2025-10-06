@@ -41,7 +41,11 @@ public:
   RobotParser();
   ~RobotParser() = default;
 
+  // Test-only lightweight constructor (skips heavy ROS/TF setup & URDF parsing)
+  explicit RobotParser(bool skipInitialization);
+
 private:
+  friend class RobotParserTestHelper; // Grants unit tests controlled access to private members
   double robotUpdateFrequency; // Frequency for updating Robot's TF frames [Hz]
   std::string robotDescription; // Robot Description
   std::string fixedFrame; // RViz fixed frame

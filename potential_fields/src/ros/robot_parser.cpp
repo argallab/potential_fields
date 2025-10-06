@@ -2,6 +2,7 @@
 #include "urdf/model.h"
 #include "urdf_parser/urdf_parser.h"
 #include "tf2_eigen/tf2_eigen.hpp"
+#include <regex>
 
 
 RobotParser::RobotParser() : Node("robot_parser") {
@@ -77,6 +78,15 @@ RobotParser::RobotParser() : Node("robot_parser") {
       std::bind(&RobotParser::timerCallback, this)
     );
   }
+}
+
+// Test-only constructor: skips parameter declaration, TF setup, and parsing.
+RobotParser::RobotParser(bool skipInitialization) : Node("robot_parser_test") {
+  if (!skipInitialization) {
+    // Fallback to full initialization if false passed inadvertently
+    robotUpdateFrequency = 50.0;
+  }
+  modelLoaded = false; // tests will set up models manually if needed
 }
 
 void RobotParser::timerCallback() {
@@ -254,12 +264,75 @@ std::string RobotParser::createPlanningRobotDescription(const std::string& origi
   // This function will simply create the planning RD that we can publish to a planning/robot_description topic
   // RobotParser will need to listen to the planning TF Tree to pfield/planning/obstacles
   // So we will need a robot catalog (real robot) and a planning catalog (planning copy robot)
+  //
+  // Strategy:
+  //  - Duplicate the URDF string and prefix all link & joint names with "planning::".
+  //  - Update every reference to those names inside <parent link="...">, <child link="...">,
+  //    <mimic joint="..."> and any <joint name="..."> occurrences (including inside transmissions).
+  //  - Avoid double-prefixing if the function is ever called on an already-prefixed description.
+  //  - Keep other tags (materials, gazebo, inertials, visuals) unchanged.
+  //
+  // NOTE: We intentionally do a lightweight regex / string rewrite instead of parsing the XML into
+  //       a DOM to keep dependencies minimal. This assumes reasonably well‑formed URDF XML.
+
+  static const std::string kPrefix = "planning::";
+  std::string result = originalRobotDescription; // working copy
+
+  // Helper that prefixes the captured name if not already prefixed.
+  auto applyPrefix = [&](const std::string& input, const std::regex& pattern) -> std::string {
+    std::string output;
+    output.reserve(input.size());
+    std::sregex_iterator it(input.begin(), input.end(), pattern);
+    std::sregex_iterator end;
+    std::size_t lastPos = 0;
+    for (; it != end; ++it) {
+      const auto& m = *it;
+      // m[0]: full match
+      // m[1]: prefix before the name (e.g., <link ... name=")
+      // m[2]: the actual name
+      // m[3]: the trailing quote
+      output.append(input, lastPos, m.position() - lastPos); // text before match
+      std::string name = m[2].str();
+      if (name.rfind(kPrefix, 0) != 0) { // not already prefixed
+        name = kPrefix + name;
+      }
+      output += m[1].str();
+      output += name;
+      output += m[3].str();
+      lastPos = m.position() + m.length();
+    }
+    output.append(input, lastPos, std::string::npos);
+    return output;
+  };
+
+  // Patterns:
+  //  (<link ... name=") (NAME) (" )
+  //  (<joint ... name=") (NAME) (" )
+  //  (<parent ... link=") (NAME) (" )
+  //  (<child ... link=") (NAME) (" )
+  //  (<mimic ... joint=") (NAME) (" )
+  // Use \b to ensure we match the whole attribute name, allow any other attributes before/after.
+  const std::regex linkName(R"((<link\b[^>]*?\bname=")([^"]+)("))");
+  const std::regex jointName(R"((<joint\b[^>]*?\bname=")([^"]+)("))");
+  const std::regex parentLink(R"((<parent\b[^>]*?\blink=")([^"]+)("))");
+  const std::regex childLink(R"((<child\b[^>]*?\blink=")([^"]+)("))");
+  const std::regex mimicJoint(R"((<mimic\b[^>]*?\bjoint=")([^"]+)("))");
+
+  result = applyPrefix(result, linkName);
+  result = applyPrefix(result, jointName);
+  result = applyPrefix(result, parentLink);
+  result = applyPrefix(result, childLink);
+  result = applyPrefix(result, mimicJoint);
+
+  return result;
 }
 
 
+#ifndef COMPILE_ROBOT_PARSER_NO_MAIN
 int main(int argc, char* argv[]) {
   rclcpp::init(argc, argv);
   rclcpp::spin(std::make_shared<RobotParser>());
   rclcpp::shutdown();
   return 0;
 }
+#endif

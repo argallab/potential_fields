@@ -75,6 +75,7 @@ ament_target_dependencies(pfield_manager
   sensor_msgs
   visualization_msgs
   nav_msgs
+  std_msgs
   trajectory_msgs
   tf2_ros
   tf2_eigen
@@ -89,6 +90,7 @@ ament_target_dependencies(robot_parser
   sensor_msgs
   visualization_msgs
   nav_msgs
+  std_msgs
   tf2_ros
   tf2_eigen
   urdf
@@ -153,6 +155,24 @@ if(BUILD_TESTING)
   )
   target_link_libraries(test_mesh_obstacle pfield_lib)
 
+  ament_add_gtest(test_robot_parser
+    test/test_robot_parser.cpp
+  )
+  target_link_libraries(test_robot_parser pfield_lib ${potential_fields_interfaces_LIBRARIES})
+  ament_target_dependencies(test_robot_parser
+    rclcpp
+    Eigen3
+    potential_fields_interfaces
+    geometry_msgs
+    sensor_msgs
+    visualization_msgs
+    nav_msgs
+    std_msgs
+    tf2_ros
+    tf2_eigen
+    urdf
+  )
+
   install(
     TARGETS test_spatial_vector
     DESTINATION lib/${PROJECT_NAME}
@@ -165,6 +185,11 @@ if(BUILD_TESTING)
 
   install(
     TARGETS test_mesh_obstacle
+    DESTINATION lib/${PROJECT_NAME}
+  )
+
+  install(
+    TARGETS test_robot_parser
     DESTINATION lib/${PROJECT_NAME}
   )
 
