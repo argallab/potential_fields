@@ -5,9 +5,38 @@ FrankaIKSolver::FrankaIKSolver() : IKSolver() {
   this->homeTransformOE = franka_fk(this->homeJointAngles);
 }
 
-bool FrankaIKSolver::computeIK(const geometry_msgs::msg::PoseStamped& targetPose,
-  sensor_msgs::msg::JointState& jointState) {
+// TODO(Sharwin): Implement FrankaIKSolver methods
+
+bool FrankaIKSolver::initialize(
+  const std::string& robotDescription,
+  const std::string& baseLink,
+  const std::string& tipLink) {
   return false;
+}
+
+bool FrankaIKSolver::solve(
+  const Eigen::Isometry3d& targetPose,
+  const std::vector<double>& seed,
+  std::vector<double>& solution,
+  double timeoutMilliseconds) {
+  return false;
+}
+
+bool FrankaIKSolver::computeJacobian(
+  const std::vector<double>& jointPositions,
+  Eigen::Matrix<double, 6, Eigen::Dynamic>& J) {
+  return false;
+}
+
+double FrankaIKSolver::scoreIKSolution(const std::array<double, 7>& solution, const std::array<double, 7>& seed) {
+  // Score based on how close the solution is to the seed using Sum of Squared Differences (SSD)
+  // TODO(Sharwin): Replace this with Kris' scoring method that considers manipulability and distance from neutral pose
+  double score = 0.0;
+  for (size_t i = 0; i < 7; ++i) {
+    double diff = solution[i] - seed[i];
+    score += diff * diff;
+  }
+  return score;
 }
 
 FrankaPlugin::FrankaPlugin(const std::string& hostname) : MotionPlugin() {

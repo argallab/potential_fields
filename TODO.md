@@ -13,6 +13,6 @@
   - IKSolver interface for converting poses in the PF world to joint space (for planning a path)
   - JointTrajectory (and Pose) trajectory planner interface using `trajectory_msgs/JointTrajectory`
   - Interface to hand `JointTrajectory` to a robot controller (libfranka for example) to execute the planned path
-
-- Now that planning TF frames are being published, PF obstacles need to be created from those frames and published for visualization
-- In RViz, should be able to view "Real PField" and "Planning PField" as separate MarkerArray topics
+- IKSolver needs a method to score IK solutions in order to pick the best one from GeoFIK since it provides multiple solutions
+  - Kris has an [implementation](https://github.com/wengmister/Weighted_GeoFIK/tree/main) that could be useful
+- Include installation instructions for fcl and libfranka and other external dependencies

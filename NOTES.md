@@ -103,12 +103,9 @@ Parrallize planning.
 Send JT to JTAS when running MoveIt Franka demo. Doesn't matter if MoveIt.
 Generic programming (Policy based design) for different IK solvers.
 
-## IK
-[GeoFIK](https://arxiv.org/abs/2503.03992)
-TrackIK
-KDL (ROS1 XArm)
-Pinocchio (ROS2 XArm)
-Custom IK Solver (GeoFIK for Franka)
-
-This week:
-Pinnochio as IK to get JointTrajectory from a planned path.
+## IK Libraries
+[Andrew Dornbush's Trac-IK](https://github.com/aurone/trac_ik), [Traclabs Track-IK](https://bitbucket.org/traclabs/trac_ik/src/rolling/)
+[KDL](https://github.com/nbfigueroa/robot_kinematics_kdl) (ROS1 XArm)
+[Pinocchio](https://github.com/stack-of-tasks/pinocchio) (ROS2 XArm)
+[GeoFIK](https://arxiv.org/abs/2503.03992) (Franka Emika Panda)
+[BioIK](https://github.com/TAMS-Group/bio_ik) (Kinova Jaco)

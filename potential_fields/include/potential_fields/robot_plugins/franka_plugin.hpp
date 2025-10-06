@@ -44,6 +44,8 @@ private:
   const std::array<double, 7> homeJointAngles = {0, -M_PI_4, 0, -3 * M_PI_4, 0, M_PI_2, M_PI_4};
   // The homogeneous transform from the robot's base link [O] to the end-effector [E] in the "home" position
   Eigen::Matrix4d homeTransformOE;
+
+  double scoreIKSolution(const std::array<double, 7>& solution, const std::array<double, 7>& seed);
 };
 
 class FrankaPlugin : public MotionPlugin {

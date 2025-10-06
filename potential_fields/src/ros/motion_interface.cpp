@@ -103,27 +103,18 @@ geometry_msgs::msg::TwistStamped MotionInterface::fuseTwists(
   fusedTwist.header.stamp = this->now();
   fusedTwist.header.frame_id = autonomyTwist->header.frame_id;
 
+  auto fuseValue = [](double humanValue, double autonomyValue, double alpha) {
+    return alpha * autonomyValue + (1.0 - alpha) * humanValue;
+  };
+
   // Simple linear fusion based on alpha parameter
   // When alpha = 1.0, the output is only the autonomy command
-  fusedTwist.twist.linear.x =
-    this->fusionAlpha * autonomyTwist->twist.linear.x +
-    (1.0 - this->fusionAlpha) * humanTwist->twist.linear.x;
-  fusedTwist.twist.linear.y =
-    this->fusionAlpha * autonomyTwist->twist.linear.y +
-    (1.0 - this->fusionAlpha) * humanTwist->twist.linear.y;
-  fusedTwist.twist.linear.z =
-    this->fusionAlpha * autonomyTwist->twist.linear.z +
-    (1.0 - this->fusionAlpha) * humanTwist->twist.linear.z;
-
-  fusedTwist.twist.angular.x =
-    this->fusionAlpha * autonomyTwist->twist.angular.x +
-    (1.0 - this->fusionAlpha) * humanTwist->twist.angular.x;
-  fusedTwist.twist.angular.y =
-    this->fusionAlpha * autonomyTwist->twist.angular.y +
-    (1.0 - this->fusionAlpha) * humanTwist->twist.angular.y;
-  fusedTwist.twist.angular.z =
-    this->fusionAlpha * autonomyTwist->twist.angular.z +
-    (1.0 - this->fusionAlpha) * humanTwist->twist.angular.z;
+  fusedTwist.twist.linear.x = fuseValue(humanTwist->twist.linear.x, autonomyTwist->twist.linear.x, this->fusionAlpha);
+  fusedTwist.twist.linear.y = fuseValue(humanTwist->twist.linear.y, autonomyTwist->twist.linear.y, this->fusionAlpha);
+  fusedTwist.twist.linear.z = fuseValue(humanTwist->twist.linear.z, autonomyTwist->twist.linear.z, this->fusionAlpha);
+  fusedTwist.twist.angular.x = fuseValue(humanTwist->twist.angular.x, autonomyTwist->twist.angular.x, this->fusionAlpha);
+  fusedTwist.twist.angular.y = fuseValue(humanTwist->twist.angular.y, autonomyTwist->twist.angular.y, this->fusionAlpha);
+  fusedTwist.twist.angular.z = fuseValue(humanTwist->twist.angular.z, autonomyTwist->twist.angular.z, this->fusionAlpha);
 
   return fusedTwist;
 }
