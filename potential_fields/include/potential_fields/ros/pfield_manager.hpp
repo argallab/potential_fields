@@ -18,6 +18,7 @@
 #include "visualization_msgs/msg/marker.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
+#include "std_msgs/msg/string.hpp"
 
 #include "potential_fields_interfaces/msg/obstacle.hpp"
 #include "potential_fields_interfaces/msg/obstacle_array.hpp"
@@ -25,6 +26,7 @@
 #include "potential_fields_interfaces/srv/compute_autonomy_vector.hpp"
 
 #include "pfield/pfield.hpp"
+#include "robot_plugins/ik_solver.hpp"
 
 #include "rclcpp/rclcpp.hpp"
 #include "tf2_eigen/tf2_eigen.hpp"
@@ -77,12 +79,13 @@ private:
   std::shared_ptr<tf2_ros::TransformBroadcaster> dynamicTfBroadcaster; // Dynamic transform broadcaster
   std::shared_ptr<tf2_ros::Buffer> tfBuffer; // TF buffer for transform lookups
   std::shared_ptr<tf2_ros::TransformListener> tfListener; // TF Listener for populating the TF buffer
-  rclcpp::Publisher<JointState>::SharedPtr planningJointStatePub; // Publisher for planning-copy of JointStates
   rclcpp::Publisher<MarkerArray>::SharedPtr markerPub; // Publisher for visualization markers
   rclcpp::Subscription<PoseStamped>::SharedPtr goalPoseSub; // Subscriber for the goal pose
   rclcpp::Subscription<ObstacleArray>::SharedPtr obstacleSub; // Subscriber for obstacles
   rclcpp::Service<PlanPath>::SharedPtr pathPlanningService; // Service to obtain a path from a query point to the goal
   rclcpp::Service<ComputeAutonomyVector>::SharedPtr autonomyVectorService; // Service to compute velocity vector at a given pose
+
+  std::unique_ptr<IKSolver> ikSolver; // IK Solver Plugin instance
 
   /**
    * @brief Interpolates a path from a start pose to the goal pose.

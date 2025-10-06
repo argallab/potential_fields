@@ -11,6 +11,7 @@ pfield_manager:
 robot_parser:
   ros__parameters:
     robot_geometry_update_frequency: 100.0 # [Hz]
+    planning_tf_prefix: "planning" # Prefix for planning frames
 motion_interface:
   ros__parameters:
     robot_plugin: "franka"

@@ -12,11 +12,14 @@ RobotParser::RobotParser() : Node("robot_parser") {
   this->robotUpdateFrequency = this->declare_parameter("robot_geometry_update_frequency", 50.0f); // [Hz]
   this->robotDescription = this->declare_parameter("robot_description", "urdf/robot.urdf");
   this->fixedFrame = this->declare_parameter("fixed_frame", "world"); // RViz fixed frame
+  this->planningTFPrefix = this->declare_parameter("planning_tf_prefix", std::string("planning"));
+  this->useJSPGui = this->declare_parameter("use_jsp", true);
   // Get parameters from yaml file
   this->robotUpdateFrequency = this->get_parameter("robot_geometry_update_frequency").as_double();
   this->robotDescription = this->get_parameter("robot_description").as_string();
   this->fixedFrame = this->get_parameter("fixed_frame").as_string();
-
+  this->planningTFPrefix = this->get_parameter("planning_tf_prefix").as_string();
+  this->useJSPGui = this->get_parameter("use_jsp").as_bool();
 
   // Setup obstacle publisher (smaller queue reduces latency/buffering)
   auto qos = rclcpp::QoS(rclcpp::KeepLast(10))
@@ -44,6 +47,10 @@ RobotParser::RobotParser() : Node("robot_parser") {
     std_msgs::msg::String planningRobotDescMsg;
     planningRobotDescMsg.data = planningRobotDesc;
     this->planningRobotDescriptionPub->publish(planningRobotDescMsg);
+    // Cache for later param set attempts
+    this->cachedPlanningRobotDescription = planningRobotDesc;
+    this->cachedPlanningRobotDescriptionHash = std::hash<std::string>{}(planningRobotDesc);
+    // After publishing Planning Robot Description, set the parameter for the planning_RSP
     this->planningRobotModel.initString(planningRobotDesc);
     this->collisionCatalog = this->buildCollisionCatalog(this->robotModel, false);
     this->planningCollisionCatalog = this->buildCollisionCatalog(this->planningRobotModel, true);
@@ -75,22 +82,21 @@ RobotParser::RobotParser() : Node("robot_parser") {
     // Run the timer to periodically update the robot state
     this->timer = this->create_wall_timer(
       std::chrono::duration<double>(1.0 / this->robotUpdateFrequency),
-      std::bind(&RobotParser::timerCallback, this)
-    );
+      std::bind(&RobotParser::timerCallback, this));
   }
-}
-
-// Test-only constructor: skips parameter declaration, TF setup, and parsing.
-RobotParser::RobotParser(bool skipInitialization) : Node("robot_parser_test") {
-  if (!skipInitialization) {
-    // Fallback to full initialization if false passed inadvertently
-    robotUpdateFrequency = 50.0;
-  }
-  modelLoaded = false; // tests will set up models manually if needed
 }
 
 void RobotParser::timerCallback() {
   if (!this->modelLoaded) { return; }
+  // Attempt setting planning robot_description parameter if not yet done for the RSP and JSP
+  if (!this->planningRSPLoaded) {
+    this->trySetPlanningRobotDescriptionParam();
+  }
+  if (!this->planningJSPParamSet) {
+    this->trySetPlanningJointStatePublisherRDParam();
+  }
+
+
   // Publish Obstacles from Robot Collision Geometry (Using links in the Catalog we already built)
   std::vector<Obstacle> obstacles = this->extractObstaclesFromCatalog(this->collisionCatalog);
   ObstacleArray obstacleArray;
@@ -110,6 +116,78 @@ void RobotParser::timerCallback() {
     planningObstacleArray.obstacles.push_back(obstacle);
   }
   this->planningObstaclePub->publish(planningObstacleArray);
+}
+
+void RobotParser::trySetPlanningRobotDescriptionParam() {
+  if (this->planningRSPLoaded) { return; }
+  if (this->cachedPlanningRobotDescription.empty()) { return; }
+  if (!this->syncParamClientRSP) {
+    // Safe to create now; Node fully constructed
+    this->syncParamClientRSP = std::make_shared<rclcpp::SyncParametersClient>(shared_from_this(), this->planningRSPNodeName);
+  }
+  // Short wait (non-blocking busy spin avoided) for service readiness
+  if (!this->syncParamClientRSP->wait_for_service(std::chrono::milliseconds(50))) {
+    RCLCPP_DEBUG_THROTTLE(this->get_logger(), *this->get_clock(), 5000, "Waiting for %s parameter service...", this->planningRSPNodeName.c_str());
+    return;
+  }
+  // Avoid redundant sets: retrieve existing param if present
+  try {
+    if (this->syncParamClientRSP->has_parameter("robot_description")) {
+      auto existing = this->syncParamClientRSP->get_parameter<std::string>("robot_description");
+      if (std::hash<std::string>{}(existing) == this->cachedPlanningRobotDescriptionHash) {
+        this->planningRSPLoaded = true;
+        RCLCPP_INFO(this->get_logger(), "Planning robot_state_publisher already has matching robot_description");
+        return;
+      }
+    }
+  }
+  catch (const std::exception& e) {
+    // If get fails, we'll just attempt to set.
+  }
+  auto results = this->syncParamClientRSP->set_parameters({rclcpp::Parameter("robot_description", this->cachedPlanningRobotDescription)});
+  bool ok = std::all_of(results.begin(), results.end(), [](const rcl_interfaces::msg::SetParametersResult& r) { return r.successful; });
+  if (ok) {
+    this->planningRSPLoaded = true;
+    RCLCPP_INFO(this->get_logger(), "Set planning robot_description on %s (%zu chars)", this->planningRSPNodeName.c_str(), this->cachedPlanningRobotDescription.size());
+  }
+  else {
+    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 10000, "Failed to set planning robot_description on %s; will retry", this->planningRSPNodeName.c_str());
+  }
+}
+
+void RobotParser::trySetPlanningJointStatePublisherRDParam() {
+  // Attempt to set robot_description on planning joint state publisher(s)
+  if (!this->cachedPlanningRobotDescription.empty()) {
+    // Lazy create clients
+    const std::string JSPNodeName = this->useJSPGui ? this->planningJSPNodeName + "_gui" : this->planningJSPNodeName;
+    if (!this->syncParamClientJSP) {
+      this->syncParamClientJSP = std::make_shared<rclcpp::SyncParametersClient>(shared_from_this(), JSPNodeName);
+    }
+    bool setAny = false;
+    auto trySet = [&](std::shared_ptr<rclcpp::SyncParametersClient>& client, const std::string& nodeName) {
+      if (!client) return false;
+      if (!client->wait_for_service(std::chrono::milliseconds(10))) return false;
+      try {
+        if (client->has_parameter("robot_description")) {
+          auto existing = client->get_parameter<std::string>("robot_description");
+          if (std::hash<std::string>{}(existing) == this->cachedPlanningRobotDescriptionHash) {
+            RCLCPP_DEBUG(this->get_logger(), "%s already has matching robot_description", nodeName.c_str());
+            return true; // treat as satisfied
+          }
+        }
+      }
+      catch (...) {}
+      auto results = client->set_parameters({rclcpp::Parameter("robot_description", this->cachedPlanningRobotDescription)});
+      bool ok = std::all_of(results.begin(), results.end(), [](const rcl_interfaces::msg::SetParametersResult& r) { return r.successful; });
+      if (ok) {
+        RCLCPP_INFO(this->get_logger(), "Set planning robot_description on %s", nodeName.c_str());
+        return true;
+      }
+      return false;
+    };
+    if (trySet(this->syncParamClientJSP, this->planningJSPNodeName)) setAny = true;
+    if (setAny) { this->planningJSPParamSet = true; }
+  }
 }
 
 std::vector<Obstacle> RobotParser::extractObstaclesFromCatalog(const std::vector<CollisionCatalogEntry>& catalog) {
@@ -135,7 +213,7 @@ std::vector<Obstacle> RobotParser::extractObstaclesFromCatalog(const std::vector
     }
   }
   // Build obstacles for links whose transforms we obtained
-  for (const auto& entry : this->collisionCatalog) {
+  for (const auto& entry : catalog) {
     auto it = linkPoses.find(entry.linkName);
     if (it == linkPoses.end()) continue;
     const urdf::Pose& origin = entry.col->origin;
@@ -275,7 +353,7 @@ std::string RobotParser::createPlanningRobotDescription(const std::string& origi
   // NOTE: We intentionally do a lightweight regex / string rewrite instead of parsing the XML into
   //       a DOM to keep dependencies minimal. This assumes reasonably well‑formed URDF XML.
 
-  static const std::string kPrefix = "planning::";
+  static const std::string kPrefix = this->planningTFPrefix + "::";
   std::string result = originalRobotDescription; // working copy
 
   // Helper that prefixes the captured name if not already prefixed.

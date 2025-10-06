@@ -46,9 +46,12 @@
   <!-- Include PF Launch File -->
   <include file="$(find-pkg-share potential_fields)/launch/pfield.launch.xml">
     <arg name="rviz_fixed_frame" value="$(var rviz_fixed_frame)"/>
+    <arg name="use_jsp" value="$(var use_jsp)"/>
     <arg name="use_rviz" value="$(var use_rviz)"/>
     <arg name="use_xacro" value="$(var use_xacro)"/>
     <arg name="robot_urdf_xacro" value="$(find-pkg-share pfields_demo)/urdf/$(var robot_urdf_xacro)"/>
     <arg name="robot_urdf" value="$(find-pkg-share pfields_demo)/urdf/$(var robot_urdf)"/>
+    <arg name="robot_state_publisher_frequency" value="$(var robot_state_publisher_frequency)"/>
+    <arg name="joint_state_publisher_frequency" value="$(var joint_state_publisher_frequency)"/>
   </include>
 </launch>

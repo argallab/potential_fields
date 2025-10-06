@@ -63,13 +63,6 @@ PotentialFieldManager::PotentialFieldManager()
   this->markerPub = this->create_publisher<MarkerArray>("visualization_marker_array", markerPubQos);
   RCLCPP_INFO(this->get_logger(), "Markers publishing on: %s", this->markerPub->get_topic_name());
 
-  // Setup planning JointState publisher
-  auto planningJointStatePubQos = rclcpp::QoS(rclcpp::KeepLast(10))
-    .best_effort()
-    .durability_volatile();
-  this->planningJointStatePub = this->create_publisher<JointState>("pfield/planning_joint_states", planningJointStatePubQos);
-  RCLCPP_INFO(this->get_logger(), "Planning JointStates publishing on: %s", this->planningJointStatePub->get_topic_name());
-
   // Setup goal pose subscriber
   this->goalPoseSub = this->create_subscription<geometry_msgs::msg::PoseStamped>(
     "goal_pose",

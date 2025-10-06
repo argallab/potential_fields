@@ -41,7 +41,6 @@ target_link_libraries(pfield_lib
 ament_target_dependencies(pfield_lib
   Eigen3
   geometric_shapes
-  fcl
 )
 target_include_directories(pfield_lib PUBLIC
   include/potential_fields
@@ -67,33 +66,43 @@ include_directories(
 
 add_executable(pfield_manager src/ros/pfield_manager.cpp)
 add_executable(robot_parser src/ros/robot_parser.cpp)
-ament_target_dependencies(pfield_manager
-  rclcpp
+
+# Library version of robot_parser (without main) for unit testing
+add_library(robot_parser_lib STATIC src/ros/robot_parser.cpp)
+target_compile_definitions(robot_parser_lib PRIVATE COMPILE_ROBOT_PARSER_NO_MAIN)
+ament_target_dependencies(robot_parser_lib
   Eigen3
-  potential_fields_interfaces
   geometry_msgs
-  sensor_msgs
-  visualization_msgs
-  nav_msgs
-  std_msgs
-  trajectory_msgs
-  tf2_ros
+  potential_fields_interfaces
+  rclcpp
   tf2_eigen
+  tf2_ros
   urdf
+  visualization_msgs
+)
+ament_target_dependencies(pfield_manager
+  Eigen3
+  geometry_msgs
+  nav_msgs
+  potential_fields_interfaces
+  rclcpp
+  sensor_msgs
+  tf2_eigen
+  tf2_ros
+  trajectory_msgs
+  urdf
+  visualization_msgs
 )
 
 ament_target_dependencies(robot_parser
-  rclcpp
   Eigen3
-  potential_fields_interfaces
   geometry_msgs
-  sensor_msgs
-  visualization_msgs
-  nav_msgs
-  std_msgs
-  tf2_ros
+  potential_fields_interfaces
+  rclcpp
   tf2_eigen
+  tf2_ros
   urdf
+  visualization_msgs
 )
 
 target_link_libraries(pfield_manager
@@ -158,19 +167,16 @@ if(BUILD_TESTING)
   ament_add_gtest(test_robot_parser
     test/test_robot_parser.cpp
   )
-  target_link_libraries(test_robot_parser pfield_lib ${potential_fields_interfaces_LIBRARIES})
+  target_link_libraries(test_robot_parser pfield_lib robot_parser_lib)
   ament_target_dependencies(test_robot_parser
-    rclcpp
     Eigen3
-    potential_fields_interfaces
     geometry_msgs
-    sensor_msgs
-    visualization_msgs
-    nav_msgs
-    std_msgs
-    tf2_ros
+    potential_fields_interfaces
+    rclcpp
     tf2_eigen
+    tf2_ros
     urdf
+    visualization_msgs
   )
 
   install(
