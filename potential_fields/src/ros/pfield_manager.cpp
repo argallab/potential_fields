@@ -164,11 +164,19 @@ PotentialFieldManager::PotentialFieldManager()
         request->start.pose.orientation.y, request->start.pose.orientation.z
       )
     );
-    Path path = this->interpolatePath(startPose, request->delta_time, request->goal_tolerance);
+    PlanningResult result = this->interpolatePath(startPose, request->delta_time, request->goal_tolerance);
+    if (!result.success) {
+      RCLCPP_WARN(this->get_logger(), "Path planning failed");
+      response->success = false;
+      return;
+    }
+    RCLCPP_INFO(this->get_logger(), "Path generated with %zu poses", result.path.poses.size());
+    RCLCPP_INFO(this->get_logger(), "Joint trajectory has %zu points", result.jointTrajectory.points.size());
     response->plan.header.frame_id = this->fixedFrame;
     response->plan.header.stamp = this->now();
-    response->plan = path;
-    RCLCPP_INFO(this->get_logger(), "Path generated with %zu poses", path.poses.size());
+    response->plan = result.path;
+    response->joint_trajectory = result.jointTrajectory;
+    response->success = true;
   }
   );
 
@@ -224,7 +232,7 @@ PotentialFieldManager::PotentialFieldManager()
   );
 }
 
-Path PotentialFieldManager::interpolatePath(const SpatialVector& start, double deltaTime, double goalTolerance) {
+PlanningResult PotentialFieldManager::interpolatePath(const SpatialVector& start, double deltaTime, double goalTolerance) {
   // TODO(Sharwin): Implement the new functionality here
   // interpolatePath will need to account for robot motion influencing the PF
   // during the motion so the function will need to be re-written.
@@ -244,7 +252,7 @@ Path PotentialFieldManager::interpolatePath(const SpatialVector& start, double d
   // 7. Return the EE Path (nav_msgs/Path) and the Robot's joint positions (trajectory_msgs/JointTrajectory)
   // 8. Compute the joint velocities and put the joint velocity path into the msg (trajectory_msgs/JointTrajectory)
   //    - In order to do this, the IKSolver must offer the Jacobian to convert EE Velocites into Joint Velocities
-
+  PlanningResult result;
   Path path;
   path.header.frame_id = this->fixedFrame;
   path.header.stamp = this->now();
@@ -282,7 +290,9 @@ Path PotentialFieldManager::interpolatePath(const SpatialVector& start, double d
     newPose.pose.orientation.w = currentPose.getOrientation().w();
     path.poses.push_back(newPose);
   }
-  return path;
+  result.path = path;
+  result.success = true;
+  return result;
 }
 
 PFLimits PotentialFieldManager::getPFLimits(std::shared_ptr<PotentialField> pf) {

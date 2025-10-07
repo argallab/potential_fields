@@ -8,4 +8,6 @@ float32 delta_time
 float32 goal_tolerance
 
 ---
+bool success
 nav_msgs/Path plan
+trajectory_msgs/JointTrajectory joint_trajectory

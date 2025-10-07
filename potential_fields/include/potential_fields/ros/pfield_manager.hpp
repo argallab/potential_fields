@@ -19,6 +19,7 @@
 #include "visualization_msgs/msg/marker_array.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
 #include "std_msgs/msg/string.hpp"
+#include "trajectory_msgs/msg/joint_trajectory.hpp"
 
 #include "potential_fields_interfaces/msg/obstacle.hpp"
 #include "potential_fields_interfaces/msg/obstacle_array.hpp"
@@ -55,6 +56,12 @@ struct PFLimits {
   double maxY; // Maximum Y coordinate of the bounding box [m]
   double minZ; // Minimum Z coordinate of the bounding box [m]
   double maxZ; // Maximum Z coordinate of the bounding box [m]
+};
+
+struct PlanningResult {
+  bool success;
+  Path path;
+  trajectory_msgs::msg::JointTrajectory jointTrajectory;
 };
 
 class PotentialFieldManager : public rclcpp::Node {
@@ -108,9 +115,9 @@ private:
    * @param start The starting pose of the path
    * @param deltaTime The time step for each interpolation segment [s]
    * @param goalTolerance The tolerance for reaching the goal [m]
-   * @return Path The interpolated path from start to goal
+   * @return PlanningResult A struct containing success flag, path, and joint trajectory
    */
-  Path interpolatePath(const SpatialVector& start, double deltaTime, double goalTolerance);
+  PlanningResult interpolatePath(const SpatialVector& start, double deltaTime, double goalTolerance);
 
   /**
    * @brief Given a potential field, computes its spatial limits for visualization (bounding box)

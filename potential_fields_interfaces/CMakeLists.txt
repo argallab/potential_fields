@@ -12,6 +12,7 @@ find_package(builtin_interfaces REQUIRED)
 find_package(std_msgs REQUIRED)
 find_package(geometry_msgs REQUIRED)
 find_package(nav_msgs REQUIRED)
+find_package(trajectory_msgs REQUIRED)
 
 if(BUILD_TESTING)
   find_package(ament_lint_auto REQUIRED)
@@ -32,7 +33,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/ObstacleArray.msg"
   "srv/PlanPath.srv"
   "srv/ComputeAutonomyVector.srv"
-  DEPENDENCIES builtin_interfaces std_msgs geometry_msgs nav_msgs
+  DEPENDENCIES builtin_interfaces std_msgs geometry_msgs nav_msgs trajectory_msgs
 )
 
 ament_package()
