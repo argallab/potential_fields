@@ -204,8 +204,10 @@ if(BUILD_TESTING)
     EXCLUDE
     include/potential_fields/robot_plugins/examples_common.h
     include/potential_fields/robot_plugins/geofik.h
+    include/potential_fields/robot_plugins/weighted_ik.h
     src/robot_plugins/geofik.cpp
     src/robot_plugins/examples_common.cpp
+    src/robot_plugins/weighted_ik.cpp
   )
 
   # the following line skips the linter which checks for copyrights

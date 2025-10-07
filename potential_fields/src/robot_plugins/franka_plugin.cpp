@@ -36,14 +36,13 @@ bool FrankaIKSolver::solve(
   const std::vector<double>& seed,
   std::vector<double>& solution,
   Eigen::Matrix<double, 6, Eigen::Dynamic>& J) {
-
   const std::array<double, 3> targetPosition = {
     targetPose.translation().x(), targetPose.translation().y(), targetPose.translation().z()
   };
   const std::array<double, 9> targetOrientation = {
-    targetPose.rotation()(0,0), targetPose.rotation()(0,1), targetPose.rotation()(0,2),
-    targetPose.rotation()(1,0), targetPose.rotation()(1,1), targetPose.rotation()(1,2),
-    targetPose.rotation()(2,0), targetPose.rotation()(2,1), targetPose.rotation()(2,2)
+    targetPose.rotation()(0, 0), targetPose.rotation()(0, 1), targetPose.rotation()(0, 2),
+    targetPose.rotation()(1, 0), targetPose.rotation()(1, 1), targetPose.rotation()(1, 2),
+    targetPose.rotation()(2, 0), targetPose.rotation()(2, 1), targetPose.rotation()(2, 2)
   };
   const std::array<double, 7> currentConfiguration = {
     seed[0], seed[1], seed[2], seed[3], seed[4], seed[5], seed[6]

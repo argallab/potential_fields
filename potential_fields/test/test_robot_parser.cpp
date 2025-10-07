@@ -1,4 +1,5 @@
 #include <gtest/gtest.h>
+#include <rclcpp/rclcpp.hpp>
 #include <urdf/model.h>
 #include <urdf_parser/urdf_parser.h>
 #include <Eigen/Core>
@@ -7,9 +8,26 @@
 #define COMPILE_ROBOT_PARSER_NO_MAIN
 #include "ros/robot_parser.hpp"
 
+// Ensure rclcpp is initialized for tests that create nodes
+namespace {
+  struct RclcppTestInitializer {
+    RclcppTestInitializer() {
+      if (!rclcpp::ok()) {
+        int argc = 0;
+        rclcpp::init(argc, nullptr);
+      }
+    }
+    ~RclcppTestInitializer() {
+      if (rclcpp::ok()) {
+        rclcpp::shutdown();
+      }
+    }
+  } rclcpp_test_initializer;
+} // namespace
+
 class RobotParserTestHelper : public RobotParser {
 public:
-  RobotParserTestHelper() : RobotParser(true) {}
+  RobotParserTestHelper() : RobotParser(true) { this->planningTFPrefix = "planning"; }
   using RobotParser::createPlanningRobotDescription;
   using RobotParser::buildCollisionCatalog;
   using RobotParser::obstacleFromCollisionObject;
@@ -48,11 +66,11 @@ TEST(RobotParserTests, PlanningDescriptionPrefixesNames) {
   RobotParserTestHelper helper;
   std::string planning = helper.createPlanningRobotDescription(kTestURDF);
   // Original names shouldn't appear as attribute values un-prefixed; check a sampling.
-  EXPECT_NE(std::string::npos, planning.find("planning::base_link"));
-  EXPECT_NE(std::string::npos, planning.find("planning::joint1"));
+  EXPECT_NE(std::string::npos, planning.find("planning_base_link"));
+  EXPECT_NE(std::string::npos, planning.find("planning_joint1"));
   EXPECT_EQ(std::string::npos, planning.find("\"link1\"")); // raw unprefixed attribute pattern
   // Ensure double prefixing didn't occur.
-  EXPECT_EQ(std::string::npos, planning.find("planning::planning::"));
+  EXPECT_EQ(std::string::npos, planning.find("planning_planning_"));
 }
 
 TEST(RobotParserTests, BuildCollisionCatalogAssignsIds) {

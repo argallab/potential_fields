@@ -14,9 +14,11 @@
 ///   (none) – This node is passive with respect to subscriptions; it relies on TF and parameters.
 ///
 /// PUBLISHERS:
-///   ~/pfield/obstacles (potential_fields_interfaces::msg::ObstacleArray) Collision geometry obstacles derived from the live robot's URDF & current TF transforms.
-///   ~/pfield/planning_obstacles (potential_fields_interfaces::msg::ObstacleArray) Collision geometry obstacles derived from the planning duplicate robot.
-///   ~/pfield/planning_robot_description (std_msgs::msg::String) The planning-modified URDF for downstream consumers (e.g., a planning robot_state_publisher).
+///   ~/pfield/obstacles (potential_fields_interfaces::msg::ObstacleArray) Collision geometry obstacles derived
+///                                                                        from the live robot's URDF & current TF transforms.
+///   ~/pfield/planning_obstacles (potential_fields_interfaces::msg::ObstacleArray) Collision geometry obstacles derived from the
+///                                                                                 planning duplicate robot.
+///   ~/pfield/planning_robot_description (std_msgs::msg::String) The planning-modified URDF for downstream consumers
 
 #include "ros/robot_parser.hpp"
 #include "urdf/model.h"
@@ -96,7 +98,6 @@ RobotParser::RobotParser() : Node("robot_parser") {
     rclcpp::shutdown();
   }
   else {
-
     // Publish a static transform from robot's base frame to planning base frame as identity
     geometry_msgs::msg::TransformStamped staticTransform;
     staticTransform.header.stamp = this->get_clock()->now();
@@ -388,7 +389,10 @@ void RobotParser::dumpRobotDescriptions(const std::string& original, const std::
   // createPlanningRobotDescription currently uses 'prefix::name' pattern.
   if (planning.find(this->planningTFPrefix + "::") != std::string::npos) {
     RCLCPP_WARN(this->get_logger(),
-      "Planning URDF uses '::' separators (e.g., %s::link). If the planning robot_state_publisher is configured with frame_prefix '%s', TF frames will appear as '%s<link>', not with '::'. This will cause TF lookup failures. Consider switching to underscores or aligning naming.",
+      "Planning URDF uses '::' separators (e.g., %s::link). "
+      "If the planning robot_state_publisher is configured with frame_prefix '%s', "
+      "TF frames will appear as '%s<link>', not with '::'. This will cause TF lookup failures. "
+      "Consider switching to underscores or aligning naming.",
       this->planningTFPrefix.c_str(), this->planningTFPrefix.c_str(), this->planningTFPrefix.c_str());
   }
 }

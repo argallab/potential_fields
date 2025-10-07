@@ -222,7 +222,6 @@ PotentialFieldManager::PotentialFieldManager()
     this->planningPFieldMarkerPub->publish(planningPFMarkers);
   }
   );
-
 }
 
 Path PotentialFieldManager::interpolatePath(const SpatialVector& start, double deltaTime, double goalTolerance) {

@@ -5,6 +5,7 @@
 #include <memory>
 #include <string>
 #include <iostream>
+#include <vector>
 
 #include <franka/active_control.h>
 #include <franka/active_motion_generator.h>
