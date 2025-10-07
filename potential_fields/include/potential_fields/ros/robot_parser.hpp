@@ -46,7 +46,7 @@ public:
   ~RobotParser() = default;
 
   // Test-only lightweight constructor (skips heavy ROS/TF setup & URDF parsing)
-  explicit RobotParser(bool testConstructor) : Node("robot_parser_test"), modelLoaded(false) {}
+  explicit RobotParser([[maybe_unused]] bool testConstructor) : Node("robot_parser_test"), modelLoaded(false) {}
 
 private:
   friend class RobotParserTestHelper; // Grants unit tests controlled access to private members

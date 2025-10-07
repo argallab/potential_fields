@@ -552,11 +552,10 @@ MarkerArray PotentialFieldManager::createGoalMarker(std::shared_ptr<PotentialFie
 MarkerArray PotentialFieldManager::createPotentialVectorMarkers(std::shared_ptr<PotentialField> pf) {
   MarkerArray markerArray;
   int id = 0;
-  double minX, maxX, minY, maxY, minZ, maxZ;
-  this->getPFLimits(minX, maxX, minY, maxY, minZ, maxZ);
-  for (double x = minX; x <= maxX; x += this->fieldResolution) {
-    for (double y = minY; y <= maxY; y += this->fieldResolution) {
-      for (double z = minZ; z <= maxZ; z += this->fieldResolution) {
+  const auto limits = this->getPFLimits(pf);
+  for (double x = limits.minX; x <= limits.maxX; x += this->fieldResolution) {
+    for (double y = limits.minY; y <= limits.maxY; y += this->fieldResolution) {
+      for (double z = limits.minZ; z <= limits.maxZ; z += this->fieldResolution) {
         // Skip any points that are inside obstacle radius
         Eigen::Vector3d point(x, y, z);
         if (pf->isPointInsideObstacle(point)) { continue; }
