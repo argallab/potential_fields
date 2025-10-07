@@ -109,3 +109,23 @@ Generic programming (Policy based design) for different IK solvers.
 [Pinocchio](https://github.com/stack-of-tasks/pinocchio) (ROS2 XArm)
 [GeoFIK](https://arxiv.org/abs/2503.03992) (Franka Emika Panda)
 [BioIK](https://github.com/TAMS-Group/bio_ik) (Kinova Jaco)
+
+# What the User needs to provide to use PFields with their robot
+1. Robot Model (URDF, raw or xacro)
+   - Needs Collision elements for all links
+   - Needs Joint limits for all joints
+   - In addition to the URDF, include any mesh files used in the URDF
+   - Static Transform from chosen fixed frame to robot base link (typically identity transform)
+2. `MotionPlugin` implementation for their robot
+   - `IKSolver` implementation with convergence criteria to pick "best" solution from multiple solutions if applicable
+   - Robot interface to obtain robot state (joint states, end-effector pose)
+   - Robot interface to send end-effector velocity commands or joint trajectory commands to the robot
+3. (Optional) Obstacle publisher node to publish obstacles in the environment as standard ROS messages
+   - Note that these are separate from the robot's collision objects, which are automatically parsed into PF obstacles
+4. (Optional) Goal publisher node to publish goal positions for the robot to plan
+5. (Optional) Human input node to publish human velocity commands for the robot to fuse with the autonomy commands
+   - Joystick, keyboard, or other teleoperation interface
+6. Service Client for Path Planning
+    - Provide start pose (typically current end-effector pose)
+    - Service internally requires a `MotionPlugin` for the robot (includes `IKSolver`)
+    - Receive planned path as `trajectory_msgs/JointTrajectory` message
