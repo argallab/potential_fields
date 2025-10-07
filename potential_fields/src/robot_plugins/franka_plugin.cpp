@@ -1,5 +1,6 @@
 #include "robot_plugins/franka_plugin.hpp"
 #include "geofik.h"
+#include <cmath>
 
 FrankaIKSolver::FrankaIKSolver() : IKSolver() {
   this->homeTransformOE = franka_fk(this->homeJointAngles);
@@ -36,7 +37,7 @@ double FrankaIKSolver::scoreIKSolution(const std::array<double, 7>& solution, co
     double diff = solution[i] - seed[i];
     score += diff * diff;
   }
-  return score;
+  return std::sqrt(score);
 }
 
 FrankaPlugin::FrankaPlugin(const std::string& hostname) : MotionPlugin() {
