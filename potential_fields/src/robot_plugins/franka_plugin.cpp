@@ -1,43 +1,72 @@
 #include "robot_plugins/franka_plugin.hpp"
-#include "geofik.h"
+#include "weighted_ik.h"
 #include <cmath>
 
-FrankaIKSolver::FrankaIKSolver() : IKSolver() {
+// struct WeightedIKResult {
+//   bool success;
+//   std::array<double, 7> joint_angles;
+//   double q7_optimal;
+//   double score;
+//   double manipulability;
+//   double neutral_distance;
+//   double current_distance;
+//   int solution_index;
+//   std::array<std::array<double, 6>, 7> jacobian;
+
+//   int total_solutions_found;
+//   int valid_solutions_count;
+//   int q7_values_tested;
+//   int optimization_iterations;  // Number of iterations used by optimization algorithm
+//   long duration_microseconds;
+// };
+
+FrankaIKSolver::FrankaIKSolver(IKSolverSearchParameters params) : IKSolver(), ikParams(params) {
   this->homeTransformOE = franka_fk(this->homeJointAngles);
-}
-
-// TODO(Sharwin): Implement FrankaIKSolver methods
-
-bool FrankaIKSolver::initialize(
-  const std::string& robotDescription,
-  const std::string& baseLink,
-  const std::string& tipLink) {
-  return false;
+  this->solver = std::make_unique<WeightedIKSolver>(
+    /*neutral_pose=*/ this->homeJointAngles,
+    /*weight_manip=*/ ikParams.manipulabilityWeight,
+    /*weight_neutral=*/ ikParams.neutralWeight,
+    /*weight_current=*/ ikParams.currentWeight,
+    /*verbose=*/ false
+  );
 }
 
 bool FrankaIKSolver::solve(
   const Eigen::Isometry3d& targetPose,
   const std::vector<double>& seed,
   std::vector<double>& solution,
-  double timeoutMilliseconds) {
-  return false;
-}
-
-bool FrankaIKSolver::computeJacobian(
-  const std::vector<double>& jointPositions,
   Eigen::Matrix<double, 6, Eigen::Dynamic>& J) {
-  return false;
-}
 
-double FrankaIKSolver::scoreIKSolution(const std::array<double, 7>& solution, const std::array<double, 7>& seed) {
-  // Score based on how close the solution is to the seed using Sum of Squared Differences (SSD)
-  // TODO(Sharwin): Replace this with Kris' scoring method that considers manipulability and distance from neutral pose
-  double score = 0.0;
-  for (size_t i = 0; i < 7; ++i) {
-    double diff = solution[i] - seed[i];
-    score += diff * diff;
+  const std::array<double, 3> targetPosition = {
+    targetPose.translation().x(), targetPose.translation().y(), targetPose.translation().z()
+  };
+  const std::array<double, 9> targetOrientation = {
+    targetPose.rotation()(0,0), targetPose.rotation()(0,1), targetPose.rotation()(0,2),
+    targetPose.rotation()(1,0), targetPose.rotation()(1,1), targetPose.rotation()(1,2),
+    targetPose.rotation()(2,0), targetPose.rotation()(2,1), targetPose.rotation()(2,2)
+  };
+  const std::array<double, 7> currentConfiguration = {
+    seed[0], seed[1], seed[2], seed[3], seed[4], seed[5], seed[6]
+  };
+  WeightedIKResult result = this->solver->solve_q7_optimized(
+    /*target_position=*/targetPosition,
+    /*target_orientation=*/targetOrientation,
+    /*current_pose=*/currentConfiguration,
+    /*q7_min=*/ this->ikParams.q7Min,
+    /*q7_max=*/ this->ikParams.q7Max,
+    /*tolerance=*/ this->ikParams.ikTolerance,
+    /*max_iterations=*/ this->ikParams.ikMaxIterations
+  );
+  // Copy the result joint angles to the output solution vector
+  solution = std::vector<double>(result.joint_angles.begin(), result.joint_angles.end());
+  // Copy the result Jacobian to the output J matrix, resizing to 6x7 since  Franka is 7-DOF
+  J.resize(6, 7);
+  for (size_t col = 0; col < J.cols(); ++col) {
+    for (size_t row = 0; row < J.rows(); ++row) {
+      J(row, col) = result.jacobian.at(col).at(row);
+    }
   }
-  return std::sqrt(score);
+  return result.success;
 }
 
 FrankaPlugin::FrankaPlugin(const std::string& hostname) : MotionPlugin() {

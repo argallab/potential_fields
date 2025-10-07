@@ -46,8 +46,7 @@ target_include_directories(pfield_lib PUBLIC
   include/potential_fields
 )
 
-
-# Optional: use precompiled headers to speed up builds (CMake >= 3.16)
+# Use precompiled headers to speed up builds (CMake >= 3.16)
 if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.16)
   target_precompile_headers(pfield_lib PRIVATE
     <Eigen/Core>

@@ -25,26 +25,17 @@ class IKSolver {
 public:
   virtual ~IKSolver() = default;
 
-  // Called once (robotDescription: full URDF XML)
-  virtual bool initialize(
-    const std::string& robotDescription,
-    const std::string& baseLink,
-    const std::string& tipLink) = 0;
-
-  // Primary IK (targetPose is base->EE as an Isometry)
+  // Primary IK (targetPose is base->EE as an Isometry) and Jacobian function
   virtual bool solve(
     const Eigen::Isometry3d& targetPose,
     const std::vector<double>& seed,
     std::vector<double>& solution,
-    double timeoutMilliseconds) = 0;
+    Eigen::Matrix<double, 6, Eigen::Dynamic>& J) = 0;
 
-  // Optional Jacobian (for joint velocities from Cartesian twist)
+  // Optional Jacobian-only function (for joint velocities from Cartesian twist)
   virtual bool computeJacobian(
     const std::vector<double>& jointPositions,
     Eigen::Matrix<double, 6, Eigen::Dynamic>& J) = 0;
-
-  virtual std::vector<std::string> jointNames() const = 0;
-  virtual size_t dof() const = 0;
 };
 
 #endif // IK_SOLVER_HPP
