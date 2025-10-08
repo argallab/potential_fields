@@ -17,7 +17,6 @@
 #include "nav_msgs/msg/path.hpp"
 #include "visualization_msgs/msg/marker.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
-#include "sensor_msgs/msg/joint_state.hpp"
 #include "std_msgs/msg/string.hpp"
 #include "trajectory_msgs/msg/joint_trajectory.hpp"
 
@@ -25,6 +24,7 @@
 #include "potential_fields_interfaces/msg/obstacle_array.hpp"
 #include "potential_fields_interfaces/srv/plan_path.hpp"
 #include "potential_fields_interfaces/srv/compute_autonomy_vector.hpp"
+#include "potential_fields_interfaces/srv/p_field_step.hpp"
 
 #include "pfield/pfield.hpp"
 #include "robot_plugins/ik_solver.hpp"
@@ -47,7 +47,7 @@ using Obstacle = potential_fields_interfaces::msg::Obstacle;
 using ObstacleArray = potential_fields_interfaces::msg::ObstacleArray;
 using PlanPath = potential_fields_interfaces::srv::PlanPath;
 using ComputeAutonomyVector = potential_fields_interfaces::srv::ComputeAutonomyVector;
-using JointState = sensor_msgs::msg::JointState;
+using PFieldStep = potential_fields_interfaces::srv::PFieldStep;
 
 struct PFLimits {
   double minX; // Minimum X coordinate of the bounding box [m]
@@ -56,12 +56,6 @@ struct PFLimits {
   double maxY; // Maximum Y coordinate of the bounding box [m]
   double minZ; // Minimum Z coordinate of the bounding box [m]
   double maxZ; // Maximum Z coordinate of the bounding box [m]
-};
-
-struct PlanningResult {
-  bool success;
-  Path path;
-  trajectory_msgs::msg::JointTrajectory jointTrajectory;
 };
 
 class PotentialFieldManager : public rclcpp::Node {
@@ -98,26 +92,15 @@ private:
   std::shared_ptr<tf2_ros::TransformListener> tfListener; // TF Listener for populating the TF buffer
   rclcpp::Publisher<MarkerArray>::SharedPtr pFieldMarkerPub; // Publisher for PF Markers
   rclcpp::Publisher<MarkerArray>::SharedPtr planningPFieldMarkerPub; // Publisher for Planning PF Markers
-  rclcpp::Publisher<JointState>::SharedPtr planningJointStatePub; // Publisher for planning joint states
   rclcpp::Subscription<PoseStamped>::SharedPtr goalPoseSub; // Subscriber for the goal pose
   rclcpp::Subscription<ObstacleArray>::SharedPtr obstacleSub; // Subscriber for obstacles
   rclcpp::Subscription<ObstacleArray>::SharedPtr planningObstacleSub; // Subscriber for planning obstacles
-  rclcpp::Service<PlanPath>::SharedPtr pathPlanningService; // Service to obtain a path from a query point to the goal
+  // Path planning service was moved to MotionInterface; PFieldManager now offers a single-step PF evaluation
+  rclcpp::Service<PFieldStep>::SharedPtr pfieldStepService; // Service to perform one planning step (evaluate PF and return next pose)
   rclcpp::Service<ComputeAutonomyVector>::SharedPtr autonomyVectorService; // Service to compute velocity vector at a given pose
-  std::unique_ptr<IKSolver> ikSolver; // IK Solver Plugin instance
 
-  /**
-   * @brief Interpolates a path from a start pose to the goal pose.
-   *
-   * @note Accounts for the robot moving along the path with
-   *       its geometry contributing to the potential field as obstacles.
-   *
-   * @param start The starting pose of the path
-   * @param deltaTime The time step for each interpolation segment [s]
-   * @param goalTolerance The tolerance for reaching the goal [m]
-   * @return PlanningResult A struct containing success flag, path, and joint trajectory
-   */
-  PlanningResult interpolatePath(const SpatialVector& start, double deltaTime, double goalTolerance);
+  // Service callbacks
+  void handlePFieldStep(const PFieldStep::Request::SharedPtr request, PFieldStep::Response::SharedPtr response);
 
   /**
    * @brief Given a potential field, computes its spatial limits for visualization (bounding box)

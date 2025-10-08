@@ -33,6 +33,7 @@ rosidl_generate_interfaces(${PROJECT_NAME}
   "msg/ObstacleArray.msg"
   "srv/PlanPath.srv"
   "srv/ComputeAutonomyVector.srv"
+  "srv/PFieldStep.srv"
   DEPENDENCIES builtin_interfaces std_msgs geometry_msgs nav_msgs trajectory_msgs
 )
 

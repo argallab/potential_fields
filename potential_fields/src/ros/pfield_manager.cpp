@@ -25,7 +25,6 @@
 /// PUBLISHERS:
 ///   ~/pfield/markers (visualization_msgs::msg::MarkerArray): Markers for PF visualization in RViz
 ///   ~/pfield/planning_markers (visualization_msgs::msg::MarkerArray): Markers for Planning PF visualization in RViz
-///   ~/planning_joint_states (sensor_msgs::msg::JointState): Joint states for the planning robot for path planning
 
 #include "ros/pfield_manager.hpp"
 
@@ -72,10 +71,6 @@ PotentialFieldManager::PotentialFieldManager()
   RCLCPP_INFO(this->get_logger(), "PF Markers publishing on: %s", this->pFieldMarkerPub->get_topic_name());
   this->planningPFieldMarkerPub = this->create_publisher<MarkerArray>("pfield/planning_markers", markerPubQos);
   RCLCPP_INFO(this->get_logger(), "Planning markers publishing on: %s", this->planningPFieldMarkerPub->get_topic_name());
-
-  // Setup planning joint state publisher
-  this->planningJointStatePub = this->create_publisher<JointState>("planning_joint_states", 10);
-  RCLCPP_INFO(this->get_logger(), "Planning joint states publishing on: %s", this->planningJointStatePub->get_topic_name());
 
   // Setup goal pose subscriber
   this->goalPoseSub = this->create_subscription<geometry_msgs::msg::PoseStamped>(
@@ -148,36 +143,10 @@ PotentialFieldManager::PotentialFieldManager()
   }
   );
 
-  // Create service to get planned path from a query pose to the goal pose
-  this->pathPlanningService = this->create_service<PlanPath>("pfield/plan_path",
-    [this](const PlanPath::Request::SharedPtr request, PlanPath::Response::SharedPtr response) {
-    RCLCPP_INFO(this->get_logger(), "Received path request");
-    // Interpolate the path from the start pose to the goal pose
-    SpatialVector startPose(
-      Eigen::Vector3d(
-        request->start.pose.position.x,
-        request->start.pose.position.y,
-        request->start.pose.position.z
-      ),
-      Eigen::Quaterniond(
-        request->start.pose.orientation.w, request->start.pose.orientation.x,
-        request->start.pose.orientation.y, request->start.pose.orientation.z
-      )
-    );
-    PlanningResult result = this->interpolatePath(startPose, request->delta_time, request->goal_tolerance);
-    if (!result.success) {
-      RCLCPP_WARN(this->get_logger(), "Path planning failed");
-      response->success = false;
-      return;
-    }
-    RCLCPP_INFO(this->get_logger(), "Path generated with %zu poses", result.path.poses.size());
-    RCLCPP_INFO(this->get_logger(), "Joint trajectory has %zu points", result.jointTrajectory.points.size());
-    response->plan.header.frame_id = this->fixedFrame;
-    response->plan.header.stamp = this->now();
-    response->plan = result.path;
-    response->joint_trajectory = result.jointTrajectory;
-    response->success = true;
-  }
+  // Create service to perform a single potential-field planning step (evaluate PF and return next pose)
+  this->pfieldStepService = this->create_service<PFieldStep>(
+    "pfield/step",
+    std::bind(&PotentialFieldManager::handlePFieldStep, this, std::placeholders::_1, std::placeholders::_2)
   );
 
   // Create service to compute the autonomy vector at a given pose
@@ -220,6 +189,8 @@ PotentialFieldManager::PotentialFieldManager()
   // std::string filename = "pfield_data";
   // this->exportFieldDataToCSV(filename);
 
+  // Initialize IKSolver depending on robot type
+
   // Run the timer for visualizing the potential field
   this->timer = this->create_wall_timer(
     std::chrono::duration<double>(1.0 / this->visualizerFrequency), // Timer period based on frequency
@@ -232,67 +203,50 @@ PotentialFieldManager::PotentialFieldManager()
   );
 }
 
-PlanningResult PotentialFieldManager::interpolatePath(const SpatialVector& start, double deltaTime, double goalTolerance) {
-  // TODO(Sharwin): Implement the new functionality here
-  // interpolatePath will need to account for robot motion influencing the PF
-  // during the motion so the function will need to be re-written.
-  // Start is not guaranteed to be at the robot's current EE position since
-  // planning should be supported for any arbitrary starting Pose
-  // 1. Given the current EE Pose (starting at Start), compute the robot's joint angles with an IKSolver attached to PFM
-  //    - For picking one of many IK solutions, use solution most similar to current robot state OR neutral/home robot state
-  //    - Also initialize/reset our planning PField if not initialized already.
-  // 2. Now that we have joint angles from the IK solver, publish these joint angles to the planning-copy of the JointStates
-  //    - Once planning JS are published, the planning copy of the robot's TF frames will update and RobotParser
-  //      will handle them and publish planning obstacles.
-  // 3. Take a look at the planning obstacles that were published by RobotParser and update the planning PField with them
-  //    - The planning PField should now have new obstacles but the same goal as the normal PField
-  // 4. Compute a new velocity from the planning PField
-  // 5. Project the new velocity onto the current EE pose using the deltaTime to obtain a new EE Pose
-  // 6. The new EE Pose is used for the loop and we repeat steps 1-5 until the EE Pose and the goal Pose are within the tolerance
-  // 7. Return the EE Path (nav_msgs/Path) and the Robot's joint positions (trajectory_msgs/JointTrajectory)
-  // 8. Compute the joint velocities and put the joint velocity path into the msg (trajectory_msgs/JointTrajectory)
-  //    - In order to do this, the IKSolver must offer the Jacobian to convert EE Velocites into Joint Velocities
-  PlanningResult result;
-  Path path;
-  path.header.frame_id = this->fixedFrame;
-  path.header.stamp = this->now();
-  PoseStamped startPose;
-  startPose.header.frame_id = path.header.frame_id;
-  startPose.header.stamp = path.header.stamp;
-  startPose.pose.position.x = start.getPosition().x();
-  startPose.pose.position.y = start.getPosition().y();
-  startPose.pose.position.z = start.getPosition().z();
-  startPose.pose.orientation.x = start.getOrientation().x();
-  startPose.pose.orientation.y = start.getOrientation().y();
-  startPose.pose.orientation.z = start.getOrientation().z();
-  startPose.pose.orientation.w = start.getOrientation().w();
-  path.poses.push_back(startPose);
-  // Interpolate through the potential field until the goal is reached with the given delta time
-  SpatialVector currentPose = start;
-  while (currentPose.euclideanDistance(this->pField->getGoalPose()) > goalTolerance) {
-    // Evaluate the velocity at the current pose
-    SpatialVector velocity = this->pField->evaluateVelocityAtPose(currentPose);
-    // Update the current pose based on the velocity and delta time
-    Eigen::Vector3d newPosition = currentPose.getPosition() + (velocity.getPosition() * deltaTime);
-    Eigen::Quaterniond newOrientation = this->pField->integrateAngularVelocity(currentPose.getOrientation(), deltaTime);
-    currentPose.setPosition(newPosition);
-    currentPose.setOrientation(newOrientation);
-    // Add the new pose to the path
-    PoseStamped newPose;
-    newPose.header.frame_id = path.header.frame_id;
-    newPose.header.stamp = this->now();
-    newPose.pose.position.x = currentPose.getPosition().x();
-    newPose.pose.position.y = currentPose.getPosition().y();
-    newPose.pose.position.z = currentPose.getPosition().z();
-    newPose.pose.orientation.x = currentPose.getOrientation().x();
-    newPose.pose.orientation.y = currentPose.getOrientation().y();
-    newPose.pose.orientation.z = currentPose.getOrientation().z();
-    newPose.pose.orientation.w = currentPose.getOrientation().w();
-    path.poses.push_back(newPose);
-  }
-  result.path = path;
-  result.success = true;
-  return result;
+void PotentialFieldManager::handlePFieldStep(const PFieldStep::Request::SharedPtr request, PFieldStep::Response::SharedPtr response) {
+  RCLCPP_DEBUG(this->get_logger(), "Received pfield step request");
+  // Build SpatialVector from request current_pose
+  SpatialVector currentPose(
+    Eigen::Vector3d(
+      request->current_pose.pose.position.x,
+      request->current_pose.pose.position.y,
+      request->current_pose.pose.position.z
+    ),
+    Eigen::Quaterniond(
+      request->current_pose.pose.orientation.w, request->current_pose.pose.orientation.x,
+      request->current_pose.pose.orientation.y, request->current_pose.pose.orientation.z
+    )
+  );
+
+  // Evaluate autonomy vector using planning copy of the potential field
+  SpatialVector autonomyVec = this->planningPField->evaluateVelocityAtPose(currentPose);
+
+  // Compute next pose by integrating linear and angular components
+  Eigen::Vector3d nextPosition = currentPose.getPosition() + (autonomyVec.getPosition() * request->delta_time);
+  Eigen::Quaterniond nextOrientation = this->planningPField->integrateAngularVelocity(currentPose.getOrientation(), request->delta_time);
+
+  // Fill response
+  response->success = true;
+  response->reached_goal = (currentPose.euclideanDistance(this->planningPField->getGoalPose()) <= request->goal_tolerance);
+  response->autonomy_vector.header.frame_id = this->fixedFrame;
+  response->autonomy_vector.header.stamp = this->now();
+  response->autonomy_vector.twist.linear.x = autonomyVec.getPosition().x();
+  response->autonomy_vector.twist.linear.y = autonomyVec.getPosition().y();
+  response->autonomy_vector.twist.linear.z = autonomyVec.getPosition().z();
+  Eigen::Vector3d eulerAngles = autonomyVec.getOrientation().toRotationMatrix().eulerAngles(2, 1, 0);
+  response->autonomy_vector.twist.angular.x = eulerAngles[2];
+  response->autonomy_vector.twist.angular.y = eulerAngles[1];
+  response->autonomy_vector.twist.angular.z = eulerAngles[0];
+
+  response->next_pose.header.frame_id = this->fixedFrame;
+  response->next_pose.header.stamp = this->now();
+  response->next_pose.pose.position.x = nextPosition.x();
+  response->next_pose.pose.position.y = nextPosition.y();
+  response->next_pose.pose.position.z = nextPosition.z();
+  response->next_pose.pose.orientation.x = nextOrientation.x();
+  response->next_pose.pose.orientation.y = nextOrientation.y();
+  response->next_pose.pose.orientation.z = nextOrientation.z();
+  response->next_pose.pose.orientation.w = nextOrientation.w();
 }
 
 PFLimits PotentialFieldManager::getPFLimits(std::shared_ptr<PotentialField> pf) {
