@@ -150,39 +150,9 @@ PotentialFieldManager::PotentialFieldManager()
   );
 
   // Create service to compute the autonomy vector at a given pose
-  this->autonomyVectorService = this->create_service<ComputeAutonomyVector>("pfield/compute_autonomy_vector",
-    [this](const ComputeAutonomyVector::Request::SharedPtr request, ComputeAutonomyVector::Response::SharedPtr response) {
-    RCLCPP_INFO(this->get_logger(), "Received autonomy vector request");
-    // Compute the autonomy vector at the given pose
-    SpatialVector queryPose(
-      Eigen::Vector3d(
-        request->start.pose.position.x,
-        request->start.pose.position.y,
-        request->start.pose.position.z
-      ),
-      Eigen::Quaterniond(
-        request->start.pose.orientation.w, request->start.pose.orientation.x,
-        request->start.pose.orientation.y, request->start.pose.orientation.z
-      )
-    );
-    SpatialVector autonomyVector = this->pField->evaluateVelocityAtPose(queryPose);
-    response->autonomy_vector.header.frame_id = this->fixedFrame;
-    response->autonomy_vector.header.stamp = this->now();
-    response->autonomy_vector.twist.linear.x = autonomyVector.getPosition().x();
-    response->autonomy_vector.twist.linear.y = autonomyVector.getPosition().y();
-    response->autonomy_vector.twist.linear.z = autonomyVector.getPosition().z();
-    // For angular velocity, convert quaternion to euler angles (yaw, pitch, roll)
-    Eigen::Vector3d eulerAngles = autonomyVector.getOrientation().toRotationMatrix().eulerAngles(2, 1, 0);
-    response->autonomy_vector.twist.angular.x = eulerAngles[2]; // roll
-    response->autonomy_vector.twist.angular.y = eulerAngles[1]; // pitch
-    response->autonomy_vector.twist.angular.z = eulerAngles[0]; // yaw
-    RCLCPP_INFO(
-      this->get_logger(),
-      "Autonomy vector computed at pose: pos=(%.2f, %.2f, %.2f), RPY=(%.2f, %.2f, %.2f)",
-      queryPose.getPosition().x(), queryPose.getPosition().y(), queryPose.getPosition().z(),
-      eulerAngles[2], eulerAngles[1], eulerAngles[0]
-    );
-  }
+  this->autonomyVectorService = this->create_service<ComputeAutonomyVector>(
+    "pfield/compute_autonomy_vector",
+    std::bind(&PotentialFieldManager::handleComputeAutonomyVector, this, std::placeholders::_1, std::placeholders::_2)
   );
 
   // Create a CSV file to store the potential field data for python to plot
@@ -200,6 +170,39 @@ PotentialFieldManager::PotentialFieldManager()
     this->pFieldMarkerPub->publish(pfieldMarkers);
     this->planningPFieldMarkerPub->publish(planningPFMarkers);
   }
+  );
+}
+
+void PotentialFieldManager::handleComputeAutonomyVector(const ComputeAutonomyVector::Request::SharedPtr request, ComputeAutonomyVector::Response::SharedPtr response) {
+  RCLCPP_INFO(this->get_logger(), "Received autonomy vector request");
+  // Compute the autonomy vector at the given pose
+  SpatialVector queryPose(
+    Eigen::Vector3d(
+      request->start.pose.position.x,
+      request->start.pose.position.y,
+      request->start.pose.position.z
+    ),
+    Eigen::Quaterniond(
+      request->start.pose.orientation.w, request->start.pose.orientation.x,
+      request->start.pose.orientation.y, request->start.pose.orientation.z
+    )
+  );
+  SpatialVector autonomyVector = this->pField->evaluateVelocityAtPose(queryPose);
+  response->autonomy_vector.header.frame_id = this->fixedFrame;
+  response->autonomy_vector.header.stamp = this->now();
+  response->autonomy_vector.twist.linear.x = autonomyVector.getPosition().x();
+  response->autonomy_vector.twist.linear.y = autonomyVector.getPosition().y();
+  response->autonomy_vector.twist.linear.z = autonomyVector.getPosition().z();
+  // For angular velocity, convert quaternion to euler angles (yaw, pitch, roll)
+  Eigen::Vector3d eulerAngles = autonomyVector.getOrientation().toRotationMatrix().eulerAngles(2, 1, 0);
+  response->autonomy_vector.twist.angular.x = eulerAngles[2]; // roll
+  response->autonomy_vector.twist.angular.y = eulerAngles[1]; // pitch
+  response->autonomy_vector.twist.angular.z = eulerAngles[0]; // yaw
+  RCLCPP_INFO(
+    this->get_logger(),
+    "Autonomy vector computed at pose: pos=(%.2f, %.2f, %.2f), RPY=(%.2f, %.2f, %.2f)",
+    queryPose.getPosition().x(), queryPose.getPosition().y(), queryPose.getPosition().z(),
+    eulerAngles[2], eulerAngles[1], eulerAngles[0]
   );
 }
 

@@ -121,7 +121,7 @@ void MotionInterface::handlePlanPath(const PlanPath::Request::SharedPtr request,
       return pfStepResponse;
     }
     auto res = future.get();
-    return res;
+    return *res;
   };
 
   // Build initial pose
@@ -164,7 +164,7 @@ void MotionInterface::handlePlanPath(const PlanPath::Request::SharedPtr request,
   }
 
   response->plan = path;
-  response->joint_trajectory = trajectory_msgs::msg::JointTrajectory();
+  response->joint_trajectory = trajectory_msgs::msg::JointTrajectory(); // TODO: fill using IK
   response->success = reached;
   if (!reached) RCLCPP_WARN(this->get_logger(), "Plan path reached iteration limit without reaching goal");
 }
