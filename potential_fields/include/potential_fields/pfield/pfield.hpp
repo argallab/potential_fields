@@ -14,17 +14,21 @@
 
 #ifndef PFIELDS_HPP
 #define PFIELDS_HPP
-#include <vector>
-#include <stdexcept>
+
 #include <math.h>
+#include <stdexcept>
+#include <string>
+#include <unordered_map>
+#include <unordered_set>
+#include <vector>
+
+#include <eigen3/Eigen/Dense>
+
 #include "spatial_vector.hpp"
 #include "pf_obstacle.hpp"
-#include <eigen3/Eigen/Dense>
-#include <unordered_set>
 
 class PotentialField {
 public:
-
   PotentialField() = default;
   ~PotentialField() = default;
 
@@ -50,7 +54,7 @@ public:
    *
    * @param goalPose The pose in 3D space that will generate an attractive force.
    */
-  PotentialField(SpatialVector goalPose) :
+  explicit PotentialField(SpatialVector goalPose) :
     attractiveGain(1.0),
     rotationalAttractiveGain(0.7),
     goalPose(goalPose) {}
@@ -93,17 +97,17 @@ public:
    * @brief Attempts to remove an obstacle by ID.
    *
    * @note If the obstacle is not found, no action is taken.
-   * @param obstacleID  the ID of the obstacle obtained on obstacle creation.
+   * @param obstacleFrameID  the frame ID of the obstacle obtained on obstacle creation.
    * @return true if the obstacle was removed successfully.
    */
-  bool removeObstacle(int obstacleID);
+  bool removeObstacle(const std::string& obstacleFrameID);
 
   /**
    * @brief Clears all obstacles from the potential field.
    */
   void clearObstacles();
 
-  PotentialFieldObstacle getObstacleByID(int obstacleID) const;
+  PotentialFieldObstacle getObstacleByID(const std::string& obstacleFrameID) const;
 
   /**
    * @brief Given a 3D position, computes the velocity vector
@@ -149,8 +153,12 @@ public:
     auto obstaclesEqual = [this, &other]() -> bool {
       if (this->obstacles.size() != other.obstacles.size()) return false;
       // Convert both obstacle lists to unordered_sets for comparison
-      std::unordered_set<PotentialFieldObstacle, PotentialFieldObstacleHash> thisObstaclesSet(this->obstacles.cbegin(), this->obstacles.cend());
-      std::unordered_set<PotentialFieldObstacle, PotentialFieldObstacleHash> otherObstaclesSet(other.obstacles.cbegin(), other.obstacles.cend());
+      std::unordered_set<PotentialFieldObstacle, PotentialFieldObstacleHash> thisObstaclesSet(
+        this->obstacles.cbegin(), this->obstacles.cend()
+      );
+      std::unordered_set<PotentialFieldObstacle, PotentialFieldObstacleHash> otherObstaclesSet(
+        other.obstacles.cbegin(), other.obstacles.cend()
+      );
       return thisObstaclesSet == otherObstaclesSet;
     }();
     return this->attractiveGain == other.attractiveGain &&
@@ -168,6 +176,8 @@ private:
   double rotationalThreshold = 0.06; // Threshold for rotational geodesic distance
   SpatialVector goalPose;
   std::vector<PotentialFieldObstacle> obstacles;
+  // Fast lookup for obstacle updates/removals by ID
+  std::unordered_map<std::string, size_t> obstacleIndex;
 
   /**
    * @brief Computes the attractive force towards the goal pose. Also computes the

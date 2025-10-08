@@ -1,0 +1,8 @@
+geometry_msgs/PoseStamped current_pose
+float32 delta_time
+float32 goal_tolerance
+---
+bool success
+bool reached_goal
+geometry_msgs/TwistStamped autonomy_vector
+geometry_msgs/PoseStamped next_pose

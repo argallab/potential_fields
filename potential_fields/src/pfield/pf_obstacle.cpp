@@ -1,4 +1,8 @@
 #include "pfield/pf_obstacle.hpp"
+#include "pfield/mesh_collision.hpp"
+
+// NOTE: meshCollisionData must be populated externally (e.g., when constructing obstacle from mesh resource)
+// and meshInfluenceMargin should be set (e.g., fraction of meshCollisionData->maxExtent)
 
 bool PotentialFieldObstacle::withinInfluenceZone(Eigen::Vector3d pos) const {
   Eigen::Vector3d localPos = this->toObstacleFrame(pos);
@@ -17,6 +21,16 @@ bool PotentialFieldObstacle::withinInfluenceZone(Eigen::Vector3d pos) const {
     double distance = std::sqrt(std::pow(localPos.x(), 2) + std::pow(localPos.y(), 2));
     return distance <= (this->geometry.radius * this->influenceZoneScale) &&
       std::abs(localPos.z()) <= (this->geometry.height * this->influenceZoneScale / 2.0);
+  }
+  case ObstacleType::MESH: {
+    if (!this->meshCollisionData) return false;
+    // Inside test first
+    if (!this->meshCollisionData->triangles.empty() &&
+      pointInsideMesh(*this->meshCollisionData, localPos)) {
+      return true;
+    }
+    double dist = distanceToMesh(*this->meshCollisionData, localPos);
+    return dist <= this->meshInfluenceMargin;
   }
   default:
     // return false;
@@ -41,6 +55,10 @@ bool PotentialFieldObstacle::withinObstacle(Eigen::Vector3d pos) const {
     return distance <= this->geometry.radius &&
       std::abs(localPos.z()) <= (this->geometry.height / 2.0);
   }
+  case ObstacleType::MESH: {
+    if (!this->meshCollisionData) return false;
+    return pointInsideMesh(*this->meshCollisionData, localPos);
+  }
   default:
     // return false;
     throw std::invalid_argument("Unknown obstacle type");
@@ -48,7 +66,6 @@ bool PotentialFieldObstacle::withinObstacle(Eigen::Vector3d pos) const {
 }
 
 Eigen::Vector3d PotentialFieldObstacle::toObstacleFrame(const Eigen::Vector3d& point) const {
-  // Rotate the point to the obstacle's frame of reference
   return this->orientationConjugate * (point - this->position);
 }
 
@@ -61,6 +78,14 @@ Eigen::Vector3d PotentialFieldObstacle::halfDimensions() const {
     return Eigen::Vector3d(this->geometry.length / 2.0, this->geometry.width / 2.0, this->geometry.height / 2.0);
   case ObstacleType::CYLINDER:
     return Eigen::Vector3d(this->geometry.radius, this->geometry.radius, this->geometry.height / 2.0);
+  case ObstacleType::MESH:
+    // If geometry carries bounding box dims, use them. Otherwise fall back to meshScale as dims.
+    if (this->geometry.length > 0.0 && this->geometry.width > 0.0 && this->geometry.height > 0.0) {
+      return Eigen::Vector3d(this->geometry.length / 2.0, this->geometry.width / 2.0, this->geometry.height / 2.0);
+    }
+    else {
+      return Eigen::Vector3d(this->meshScale.x() / 2.0, this->meshScale.y() / 2.0, this->meshScale.z() / 2.0);
+    }
   default:
     throw std::invalid_argument("Unknown obstacle type");
   }

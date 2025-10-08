@@ -12,9 +12,10 @@
  */
 #ifndef SPATIAL_VECTOR_HPP
 #define SPATIAL_VECTOR_HPP
+
+#include <algorithm>
 #include <cmath>
 #include <stdexcept>
-#include <algorithm>
 #include <eigen3/Eigen/Dense>
 
 class SpatialVector {
@@ -23,7 +24,7 @@ public:
     position(Eigen::Vector3d::Zero()),
     orientation(Eigen::Quaterniond::Identity()) {}
 
-  SpatialVector(const Eigen::Vector3d& position) :
+  explicit SpatialVector(const Eigen::Vector3d& position) :
     position(position),
     orientation(Eigen::Quaterniond::Identity()) {}
 
@@ -87,7 +88,9 @@ public:
    */
   double angularDistance(const SpatialVector& other);
 
-  bool operator==(const SpatialVector& other) const { return  this->position == other.position && this->orientation == other.orientation; }
+  bool operator==(const SpatialVector& other) const {
+    return  this->position == other.position && this->orientation == other.orientation;
+  }
   bool operator!=(const SpatialVector& other) const { return !(*this == other); }
 
 private:

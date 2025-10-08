@@ -1,13 +1,17 @@
 pfield_manager:
   ros__parameters:
-    timer_frequency: 100.0 # [Hz]
+    visualize_pf_frequency: 60.0 # [Hz]
     attractive_gain: 1.0 # [Ns/m]
     rotational_attractive_gain: 0.7 # [Ns/m]
     repulsive_gain: 20.0 # [Ns/m]
     max_force: 10.0 # [N]
+    influence_zone_scale: 2.0 # Influence zone scaling factor
+    visualizer_buffer_area: 0.5 # Extra area around obstacles and goal to visualize the PF [m]
+    field_resolution: 0.5 # Resolution to show PF velocity arrows in RViz [m]
 robot_parser:
   ros__parameters:
-    timer_frequency: 50.0 # [Hz]
+    robot_geometry_update_frequency: 100.0 # [Hz]
+    planning_tf_prefix: "planning" # Prefix for planning frames
 motion_interface:
   ros__parameters:
     robot_plugin: "franka"

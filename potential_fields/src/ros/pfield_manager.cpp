@@ -1,5 +1,7 @@
 /// @file pfield_manager.cpp
 /// @brief Manages a PotentialField instance and visualizes obstacles, the goal, and planned paths.
+/// @author Sharwin Patil
+/// @date October 6, 2025
 ///
 /// PARAMETERS:
 ///   timer_frequency (float64): The frequency for the timer updating the potential field visualization [Hz]
@@ -8,18 +10,21 @@
 ///   repulsive_gain (float64): Gain for the repulsive force from obstacles [Ns/m]
 ///   max_force (float64): Maximum force allowed by the potential field [N]
 ///   fixed_frame (string): The fixed frame for RViz visualization and potential field computation
+///   influence_zone_scale (float64): Scaling factor for the influence zone of obstacles
+///   field_resolution (float64): Resolution of the potential field grid when visualizing [m]
 ///
 /// SERVICES:
 ///   ~/pfield/plan_path (potential_fields_interfaces::srv::PlanPath): Interpolates a path from a start pose to the goal pose
-///   ~/pfield/compute_autonomy_vector (potential_fields_interfaces::srv::ComputeAutonomyVector): Computes the autonomy vector at a given pose
+///   ~/pfield/compute_autonomy_vector (potential_fields_interfaces::srv::ComputeAutonomyVector): Computes velocity vector at pose
 ///
 /// SUBSCRIBERS:
 ///   ~/goal_pose (geometry_msgs::msg::PoseStamped): Updates the goal pose in the potential field
-///   ~/pfield/obstacles (potential_fields_interfaces::msg::Obstacle): Obtains the obstacles to be added to the potential field
+///   ~/pfield/obstacles (potential_fields_interfaces::msg::ObstacleArray): All PF Obstacles
+///   ~/pfield/planning_obstacles (potential_fields_interfaces::msg::ObstacleArray): Planning PF Obstacles
 ///
 /// PUBLISHERS:
-///   ~/visualization_marker_array (visualization_msgs::msg::MarkerArray): Publishes markers for visualization in RViz
-///   ~/nav_msgs/msg/Path (nav_msgs::msg::Path): Publishes the path of the query point to visualize its trajectory
+///   ~/pfield/markers (visualization_msgs::msg::MarkerArray): Markers for PF visualization in RViz
+///   ~/pfield/planning_markers (visualization_msgs::msg::MarkerArray): Markers for Planning PF visualization in RViz
 
 #include "ros/pfield_manager.hpp"
 
@@ -27,22 +32,29 @@ PotentialFieldManager::PotentialFieldManager()
   : Node("potential_field_manager") {
   RCLCPP_INFO(this->get_logger(), "PotentialFieldManager Initialized");
   // Declare parameters
-  this->timerFreq = this->declare_parameter("timer_frequency", 100.0f); // [Hz]
+  this->visualizerFrequency = this->declare_parameter("visualize_pf_frequency", 100.0f); // [Hz]
   this->attractiveGain = this->declare_parameter("attractive_gain", 1.0f); // [Ns/m]
   this->rotationalAttractiveGain = this->declare_parameter("rotational_attractive_gain", 0.7f); // [Ns/m]
   this->repulsiveGain = this->declare_parameter("repulsive_gain", 1.0f); // [Ns/m]
   this->maxForce = this->declare_parameter("max_force", 10.0f); // [N]
+  this->influenceZoneScale = this->declare_parameter("influence_zone_scale", 2.0f); // Influence zone scaling factor
   this->fixedFrame = this->declare_parameter("fixed_frame", "world"); // RViz fixed frame
+  this->visualizerBufferArea = this->declare_parameter("visualizer_buffer_area", 1.0f); // Extra area to visualize the PF [m]
+  this->fieldResolution = this->declare_parameter("field_resolution", 0.5f); // Resolution of the potential field grid [m]
   // Get parameters from yaml file
-  this->timerFreq = this->get_parameter("timer_frequency").as_double();
+  this->visualizerFrequency = this->get_parameter("visualize_pf_frequency").as_double();
   this->attractiveGain = this->get_parameter("attractive_gain").as_double();
   this->rotationalAttractiveGain = this->get_parameter("rotational_attractive_gain").as_double();
   this->repulsiveGain = this->get_parameter("repulsive_gain").as_double();
   this->maxForce = this->get_parameter("max_force").as_double();
+  this->influenceZoneScale = this->get_parameter("influence_zone_scale").as_double();
   this->fixedFrame = this->get_parameter("fixed_frame").as_string();
+  this->visualizerBufferArea = this->get_parameter("visualizer_buffer_area").as_double();
+  this->fieldResolution = this->get_parameter("field_resolution").as_double();
 
-  // Initialize the potential field
-  this->pField = PotentialField(this->attractiveGain, this->rotationalAttractiveGain);
+  // Initialize the potential fields
+  this->pField = std::make_shared<PotentialField>(this->attractiveGain, this->rotationalAttractiveGain);
+  this->planningPField = std::make_shared<PotentialField>(this->attractiveGain, this->rotationalAttractiveGain);
 
   // Setup TF2 broadcaster, buffer, and listener
   this->dynamicTfBroadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(this);
@@ -51,186 +63,270 @@ PotentialFieldManager::PotentialFieldManager()
   RCLCPP_INFO(this->get_logger(), "TF2 broadcaster, buffer, and listener initialized");
 
   // Setup marker publisher
-  this->markerPub = this->create_publisher<MarkerArray>("visualization_marker_array", 10);
-  RCLCPP_INFO(this->get_logger(), "Markers publishing on: %s", this->markerPub->get_topic_name());
-
-  // Setup path publisher
-  this->pathPub = this->create_publisher<Path>("nav_msgs/msg/Path", 10);
-  RCLCPP_INFO(this->get_logger(), "Query point path publishing on: %s", this->pathPub->get_topic_name());
+  // Use reliable and transient_local QoS for RViz MarkerArray publisher
+  auto markerPubQos = rclcpp::QoS(rclcpp::KeepLast(100))
+    .reliable()
+    .transient_local();
+  this->pFieldMarkerPub = this->create_publisher<MarkerArray>("pfield/markers", markerPubQos);
+  RCLCPP_INFO(this->get_logger(), "PF Markers publishing on: %s", this->pFieldMarkerPub->get_topic_name());
+  this->planningPFieldMarkerPub = this->create_publisher<MarkerArray>("pfield/planning_markers", markerPubQos);
+  RCLCPP_INFO(this->get_logger(), "Planning markers publishing on: %s", this->planningPFieldMarkerPub->get_topic_name());
 
   // Setup goal pose subscriber
   this->goalPoseSub = this->create_subscription<geometry_msgs::msg::PoseStamped>(
     "goal_pose",
     10,
     [this](const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
-    RCLCPP_INFO(this->get_logger(), "Received goal pose");
-    // Update the goal pose in the potential field
-    this->pField.updateGoalPosition(Eigen::Vector3d(
-      msg->pose.position.x,
-      msg->pose.position.y,
-      msg->pose.position.z
-    ));
+    // RCLCPP_INFO(this->get_logger(), "Received goal pose");
+    const SpatialVector goalPose(
+      Eigen::Vector3d(
+        msg->pose.position.x,
+        msg->pose.position.y,
+        msg->pose.position.z
+      ),
+      Eigen::Quaterniond(
+        msg->pose.orientation.w,
+        msg->pose.orientation.x,
+        msg->pose.orientation.y,
+        msg->pose.orientation.z
+      )
+    );
+    this->pField->updateGoalPosition(goalPose);
+    this->planningPField->updateGoalPosition(goalPose);
   }
   );
 
   // Setup obstacle subscriber
-  this->obstacleSub = this->create_subscription<Obstacle>("pfield/obstacles", 10,
-    [this](const Obstacle::SharedPtr msg) {
-    PotentialFieldObstacle obstacle(
-      msg->id,
-      Eigen::Vector3d(msg->pose.position.x, msg->pose.position.y, msg->pose.position.z),
-      Eigen::Quaterniond(msg->pose.orientation.w, msg->pose.orientation.x, msg->pose.orientation.y, msg->pose.orientation.z),
-      stringToObstacleType(msg->type),
-      stringToObstacleGroup(msg->group),
-      ObstacleGeometry{msg->radius, msg->length, msg->width, msg->height},
-      2.0, // influence zone scale
-      this->repulsiveGain
-    );
-    this->pField.addObstacle(obstacle);
+  auto obstacleSubQos = rclcpp::QoS(rclcpp::KeepLast(100)).best_effort().durability_volatile();
+  this->obstacleSub = this->create_subscription<ObstacleArray>("pfield/obstacles", obstacleSubQos,
+    [this](const ObstacleArray::SharedPtr msg) {
+    const auto& obstacles = msg->obstacles;
+    for (const auto& obst : obstacles) {
+      PotentialFieldObstacle obstacle(
+        obst.frame_id,
+        Eigen::Vector3d(obst.pose.position.x, obst.pose.position.y, obst.pose.position.z),
+        Eigen::Quaterniond(obst.pose.orientation.w, obst.pose.orientation.x, obst.pose.orientation.y, obst.pose.orientation.z),
+        stringToObstacleType(obst.type),
+        stringToObstacleGroup(obst.group),
+        ObstacleGeometry{obst.radius, obst.length, obst.width, obst.height},
+        this->influenceZoneScale,
+        this->repulsiveGain,
+        obst.mesh_resource,
+        Eigen::Vector3d(obst.scale_x, obst.scale_y, obst.scale_z)
+      );
+      RCLCPP_DEBUG(this->get_logger(), "Added/Updated obstacle: %s", obst.frame_id.c_str());
+      this->pField->addObstacle(obstacle);
+    }
   }
   );
 
-  // Create service to get planned path from a query pose to the goal pose
-  this->pathPlanningService = this->create_service<PlanPath>("pfield/plan_path",
-    [this](const PlanPath::Request::SharedPtr request, PlanPath::Response::SharedPtr response) {
-    RCLCPP_INFO(this->get_logger(), "Received path request");
-    // Interpolate the path from the start pose to the goal pose
-    SpatialVector startPose(
-      Eigen::Vector3d(
-        request->start.pose.position.x, request->start.pose.position.y,
-        request->start.pose.position.z
-      ),
-      Eigen::Quaterniond(
-        request->start.pose.orientation.w, request->start.pose.orientation.x,
-        request->start.pose.orientation.y, request->start.pose.orientation.z
-      )
-    );
-    Path path = this->interpolatePath(startPose, request->delta_time, request->goal_tolerance);
-    response->plan.header.frame_id = this->fixedFrame;
-    response->plan.header.stamp = this->now();
-    response->plan = path;
-    RCLCPP_INFO(this->get_logger(), "Path generated with %zu poses", path.poses.size());
+  // Setup Planning Obstacle Subscriber
+  this->planningObstacleSub = this->create_subscription<ObstacleArray>("pfield/planning_obstacles", obstacleSubQos,
+    [this](const ObstacleArray::SharedPtr msg) {
+    const auto& obstacles = msg->obstacles;
+    for (const auto& obst : obstacles) {
+      PotentialFieldObstacle obstacle(
+        obst.frame_id,
+        Eigen::Vector3d(obst.pose.position.x, obst.pose.position.y, obst.pose.position.z),
+        Eigen::Quaterniond(obst.pose.orientation.w, obst.pose.orientation.x, obst.pose.orientation.y, obst.pose.orientation.z),
+        stringToObstacleType(obst.type),
+        stringToObstacleGroup(obst.group),
+        ObstacleGeometry{obst.radius, obst.length, obst.width, obst.height},
+        this->influenceZoneScale,
+        this->repulsiveGain,
+        obst.mesh_resource,
+        Eigen::Vector3d(obst.scale_x, obst.scale_y, obst.scale_z)
+      );
+      RCLCPP_DEBUG(this->get_logger(), "Added/Updated obstacle: %s", obst.frame_id.c_str());
+      this->planningPField->addObstacle(obstacle);
+    }
   }
+  );
+
+  // Create service to perform a single potential-field planning step (evaluate PF and return next pose)
+  this->pfieldStepService = this->create_service<PFieldStep>(
+    "pfield/step",
+    std::bind(&PotentialFieldManager::handlePFieldStep, this, std::placeholders::_1, std::placeholders::_2)
   );
 
   // Create service to compute the autonomy vector at a given pose
-  this->autonomyVectorService = this->create_service<ComputeAutonomyVector>("pfield/compute_autonomy_vector",
-    [this](const ComputeAutonomyVector::Request::SharedPtr request, ComputeAutonomyVector::Response::SharedPtr response) {
-    RCLCPP_INFO(this->get_logger(), "Received autonomy vector request");
-    // Compute the autonomy vector at the given pose
-    SpatialVector queryPose(
-      Eigen::Vector3d(
-        request->start.pose.position.x, request->start.pose.position.y,
-        request->start.pose.position.z
-      ),
-      Eigen::Quaterniond(
-        request->start.pose.orientation.w, request->start.pose.orientation.x,
-        request->start.pose.orientation.y, request->start.pose.orientation.z
-      )
-    );
-    SpatialVector autonomyVector = this->pField.evaluateVelocityAtPose(queryPose);
-    response->autonomy_vector.header.frame_id = this->fixedFrame;
-    response->autonomy_vector.header.stamp = this->now();
-    response->autonomy_vector.twist.linear.x = autonomyVector.getPosition().x();
-    response->autonomy_vector.twist.linear.y = autonomyVector.getPosition().y();
-    response->autonomy_vector.twist.linear.z = autonomyVector.getPosition().z();
-    // For angular velocity, convert quaternion to euler angles (yaw, pitch, roll)
-    Eigen::Vector3d eulerAngles = autonomyVector.getOrientation().toRotationMatrix().eulerAngles(2, 1, 0);
-    response->autonomy_vector.twist.angular.x = eulerAngles[2]; // roll
-    response->autonomy_vector.twist.angular.y = eulerAngles[1]; // pitch
-    response->autonomy_vector.twist.angular.z = eulerAngles[0]; // yaw
-    RCLCPP_INFO(
-      this->get_logger(),
-      "Autonomy vector computed at pose: pos=(%.2f, %.2f, %.2f), RPY=(%.2f, %.2f, %.2f)",
-      queryPose.getPosition().x(), queryPose.getPosition().y(), queryPose.getPosition().z(),
-      eulerAngles[2], eulerAngles[1], eulerAngles[0]
-    );
-  }
+  this->autonomyVectorService = this->create_service<ComputeAutonomyVector>(
+    "pfield/compute_autonomy_vector",
+    std::bind(&PotentialFieldManager::handleComputeAutonomyVector, this, std::placeholders::_1, std::placeholders::_2)
   );
 
   // Create a CSV file to store the potential field data for python to plot
   // std::string filename = "pfield_data";
   // this->exportFieldDataToCSV(filename);
 
+  // Initialize IKSolver depending on robot type
+
   // Run the timer for visualizing the potential field
   this->timer = this->create_wall_timer(
-    std::chrono::duration<double>(1.0 / this->timerFreq), // Timer period based on frequency
-    std::bind(&PotentialFieldManager::timerCallback, this)
+    std::chrono::duration<double>(1.0 / this->visualizerFrequency), // Timer period based on frequency
+    [this]() {
+    MarkerArray pfieldMarkers = this->visualizePF(this->pField);
+    MarkerArray planningPFMarkers = this->visualizePF(this->planningPField);
+    this->pFieldMarkerPub->publish(pfieldMarkers);
+    this->planningPFieldMarkerPub->publish(planningPFMarkers);
+  }
   );
 }
 
-void PotentialFieldManager::timerCallback() {
-  this->visualizePF();
+void PotentialFieldManager::handleComputeAutonomyVector(const ComputeAutonomyVector::Request::SharedPtr request, ComputeAutonomyVector::Response::SharedPtr response) {
+  RCLCPP_INFO(this->get_logger(), "Received autonomy vector request");
+  // Compute the autonomy vector at the given pose
+  SpatialVector queryPose(
+    Eigen::Vector3d(
+      request->start.pose.position.x,
+      request->start.pose.position.y,
+      request->start.pose.position.z
+    ),
+    Eigen::Quaterniond(
+      request->start.pose.orientation.w, request->start.pose.orientation.x,
+      request->start.pose.orientation.y, request->start.pose.orientation.z
+    )
+  );
+  SpatialVector autonomyVector = this->pField->evaluateVelocityAtPose(queryPose);
+  response->autonomy_vector.header.frame_id = this->fixedFrame;
+  response->autonomy_vector.header.stamp = this->now();
+  response->autonomy_vector.twist.linear.x = autonomyVector.getPosition().x();
+  response->autonomy_vector.twist.linear.y = autonomyVector.getPosition().y();
+  response->autonomy_vector.twist.linear.z = autonomyVector.getPosition().z();
+  // For angular velocity, convert quaternion to euler angles (yaw, pitch, roll)
+  Eigen::Vector3d eulerAngles = autonomyVector.getOrientation().toRotationMatrix().eulerAngles(2, 1, 0);
+  response->autonomy_vector.twist.angular.x = eulerAngles[2]; // roll
+  response->autonomy_vector.twist.angular.y = eulerAngles[1]; // pitch
+  response->autonomy_vector.twist.angular.z = eulerAngles[0]; // yaw
+  RCLCPP_INFO(
+    this->get_logger(),
+    "Autonomy vector computed at pose: pos=(%.2f, %.2f, %.2f), RPY=(%.2f, %.2f, %.2f)",
+    queryPose.getPosition().x(), queryPose.getPosition().y(), queryPose.getPosition().z(),
+    eulerAngles[2], eulerAngles[1], eulerAngles[0]
+  );
 }
 
-Path PotentialFieldManager::interpolatePath(const SpatialVector& start, double deltaTime, double goalTolerance) {
-  Path path;
-  path.header.frame_id = this->fixedFrame;
-  path.header.stamp = this->now();
-  PoseStamped startPose;
-  startPose.header.frame_id = path.header.frame_id;
-  startPose.header.stamp = path.header.stamp;
-  startPose.pose.position.x = start.getPosition().x();
-  startPose.pose.position.y = start.getPosition().y();
-  startPose.pose.position.z = start.getPosition().z();
-  startPose.pose.orientation.x = start.getOrientation().x();
-  startPose.pose.orientation.y = start.getOrientation().y();
-  startPose.pose.orientation.z = start.getOrientation().z();
-  startPose.pose.orientation.w = start.getOrientation().w();
-  path.poses.push_back(startPose);
-  // Interpolate through the potential field until the goal is reached with the given delta time
-  SpatialVector currentPose = start;
-  while (currentPose.euclideanDistance(this->pField.getGoalPose()) > goalTolerance) {
-    // Evaluate the velocity at the current pose
-    SpatialVector velocity = this->pField.evaluateVelocityAtPose(currentPose);
-    // Update the current pose based on the velocity and delta time
-    Eigen::Vector3d newPosition = currentPose.getPosition() + (velocity.getPosition() * deltaTime);
-    Eigen::Quaterniond newOrientation = this->pField.integrateAngularVelocity(currentPose.getOrientation(), deltaTime);
-    currentPose.setPosition(newPosition);
-    currentPose.setOrientation(newOrientation);
-    // Add the new pose to the path
-    PoseStamped newPose;
-    newPose.header.frame_id = path.header.frame_id;
-    newPose.header.stamp = this->now();
-    newPose.pose.position.x = currentPose.getPosition().x();
-    newPose.pose.position.y = currentPose.getPosition().y();
-    newPose.pose.position.z = currentPose.getPosition().z();
-    newPose.pose.orientation.x = currentPose.getOrientation().x();
-    newPose.pose.orientation.y = currentPose.getOrientation().y();
-    newPose.pose.orientation.z = currentPose.getOrientation().z();
-    newPose.pose.orientation.w = currentPose.getOrientation().w();
-    path.poses.push_back(newPose);
+void PotentialFieldManager::handlePFieldStep(const PFieldStep::Request::SharedPtr request, PFieldStep::Response::SharedPtr response) {
+  RCLCPP_DEBUG(this->get_logger(), "Received pfield step request");
+  // Build SpatialVector from request current_pose
+  SpatialVector currentPose(
+    Eigen::Vector3d(
+      request->current_pose.pose.position.x,
+      request->current_pose.pose.position.y,
+      request->current_pose.pose.position.z
+    ),
+    Eigen::Quaterniond(
+      request->current_pose.pose.orientation.w, request->current_pose.pose.orientation.x,
+      request->current_pose.pose.orientation.y, request->current_pose.pose.orientation.z
+    )
+  );
+
+  // Evaluate autonomy vector using planning copy of the potential field
+  SpatialVector autonomyVec = this->planningPField->evaluateVelocityAtPose(currentPose);
+
+  // Compute next pose by integrating linear and angular components
+  Eigen::Vector3d nextPosition = currentPose.getPosition() + (autonomyVec.getPosition() * request->delta_time);
+  Eigen::Quaterniond nextOrientation = this->planningPField->integrateAngularVelocity(currentPose.getOrientation(), request->delta_time);
+
+  // Fill response
+  response->success = true;
+  response->reached_goal = (currentPose.euclideanDistance(this->planningPField->getGoalPose()) <= request->goal_tolerance);
+  response->autonomy_vector.header.frame_id = this->fixedFrame;
+  response->autonomy_vector.header.stamp = this->now();
+  response->autonomy_vector.twist.linear.x = autonomyVec.getPosition().x();
+  response->autonomy_vector.twist.linear.y = autonomyVec.getPosition().y();
+  response->autonomy_vector.twist.linear.z = autonomyVec.getPosition().z();
+  Eigen::Vector3d eulerAngles = autonomyVec.getOrientation().toRotationMatrix().eulerAngles(2, 1, 0);
+  response->autonomy_vector.twist.angular.x = eulerAngles[2];
+  response->autonomy_vector.twist.angular.y = eulerAngles[1];
+  response->autonomy_vector.twist.angular.z = eulerAngles[0];
+
+  response->next_pose.header.frame_id = this->fixedFrame;
+  response->next_pose.header.stamp = this->now();
+  response->next_pose.pose.position.x = nextPosition.x();
+  response->next_pose.pose.position.y = nextPosition.y();
+  response->next_pose.pose.position.z = nextPosition.z();
+  response->next_pose.pose.orientation.x = nextOrientation.x();
+  response->next_pose.pose.orientation.y = nextOrientation.y();
+  response->next_pose.pose.orientation.z = nextOrientation.z();
+  response->next_pose.pose.orientation.w = nextOrientation.w();
+}
+
+PFLimits PotentialFieldManager::getPFLimits(std::shared_ptr<PotentialField> pf) {
+  PFLimits limits;
+  // Determine the limits of the potential field based on obstacle positions and goal position
+  auto obstacles = pf->getObstacles();
+  Eigen::Vector3d goalPos = pf->getGoalPose().getPosition();
+  if (obstacles.empty()) {
+    // If no obstacles, set limits around the goal position
+    limits.minX = goalPos.x();
+    limits.maxX = goalPos.x();
+    limits.minY = goalPos.y();
+    limits.maxY = goalPos.y();
+    limits.minZ = goalPos.z();
+    limits.maxZ = goalPos.z();
   }
-  return path;
+  else {
+    // Initialize limits based on the first obstacle
+    Eigen::Vector3d firstPos = obstacles[0].getPosition();
+    limits.minX = firstPos.x();
+    limits.maxX = firstPos.x();
+    limits.minY = firstPos.y();
+    limits.maxY = firstPos.y();
+    limits.minZ = firstPos.z();
+    limits.maxZ = firstPos.z();
+    // Iterate through obstacles to find overall min/max
+    for (const auto& obst : obstacles) {
+      Eigen::Vector3d pos = obst.getPosition();
+      if (pos.x() < limits.minX) limits.minX = pos.x();
+      if (pos.x() > limits.maxX) limits.maxX = pos.x();
+      if (pos.y() < limits.minY) limits.minY = pos.y();
+      if (pos.y() > limits.maxY) limits.maxY = pos.y();
+      if (pos.z() < limits.minZ) limits.minZ = pos.z();
+      if (pos.z() > limits.maxZ) limits.maxZ = pos.z();
+    }
+    // Expand limits to include the goal position if outside current bounds
+    if (goalPos.x() < limits.minX) limits.minX = goalPos.x();
+    if (goalPos.x() > limits.maxX) limits.maxX = goalPos.x();
+    if (goalPos.y() < limits.minY) limits.minY = goalPos.y();
+    if (goalPos.y() > limits.maxY) limits.maxY = goalPos.y();
+    if (goalPos.z() < limits.minZ) limits.minZ = goalPos.z();
+    if (goalPos.z() > limits.maxZ) limits.maxZ = goalPos.z();
+  }
+  // Increase the limits by a buffer area for better visualization
+  limits.minX -= this->visualizerBufferArea;
+  limits.maxX += this->visualizerBufferArea;
+  limits.minY -= this->visualizerBufferArea;
+  limits.maxY += this->visualizerBufferArea;
+  limits.minZ -= this->visualizerBufferArea;
+  limits.maxZ += this->visualizerBufferArea;
+  return limits;
 }
 
-void PotentialFieldManager::visualizePF() {
+MarkerArray PotentialFieldManager::visualizePF(std::shared_ptr<PotentialField> pf) {
   MarkerArray markerArray;
-  // markerArray.markers.push_back(this->createGoalMarker());
-  MarkerArray goalMarkerArray = this->createGoalMarker();
+  MarkerArray goalMarkerArray = this->createGoalMarker(pf);
   markerArray.markers.insert(markerArray.markers.cend(), goalMarkerArray.markers.cbegin(), goalMarkerArray.markers.cend());
-  auto obstacleMarkers = this->createObstacleMarkers();
+  auto obstacleMarkers = this->createObstacleMarkers(pf);
   markerArray.markers.insert(markerArray.markers.cend(), obstacleMarkers.markers.cbegin(),
     obstacleMarkers.markers.cend());
-  auto potentialVectorMarkers = this->createPotentialVectorMarkers();
+  auto potentialVectorMarkers = this->createPotentialVectorMarkers(pf);
   markerArray.markers.insert(markerArray.markers.cend(), potentialVectorMarkers.markers.cbegin(),
     potentialVectorMarkers.markers.cend());
-  // auto queryPointMarker = this->createQueryPointMarker();
-  // markerArray.markers.insert(markerArray.markers.cend(), queryPointMarker.markers.cbegin(),
-  //   queryPointMarker.markers.cend());
-  // Publish the marker array
-  this->markerPub->publish(markerArray);
+  return markerArray;
 }
 
-MarkerArray PotentialFieldManager::createObstacleMarkers() {
+MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<PotentialField> pf) {
   MarkerArray markerArray;
-  int id = 0;
-  for (const auto& obstacle : this->pField.getObstacles()) {
+  std::vector<PotentialFieldObstacle> obstacles = pf->getObstacles();
+  for (const auto& obstacle : obstacles) {
+    int hashID = createHashID(obstacle);
     Marker obstacleMarker;
     obstacleMarker.header.frame_id = this->fixedFrame;
     obstacleMarker.header.stamp = this->now();
+    obstacleMarker.frame_locked = true;
     obstacleMarker.ns = "obstacle";
-    obstacleMarker.id = id;
+    obstacleMarker.id = hashID;
     obstacleMarker.action = Marker::ADD;
     auto position = obstacle.getPosition();
     auto orientation = obstacle.getOrientation();
@@ -264,6 +360,26 @@ MarkerArray PotentialFieldManager::createObstacleMarkers() {
       obstacleMarker.scale.z = obstacle.getGeometry().height; // Height
       break;
     }
+    case ObstacleType::MESH: {
+      if (!obstacle.getMeshResource().empty()) {
+        obstacleMarker.type = Marker::MESH_RESOURCE;
+        obstacleMarker.mesh_resource = obstacle.getMeshResource();
+        obstacleMarker.mesh_use_embedded_materials = true;
+        // Use the meshScale for visualization; if geometry dims are provided and non-zero, multiply scale accordingly
+        Eigen::Vector3d scale = obstacle.getMeshScale();
+        obstacleMarker.scale.x = scale.x();
+        obstacleMarker.scale.y = scale.y();
+        obstacleMarker.scale.z = scale.z();
+      }
+      else {
+        // Fallback to box approximation
+        obstacleMarker.type = Marker::CUBE;
+        obstacleMarker.scale.x = obstacle.getGeometry().length;
+        obstacleMarker.scale.y = obstacle.getGeometry().width;
+        obstacleMarker.scale.z = obstacle.getGeometry().height;
+      }
+      break;
+    }
     }
     obstacleMarker.color.r = 1.0f;
     obstacleMarker.color.g = 0.0f;
@@ -275,8 +391,9 @@ MarkerArray PotentialFieldManager::createObstacleMarkers() {
     Marker influenceMarker;
     influenceMarker.header.frame_id = this->fixedFrame;
     influenceMarker.header.stamp = this->now();
+    influenceMarker.frame_locked = true;
     influenceMarker.ns = "obstacle_influence";
-    influenceMarker.id = id;
+    influenceMarker.id = hashID; // mirror id for influence volume
     influenceMarker.action = Marker::ADD;
     influenceMarker.pose.position.x = position.x();
     influenceMarker.pose.position.y = position.y();
@@ -307,6 +424,15 @@ MarkerArray PotentialFieldManager::createObstacleMarkers() {
       influenceMarker.scale.z = obstacle.getInfluenceZoneScale() * obstacle.getGeometry().height; // Height
       break;
     }
+    case ObstacleType::MESH: {
+      // Represent mesh influence as a scaled bounding box around the mesh
+      influenceMarker.type = Marker::MESH_RESOURCE;
+      Eigen::Vector3d scale = obstacle.getMeshScale();
+      influenceMarker.scale.x = obstacle.getInfluenceZoneScale() * scale.x();
+      influenceMarker.scale.y = obstacle.getInfluenceZoneScale() * scale.y();
+      influenceMarker.scale.z = obstacle.getInfluenceZoneScale() * scale.z();
+      break;
+    }
     }
     influenceMarker.color.r = 1.0f;
     influenceMarker.color.g = 1.0f;
@@ -314,21 +440,21 @@ MarkerArray PotentialFieldManager::createObstacleMarkers() {
     influenceMarker.color.a = 0.5f; // Semi-transparent
     influenceMarker.lifetime = rclcpp::Duration(0, 0); // No lifetime
     markerArray.markers.push_back(influenceMarker);
-    id++;
   }
   return markerArray;
 }
 
-MarkerArray PotentialFieldManager::createGoalMarker() {
+MarkerArray PotentialFieldManager::createGoalMarker(std::shared_ptr<PotentialField> pf) {
   // Create a green sphere marker
   Marker goalMarker;
   goalMarker.header.frame_id = this->fixedFrame;
   goalMarker.header.stamp = this->now();
+  goalMarker.frame_locked = true;
   goalMarker.ns = "goal";
   goalMarker.id = 0;
   goalMarker.type = Marker::SPHERE;
   goalMarker.action = Marker::ADD;
-  SpatialVector goalPose = this->pField.getGoalPose();
+  SpatialVector goalPose = pf->getGoalPose();
   goalMarker.pose.position.x = goalPose.getPosition().x();
   goalMarker.pose.position.y = goalPose.getPosition().y();
   goalMarker.pose.position.z = goalPose.getPosition().z();
@@ -336,9 +462,9 @@ MarkerArray PotentialFieldManager::createGoalMarker() {
   goalMarker.pose.orientation.y = goalPose.getOrientation().y();
   goalMarker.pose.orientation.z = goalPose.getOrientation().z();
   goalMarker.pose.orientation.w = goalPose.getOrientation().w();
-  goalMarker.scale.x = 0.5;
-  goalMarker.scale.y = 0.5;
-  goalMarker.scale.z = 0.5;
+  goalMarker.scale.x = 0.15;
+  goalMarker.scale.y = 0.15;
+  goalMarker.scale.z = 0.15;
   goalMarker.color.r = 0.0f;
   goalMarker.color.g = 1.0f;
   goalMarker.color.b = 0.0f;
@@ -389,26 +515,19 @@ MarkerArray PotentialFieldManager::createGoalMarker() {
   return goalMarkerArray;
 }
 
-MarkerArray PotentialFieldManager::createPotentialVectorMarkers() {
+MarkerArray PotentialFieldManager::createPotentialVectorMarkers(std::shared_ptr<PotentialField> pf) {
   MarkerArray markerArray;
   int id = 0;
-  // TODO: Decide limits based on farthest entity in the field
-  // TODO: Parameterize these limits and resolution
-  const double lowerLimit = -5.0f; // Lower limit of the grid
-  const double upperLimit = 5.0f; // Upper limit of the grid
-  const double fieldResolution = 0.5f; // Resolution of the grid
-  const double Z = this->pField.getGoalPose().getPosition().z();
-  for (double x = lowerLimit; x <= upperLimit; x += fieldResolution) {
-    for (double y = lowerLimit; y <= upperLimit; y += fieldResolution) {
-      for (double z = lowerLimit; z <= upperLimit; z += fieldResolution) {
-        // Skip the Z-axis since we are only interested in the XY plane for now
-        if (std::abs(z - Z) > 1e-6) { continue; }
+  const auto limits = this->getPFLimits(pf);
+  for (double x = limits.minX; x <= limits.maxX; x += this->fieldResolution) {
+    for (double y = limits.minY; y <= limits.maxY; y += this->fieldResolution) {
+      for (double z = limits.minZ; z <= limits.maxZ; z += this->fieldResolution) {
         // Skip any points that are inside obstacle radius
         Eigen::Vector3d point(x, y, z);
-        if (this->pField.isPointInsideObstacle(point)) { continue; }
+        if (pf->isPointInsideObstacle(point)) { continue; }
         Marker vectorMarker;
         SpatialVector position{point};
-        SpatialVector velocity = this->pField.evaluateVelocityAtPose(position);
+        SpatialVector velocity = pf->evaluateVelocityAtPose(position);
         double magnitude = velocity.getPosition().norm();
         // Normalize the velocity vector since we want to show direction
         velocity.normalizePosition();
@@ -424,9 +543,9 @@ MarkerArray PotentialFieldManager::createPotentialVectorMarkers() {
         // Set the orientation of the arrow to point in the direction of the velocity vector
         double yaw = std::atan2(velocity.getPosition().y(), velocity.getPosition().x());
         vectorMarker.pose.orientation = PotentialFieldManager::getQuaternionFromYaw(yaw);
-        vectorMarker.scale.x = 0.2f; // Length of the arrow
-        vectorMarker.scale.y = 0.1f; // Shaft diameter
-        vectorMarker.scale.z = 0.15f;// Head diameter
+        vectorMarker.scale.x = 0.15f; // Length of the arrow
+        vectorMarker.scale.y = 0.05f; // Shaft diameter
+        vectorMarker.scale.z = 0.1f; // Head diameter
         // Color the arrows using a gradient depending on
         // the magnitude of the velocity vector
         // maxForce is red and 0 is blue
@@ -443,19 +562,19 @@ MarkerArray PotentialFieldManager::createPotentialVectorMarkers() {
   return markerArray;
 }
 
-void PotentialFieldManager::exportFieldDataToCSV(const std::string& base_filename) {
+void PotentialFieldManager::exportFieldDataToCSV(std::shared_ptr<PotentialField> pf, const std::string& base_filename) {
   // Write obstacle positions to a CSV file
   std::string obstacles_filename = "data/" + base_filename + "_obstacles.csv";
   std::ofstream obstacles_file(obstacles_filename);
   if (obstacles_file.is_open()) {
     obstacles_file << "obstacle_x,obstacle_y,obstacle_z,type,influence,repulsive_gain,radius,length,width,height\n";
-    for (const auto& obstacle : this->pField.getObstacles()) {
+    for (const auto& obstacle : pf->getObstacles()) {
       const Eigen::Vector3d& position = obstacle.getPosition();
-      std::vector<double> obstGeomVector = obstacle.getGeometry().asVector(obstacle.getType());
+      const ObstacleGeometry& g = obstacle.getGeometry();
       obstacles_file << position.x() << "," << position.y() << "," << position.z() << ","
         << obstacleTypeToString(obstacle.getType()) << "," << obstacle.getInfluenceZoneScale() << ","
         << obstacle.getRepulsiveGain() << ","
-        << obstGeomVector[0] << "," << obstGeomVector[1] << "," << obstGeomVector[2] << obstGeomVector[3]
+        << g.radius << "," << g.length << "," << g.width << "," << g.height
         << "\n";
     }
     obstacles_file.close();
@@ -469,17 +588,16 @@ void PotentialFieldManager::exportFieldDataToCSV(const std::string& base_filenam
   std::ofstream vectors_file(vectors_filename);
   if (vectors_file.is_open()) {
     vectors_file << "grid_x,grid_y,grid_z,vel_x,vel_y,vel_z\n";
-    //TODO: Parameterize the grid resolution and limits
     const double z = 0.0;
     const double res = 1.0; // 10x10 grid from -5 to 5
     for (double x = -5.0; x <= 5.0; x += res) {
       for (double y = -5.0; y <= 5.0; y += res) {
         Eigen::Vector3d point(x, y, z);
-        if (this->pField.isPointInsideObstacle(point)) {
+        if (pf->isPointInsideObstacle(point)) {
           continue;
         }
         SpatialVector position{point};
-        SpatialVector velocity = this->pField.evaluateVelocityAtPose(position);
+        SpatialVector velocity = pf->evaluateVelocityAtPose(position);
         vectors_file << x << "," << y << "," << z << ","
           << velocity.getPosition().x() << ","
           << velocity.getPosition().y() << ","

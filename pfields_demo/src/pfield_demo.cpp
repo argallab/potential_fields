@@ -9,21 +9,7 @@ PFDemo::PFDemo() : Node("pfield_demo") {
   // Get parameters from yaml file
   this->fixedFrame = this->get_parameter("fixed_frame").as_string();
 
-  static tf2_ros::StaticTransformBroadcaster staticBroadcaster = tf2_ros::StaticTransformBroadcaster(this);
-
-  // Publish a static transform from world to base_link
-  geometry_msgs::msg::TransformStamped baseLinkTransform;
-  baseLinkTransform.header.stamp = this->now();
-  baseLinkTransform.header.frame_id = this->fixedFrame;
-  baseLinkTransform.child_frame_id = "base_link";
-  baseLinkTransform.transform.translation.x = 0.0;
-  baseLinkTransform.transform.translation.y = 0.0;
-  baseLinkTransform.transform.translation.z = 0.0;
-  baseLinkTransform.transform.rotation.x = 0.0;
-  baseLinkTransform.transform.rotation.y = 0.0;
-  baseLinkTransform.transform.rotation.z = 0.0;
-  baseLinkTransform.transform.rotation.w = 1.0;
-  staticBroadcaster.sendTransform(baseLinkTransform);
+  // Static transform is now published via launch (tf2_ros/static_transform_publisher)
 
   // Wait for the service to be available
   this->planPathClient = this->create_client<PlanPath>("pfield/plan_path");

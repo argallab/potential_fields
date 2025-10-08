@@ -103,12 +103,39 @@ Parrallize planning.
 Send JT to JTAS when running MoveIt Franka demo. Doesn't matter if MoveIt.
 Generic programming (Policy based design) for different IK solvers.
 
-## IK
-[GeoFIK](https://arxiv.org/abs/2503.03992)
-TrackIK
-KDL (ROS1 XArm)
-Pinocchio (ROS2 XArm)
-Custom IK Solver (GeoFIK for Franka)
+## IK Libraries
+[Andrew Dornbush's Trac-IK](https://github.com/aurone/trac_ik), [Traclabs Track-IK](https://bitbucket.org/traclabs/trac_ik/src/rolling/)
+[KDL](https://github.com/nbfigueroa/robot_kinematics_kdl) (ROS1 XArm)
+[Pinocchio](https://github.com/stack-of-tasks/pinocchio) (ROS2 XArm)
+[GeoFIK](https://arxiv.org/abs/2503.03992) (Franka Emika Panda)
+[BioIK](https://github.com/TAMS-Group/bio_ik) (Kinova Jaco)
 
-This week:
-Pinnochio as IK to get JointTrajectory from a planned path.
+# What the User needs to provide to use PFields with their robot
+1. Robot Model (URDF, raw or xacro)
+   - Needs Collision elements for all links
+   - Needs Joint limits for all joints
+   - In addition to the URDF, include any mesh files used in the URDF
+   - Static Transform from chosen fixed frame to robot base link (typically identity transform)
+2. `MotionPlugin` implementation for their robot
+   - `IKSolver` implementation with convergence criteria to pick "best" solution from multiple solutions if applicable
+   - Robot interface to obtain robot state (joint states, end-effector pose)
+   - Robot interface to send end-effector velocity commands or joint trajectory commands to the robot
+3. (Optional) Obstacle publisher node to publish obstacles in the environment as standard ROS messages
+   - Note that these are separate from the robot's collision objects, which are automatically parsed into PF obstacles
+4. (Optional) Goal publisher node to publish goal positions for the robot to plan
+5. (Optional) Human input node to publish human velocity commands for the robot to fuse with the autonomy commands
+   - Joystick, keyboard, or other teleoperation interface
+6. Service Client for Path Planning
+    - Provide start pose (typically current end-effector pose)
+    - Service internally requires a `MotionPlugin` for the robot (includes `IKSolver`)
+    - Receive planned path as `trajectory_msgs/JointTrajectory` message
+
+# Notes for 10/08
+KDL and Pinnochio: input a URDF and get FK from that
+Use IK -> Obstacles more directly
+Push to get it working.
+If I didn't have ROS, how would it work?
+No need for MotionInterface, PFieldManager should be the only node.
+1. Finishing Planning Service (PlanPath) Set Goal, Obstacles, Franka MoveIt Simulation moves to that goal
+2. Start designing out diagram (ROS interaction, PF)
+3. Lower dimensional interface with Franka

@@ -1,20 +1,59 @@
 <launch>
   <arg name="use_jsp" default="gui" description="The JointState Publisher to launch. ['gui', 'jsp', 'none']"/>
   <arg name="use_rviz" default="true" description="Whether to launch RViz or not."/>
+  <arg name="use_xacro" default="true" description="Whether to use xacro to process the URDF file."/>
+  <arg name="robot_state_publisher_frequency" default="50.0" description="The frequency (in Hz) for the robot_state_publisher to publish transforms."/>
+  <arg name="joint_state_publisher_frequency" default="50.0" description="The frequency (in Hz) for the joint_state_publisher to publish joint states."/>
   <arg name="rviz_fixed_frame" default="world" description="The fixed frame for RVIZ"/>
-  <arg name="robot_urdf_xacro" default="$(find-pkg-share pfields_demo)/urdf/robot.urdf.xacro" description="The URDF Xacro file for the robot"/>
-  
+  <arg name="robot_urdf_xacro" default = "robot.urdf.xacro" description="The URDF Xacro file for the robot"/>
+  <arg name="robot_urdf" default = "robot.urdf" description="The URDF file for the robot if not using xacro"/>
+  <arg name="planning_tf_prefix" default="planning_" description="Prefix for planning robot's TF frames"/>
+  <!-- Static transform config from fixed frame to robot base frame -->
+  <arg name="base_frame" default="base" description="Robot base frame (child)"/>
+  <arg name="base_x" default="0.0" description="X position of the robot's base frame relative to RViz fixed frame"/>
+  <arg name="base_y" default="0.0" description="Y position of the robot's base frame relative to RViz fixed frame"/>
+  <arg name="base_z" default="0.0" description="Z position of the robot's base frame relative to RViz fixed frame"/>
+  <!-- Note: static_transform_publisher 6-arg form expects roll pitch yaw (RPY) -->
+  <arg name="base_roll" default="0.0" description="Roll of the robot's base frame relative to RViz fixed frame"/>
+  <arg name="base_pitch" default="0.0" description="Pitch of the robot's base frame relative to RViz fixed frame"/>
+  <arg name="base_yaw" default="0.0" description="Yaw of the robot's base frame relative to RViz fixed frame"/>
+
   <node pkg="pfields_demo" exec="pf_demo" name="pf_demo_node" output="screen">
     <param name="fixed_frame" value="$(var rviz_fixed_frame)"/>
   </node>
-  <node pkg="robot_state_publisher" exec="robot_state_publisher" >
-    <param name="robot_description" value="$(command 'xacro $(var robot_urdf_xacro)')"/>
+
+  <!-- Static TF: $(var rviz_fixed_frame) -> $(var base_frame) -->
+  <node pkg="tf2_ros" exec="static_transform_publisher" name="fixed_to_base_broadcaster" output="screen"
+        args="$(var base_x) $(var base_y) $(var base_z) $(var base_roll) $(var base_pitch) $(var base_yaw) $(var rviz_fixed_frame) $(var base_frame)"/>
+
+  <!-- Robot State Publisher -->
+  <node pkg="robot_state_publisher" exec="robot_state_publisher" name="robot_state_publisher" if="$(var use_xacro)" >
+    <param name="robot_description" value="$(command 'xacro $(find-pkg-share pfields_demo)/urdf/$(var robot_urdf_xacro)')" type="str"/>
+    <param name="publish_frequency" value="$(var robot_state_publisher_frequency)"/>
   </node>
-  <node pkg="joint_state_publisher_gui" exec="joint_state_publisher_gui" if="$(eval \'$(var use_jsp)\'==\'gui\')"/>
-  <node pkg="joint_state_publisher" exec="joint_state_publisher" if="$(eval \'$(var use_jsp)\'==\'jsp\')"/>
+  <node pkg="robot_state_publisher" exec="robot_state_publisher" name="robot_state_publisher" if="$(eval \'$(var use_xacro)\'==\'false\')" >
+    <param name="robot_description" value="$(command 'cat $(find-pkg-share pfields_demo)/urdf/$(var robot_urdf)')" type="str"/>
+    <param name="publish_frequency" value="$(var robot_state_publisher_frequency)"/>
+  </node>
+
+  <!-- Joint State Publisher -->
+  <node pkg="joint_state_publisher_gui" exec="joint_state_publisher_gui" if="$(eval \'$(var use_jsp)\'==\'gui\')">
+    <param name="rate" value="$(var joint_state_publisher_frequency)"/>
+  </node>
+  <node pkg="joint_state_publisher" exec="joint_state_publisher" if="$(eval \'$(var use_jsp)\'==\'jsp\')">
+    <param name="rate" value="$(var joint_state_publisher_frequency)"/>
+  </node>
+
+  <!-- Include PF Launch File -->
   <include file="$(find-pkg-share potential_fields)/launch/pfield.launch.xml">
     <arg name="rviz_fixed_frame" value="$(var rviz_fixed_frame)"/>
+    <arg name="use_jsp" value="$(var use_jsp)"/>
     <arg name="use_rviz" value="$(var use_rviz)"/>
-    <arg name="robot_urdf_xacro" value="$(var robot_urdf_xacro)"/>
+    <arg name="use_xacro" value="$(var use_xacro)"/>
+    <arg name="robot_urdf_xacro" value="$(find-pkg-share pfields_demo)/urdf/$(var robot_urdf_xacro)"/>
+    <arg name="robot_urdf" value="$(find-pkg-share pfields_demo)/urdf/$(var robot_urdf)"/>
+    <arg name="robot_state_publisher_frequency" value="$(var robot_state_publisher_frequency)"/>
+    <arg name="joint_state_publisher_frequency" value="$(var joint_state_publisher_frequency)"/>
+    <arg name="planning_tf_prefix" value="$(var planning_tf_prefix)"/>
   </include>
 </launch>

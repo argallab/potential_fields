@@ -1,15 +1,24 @@
 #ifndef PF_OBSTACLE_HPP
 #define PF_OBSTACLE_HPP
-#include "spatial_vector.hpp"
-#include <eigen3/Eigen/Dense>
-#include <vector>
-#include <stdexcept>
+
 #include <cmath>
+#include <memory>
+#include <stdexcept>
+#include <string>
+#include <utility>
+#include <vector>
+
+#include <Eigen/Core>
+#include <Eigen/Geometry>
+
+#include "spatial_vector.hpp"
+#include "mesh_collision.hpp"
 
 enum class ObstacleType {
   SPHERE, // [center, radius]
   BOX, // [center, length, width, height]
-  CYLINDER // [center, radius, height]
+  CYLINDER, // [center, radius, height]
+  MESH // [center, scale_x, scale_y, scale_z]
 };
 
 enum class ObstacleGroup {
@@ -26,6 +35,8 @@ inline std::string obstacleTypeToString(const ObstacleType& type) {
     return "Box";
   case ObstacleType::CYLINDER:
     return "Cylinder";
+  case ObstacleType::MESH:
+    return "Mesh";
   default:
     throw std::invalid_argument("Unknown obstacle type");
   }
@@ -40,6 +51,9 @@ inline ObstacleType stringToObstacleType(const std::string& typeStr) {
   }
   else if (typeStr == "Cylinder") {
     return ObstacleType::CYLINDER;
+  }
+  else if (typeStr == "Mesh") {
+    return ObstacleType::MESH;
   }
   else {
     throw std::invalid_argument("Unknown obstacle type string: " + typeStr);
@@ -96,21 +110,27 @@ struct ObstacleGeometry {
       return {length, width, height};
     case ObstacleType::CYLINDER:
       return {radius, height};
+    case ObstacleType::MESH:
+      return {length, width, height};
     default:
       throw std::invalid_argument("Unknown obstacle type");
     }
   }
 };
 
-
 class PotentialFieldObstacle {
 public:
   PotentialFieldObstacle() = delete;
-  PotentialFieldObstacle(int id,
+  ~PotentialFieldObstacle() = default;
+
+  PotentialFieldObstacle(
+    std::string frameID,
     Eigen::Vector3d centerPosition, Eigen::Quaterniond orientation,
     ObstacleType type, ObstacleGroup group, ObstacleGeometry geometry,
-    double influenceZoneScale, double repulsiveGain)
-    : id(id),
+    double influenceZoneScale, double repulsiveGain,
+    const std::string& meshResource = std::string(),
+    const Eigen::Vector3d& meshScale = Eigen::Vector3d::Ones())
+    : frameID(frameID),
     position(centerPosition),
     orientation(orientation),
     orientationConjugate(orientation.conjugate()),
@@ -118,10 +138,75 @@ public:
     group(group),
     geometry(geometry),
     influenceZoneScale(influenceZoneScale),
-    repulsiveGain(repulsiveGain) {}
-  ~PotentialFieldObstacle() = default;
+    repulsiveGain(repulsiveGain),
+    meshResource(meshResource),
+    meshScale(meshScale) {
+    if (type == ObstacleType::MESH && !meshResource.empty()) {
+      try {
+        meshCollisionData = loadMesh(meshResource);
+        if (meshCollisionData) {
+          meshInfluenceMargin = (influenceZoneScale - 1.0) * 0.5 * meshCollisionData->maxExtent;
+        }
+      }
+      catch (const std::exception&) {
+        meshCollisionData.reset();
+      }
+    }
+  }
 
-  int getID() const { return this->id; }
+  PotentialFieldObstacle(const PotentialFieldObstacle& other) :
+    frameID(other.frameID),
+    position(other.position),
+    orientation(other.orientation),
+    orientationConjugate(other.orientationConjugate),
+    type(other.type),
+    group(other.group),
+    geometry(other.geometry),
+    influenceZoneScale(other.influenceZoneScale),
+    repulsiveGain(other.repulsiveGain),
+    meshResource(other.meshResource),
+    meshScale(other.meshScale) {
+    // Shallow copy of shared mesh data
+    this->meshCollisionData = other.meshCollisionData;
+    this->meshInfluenceMargin = other.meshInfluenceMargin;
+  }
+
+  PotentialFieldObstacle(PotentialFieldObstacle&& other) noexcept :
+    frameID(std::move(other.frameID)),
+    position(std::move(other.position)),
+    orientation(std::move(other.orientation)),
+    orientationConjugate(std::move(other.orientationConjugate)),
+    type(other.type),
+    group(other.group),
+    geometry(std::move(other.geometry)),
+    influenceZoneScale(other.influenceZoneScale),
+    repulsiveGain(other.repulsiveGain),
+    meshResource(std::move(other.meshResource)),
+    meshScale(std::move(other.meshScale)) {
+    this->meshCollisionData = std::move(other.meshCollisionData);
+    this->meshInfluenceMargin = other.meshInfluenceMargin;
+  }
+
+  PotentialFieldObstacle& operator=(const PotentialFieldObstacle& other) {
+    if (this != &other) {
+      this->frameID = other.frameID;
+      this->position = other.position;
+      this->orientation = other.orientation;
+      this->orientationConjugate = other.orientationConjugate;
+      this->type = other.type;
+      this->group = other.group;
+      this->geometry = other.geometry;
+      this->influenceZoneScale = other.influenceZoneScale;
+      this->repulsiveGain = other.repulsiveGain;
+      this->meshResource = other.meshResource;
+      this->meshScale = other.meshScale;
+      this->meshCollisionData = other.meshCollisionData; // share existing (may be null)
+      this->meshInfluenceMargin = other.meshInfluenceMargin;
+    }
+    return *this;
+  }
+
+  std::string getFrameID() const { return this->frameID; }
   ObstacleGroup getGroup() const { return this->group; }
   Eigen::Vector3d getPosition() const { return this->position; }
   Eigen::Quaterniond getOrientation() const { return this->orientation; }
@@ -129,6 +214,8 @@ public:
   ObstacleGeometry getGeometry() const { return this->geometry; }
   double getInfluenceZoneScale() const { return this->influenceZoneScale; }
   double getRepulsiveGain() const { return this->repulsiveGain; }
+  const std::string& getMeshResource() const { return this->meshResource; }
+  Eigen::Vector3d getMeshScale() const { return this->meshScale; }
 
   void setPosition(Eigen::Vector3d newPosition) { this->position = newPosition; }
   void setOrientation(Eigen::Quaterniond newOrientation) {
@@ -149,7 +236,7 @@ public:
   }
 
 private:
-  int id; // Unique ID for the obstacle
+  std::string frameID; // Frame ID for the obstacle
   Eigen::Vector3d position; // Center Position of the obstacle in 3D space
   Eigen::Quaterniond orientation; // Orientation of the obstacle in 3D space
   Eigen::Quaterniond orientationConjugate; // Cached conjugate of the orientation for efficiency
@@ -158,18 +245,42 @@ private:
   ObstacleGeometry geometry; // Geometry of the obstacle, containing relevant dimensions
   double influenceZoneScale; // The scale value of the volume of the obstacle that becomes the influence zone for repulsive forces
   double repulsiveGain; // Gain for the repulsive force
+  std::string meshResource; // URI or file path to the mesh resource (e.g., package://, file://)
+  Eigen::Vector3d meshScale; // Scale for mesh visualization if using MESH_RESOURCE
+  std::shared_ptr<MeshCollisionData> meshCollisionData; // populated when mesh resource loaded (shared to avoid deep copies)
+  double meshInfluenceMargin = 0.0; // Additional margin for mesh influence zone
 
+  /**
+   * @brief Rotate the given point to the obstacle's frame of reference
+   *
+   * @note Useful for computing distances and collision checks in the obstacle's local frame
+   *
+   * @param point the point to transform into obstacle frame
+   * @return Eigen::Vector3d the point in the obstacle's local frame
+   */
   Eigen::Vector3d toObstacleFrame(const Eigen::Vector3d& point) const;
 
+  /**
+   * @brief Get the half dimensions of the obstacle
+   *
+   * @note Used for collision checking for "radius" style measurements
+   *
+   * @return Eigen::Vector3d Half dimensions [half_length, half_width, half_height]
+   */
   Eigen::Vector3d halfDimensions() const;
 };
 
 struct PotentialFieldObstacleHash {
   std::size_t operator()(const PotentialFieldObstacle& obstacle) const {
-    return std::hash<int>()(obstacle.getID()) ^
+    return std::hash<std::string>()(obstacle.getFrameID()) ^
       std::hash<std::string>()(obstacleTypeToString(obstacle.getType())) ^
       std::hash<std::string>()(obstacleGroupToString(obstacle.getGroup()));
   }
 };
+
+static int inline createHashID(const PotentialFieldObstacle& obstacle) {
+  PotentialFieldObstacleHash hasher;
+  return static_cast<int>(hasher(obstacle) & 0x7FFFFFFF); // keep positive
+}
 
 #endif // PF_OBSTACLE_HPP
