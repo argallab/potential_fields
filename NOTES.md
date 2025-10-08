@@ -130,7 +130,7 @@ Generic programming (Policy based design) for different IK solvers.
     - Service internally requires a `MotionPlugin` for the robot (includes `IKSolver`)
     - Receive planned path as `trajectory_msgs/JointTrajectory` message
 
-# Notes for 10/08
+# Notes for 10/08 Meeting
 KDL and Pinnochio: input a URDF and get FK from that
 Use IK -> Obstacles more directly
 Push to get it working.

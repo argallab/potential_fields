@@ -8,10 +8,12 @@
 - Configure CPPLint CI/CD Github Actions for PRs
 ---
 
-- Finish "Planning World" pipeline
-  - JointTrajectory (and Pose) trajectory planner interface using `trajectory_msgs/JointTrajectory`
-  - Interface to hand `JointTrajectory` to a robot controller (libfranka for example) to execute the planned path
+# Immediate TODOs
+- Finish PlanPath Service Implementation
+  - Should extract both EE Pose Trajectory, EE Velocity Trajectory, and Joint Trajectory
+- Create a demo where PlanPath service sends JointTrajectory into MoveIt JointTrajectory Action Server
 - Include installation instructions for fcl and libfranka and other external dependencies
-
 - Condense ROS Nodes into a single node and condense PF library code together.
-  - The `pfield` library should contain its own path planning function with all the necessary components (IK Solver, obstacle manager)
+  - The `pfield` library should contain its own path planning function
+  - `pfield` should also contain its own IKSolver and MotionPlugin instances with a factory method to create them
+  - ROS Wrapper node should just handle ROS communication and call the `pfield` library functions
