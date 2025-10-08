@@ -129,3 +129,13 @@ Generic programming (Policy based design) for different IK solvers.
     - Provide start pose (typically current end-effector pose)
     - Service internally requires a `MotionPlugin` for the robot (includes `IKSolver`)
     - Receive planned path as `trajectory_msgs/JointTrajectory` message
+
+# Notes for 10/08
+KDL and Pinnochio: input a URDF and get FK from that
+Use IK -> Obstacles more directly
+Push to get it working.
+If I didn't have ROS, how would it work?
+No need for MotionInterface, PFieldManager should be the only node.
+1. Finishing Planning Service (PlanPath) Set Goal, Obstacles, Franka MoveIt Simulation moves to that goal
+2. Start designing out diagram (ROS interaction, PF)
+3. Lower dimensional interface with Franka

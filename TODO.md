@@ -9,10 +9,9 @@
 ---
 
 - Finish "Planning World" pipeline
-  - PF Obstacles reflect RobotState and JointStates
-  - IKSolver interface for converting poses in the PF world to joint space (for planning a path)
   - JointTrajectory (and Pose) trajectory planner interface using `trajectory_msgs/JointTrajectory`
   - Interface to hand `JointTrajectory` to a robot controller (libfranka for example) to execute the planned path
-- IKSolver needs a method to score IK solutions in order to pick the best one from GeoFIK since it provides multiple solutions
-  - Kris has an [implementation](https://github.com/wengmister/Weighted_GeoFIK/tree/main) that could be useful
 - Include installation instructions for fcl and libfranka and other external dependencies
+
+- Condense ROS Nodes into a single node and condense PF library code together.
+  - The `pfield` library should contain its own path planning function with all the necessary components (IK Solver, obstacle manager)
