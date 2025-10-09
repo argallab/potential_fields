@@ -36,12 +36,10 @@ private:
   rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr fusedTwistPub;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goalPoseSub;
   rclcpp::Publisher<JointState>::SharedPtr planningJointStatePub; // Publisher for planning joint states
-  rclcpp::TimerBase::SharedPtr controlTimer;
+  rclcpp::Service<PlanPath>::SharedPtr pathPlanningService; // Now hosted here
+  rclcpp::Client<PFieldStep>::SharedPtr pfieldStepClient; // Client to request single PF steps
 
   double fusionAlpha;
-  double controlLoopFreq;
-  bool controlEnabled;
-
   std::unique_ptr<MotionPlugin> motionPlugin;
 
   geometry_msgs::msg::Twist::SharedPtr twistLimits;
@@ -49,14 +47,8 @@ private:
   geometry_msgs::msg::TwistStamped::SharedPtr lastHumanTwist;
   geometry_msgs::msg::TwistStamped::SharedPtr lastAutonomyTwist;
 
-
-  rclcpp::Service<PlanPath>::SharedPtr pathPlanningService; // Now hosted here
-  rclcpp::Client<PFieldStep>::SharedPtr pfieldStepClient; // Client to request single PF steps
-
   // Service callback for PlanPath requests
   void handlePlanPath(const PlanPath::Request::SharedPtr request, PlanPath::Response::SharedPtr response);
-
-  void controlLoop();
 
   geometry_msgs::msg::TwistStamped fuseTwists(
     const geometry_msgs::msg::TwistStamped::SharedPtr humanTwist,

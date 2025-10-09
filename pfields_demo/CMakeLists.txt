@@ -22,6 +22,9 @@ find_package(tf2_ros REQUIRED)
 find_package(tf2_eigen REQUIRED)
 find_package(urdf REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(std_srvs REQUIRED)
+find_package(trajectory_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
 
 include_directories(
   include/pfields_demo
@@ -35,6 +38,9 @@ ament_target_dependencies(pf_demo
   potential_fields_interfaces
   geometry_msgs
   visualization_msgs
+  sensor_msgs
+  trajectory_msgs
+  std_srvs
   nav_msgs
   tf2_ros
   tf2_eigen

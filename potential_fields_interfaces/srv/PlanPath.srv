@@ -1,5 +1,6 @@
 # The start pose for the plan
 geometry_msgs/PoseStamped start
+geometry_msgs/PoseStamped goal
 
 # Timestep to breadcrumb the vector field [s]
 float32 delta_time
@@ -9,5 +10,9 @@ float32 goal_tolerance
 
 ---
 bool success
-nav_msgs/Path plan
+nav_msgs/Path end_effector_path
+
 trajectory_msgs/JointTrajectory joint_trajectory
+
+# End-effector velocity trajectory (one TwistStamped per planning step)
+geometry_msgs/TwistStamped[] end_effector_velocity_trajectory

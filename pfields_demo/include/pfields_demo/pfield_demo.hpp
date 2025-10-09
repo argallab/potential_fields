@@ -5,6 +5,9 @@
 #include "potential_fields_interfaces/srv/plan_path.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "nav_msgs/msg/path.hpp"
+#include "sensor_msgs/msg/joint_state.hpp"
+#include "std_srvs/srv/empty.hpp"
+#include "trajectory_msgs/msg/joint_trajectory.hpp"
 
 using PlanPath = potential_fields_interfaces::srv::PlanPath;
 
@@ -17,6 +20,7 @@ private:
 
   // Create a service client for planning paths
   rclcpp::Client<PlanPath>::SharedPtr planPathClient;
+  rclcpp::Service<std_srvs::srv::Empty>::SharedPtr runPlanPathDemoService;
 };
 
 #endif // PFIELD_DEMO_HPP

@@ -3,6 +3,8 @@
 
 #include "tf2_eigen/tf2_eigen.hpp"
 #include <Eigen/Dense>
+#include <algorithm>
+#include "robot_plugins/null_motion_plugin.hpp"
 
 MotionInterface::MotionInterface() : Node("motion_interface") {
   RCLCPP_INFO(this->get_logger(), "MotionInterface Initialized");
@@ -13,7 +15,6 @@ MotionInterface::MotionInterface() : Node("motion_interface") {
   std::string baseLinkFrame = this->declare_parameter("base_link_frame", "base_link");
   std::string endEffectorFrame = this->declare_parameter("end_effector_frame", "ee_link");
   this->fusionAlpha = this->declare_parameter("fusion_alpha", 1.0);
-  this->controlLoopFreq = this->declare_parameter("control_loop_frequency", 10.0); // [Hz]
   double vLinMax = this->declare_parameter("limits.v_lin_max", 0.20);
   double vAngMax = this->declare_parameter("limits.v_ang_max", 0.80);
   double aLinMax = this->declare_parameter("limits.a_lin_max", 0.40);
@@ -32,9 +33,6 @@ MotionInterface::MotionInterface() : Node("motion_interface") {
     vLinMax, vAngMax);
   RCLCPP_INFO(this->get_logger(), "Loaded acceleration limits - Linear: %.2f m/s², Angular: %.2f rad/s²",
     aLinMax, aAngMax);
-
-  // Initialize control state as disabled, which gets toggled by start/stop services
-  this->controlEnabled = false;
 
   // Setup Publishers
   this->fusedTwistPub = this->create_publisher<geometry_msgs::msg::TwistStamped>(
@@ -67,16 +65,13 @@ MotionInterface::MotionInterface() : Node("motion_interface") {
   // Create a client to request single PF steps from the PFieldManager
   this->pfieldStepClient = this->create_client<PFieldStep>("pfield/step");
 
+  // Initialize a null motion plugin by default so the node can run without a real robot
+  this->motionPlugin = std::make_unique<NullMotionPlugin>();
+
   // Create the PlanPath service here (moved from PFieldManager)
   this->pathPlanningService = this->create_service<PlanPath>(
     "pfield/plan_path",
     std::bind(&MotionInterface::handlePlanPath, this, std::placeholders::_1, std::placeholders::_2)
-  );
-
-  // Setup the timer running the control loop
-  this->controlTimer = this->create_wall_timer(
-    std::chrono::duration<double>(1.0 / controlLoopFreq),
-    std::bind(&MotionInterface::controlLoop, this)
   );
 }
 
@@ -164,6 +159,8 @@ void MotionInterface::handlePlanPath(const PlanPath::Request::SharedPtr request,
   trajectory_msgs::msg::JointTrajectory jointTrajectory;
   jointTrajectory.header = path.header;
   jointTrajectory.joint_names = ikSolver->getJointNames();
+  // Container to accumulate end-effector velocity (TwistStamped) trajectory
+  std::vector<geometry_msgs::msg::TwistStamped> eeVelocityTrajectory;
   // Interpolate until goal reached or max iterations
   const int max_iters = 30000; // TODO(Sharwin): Parameterize this (or derive from MotionPlugin)
   unsigned int iter = 0;
@@ -197,28 +194,19 @@ void MotionInterface::handlePlanPath(const PlanPath::Request::SharedPtr request,
       response->success = false;
       return;
     }
+    // Store the autonomy vector (end-effector velocity) returned by PF step
+    eeVelocityTrajectory.push_back(pfResponse.autonomy_vector);
     // Update the current pose before moving to next iteration
     reached = pfResponse.reached_goal;
     currentPose = pfResponse.next_pose;
   }
-  response->plan = path;
+  response->end_effector_path = path;
   response->joint_trajectory = jointTrajectory;
+  // Move accumulated EE velocity trajectory into the response
+  response->end_effector_velocity_trajectory = eeVelocityTrajectory;
   response->success = reached;
-  if (!reached) RCLCPP_WARN(this->get_logger(), "Plan path reached iteration limit without reaching goal");
-}
-
-void MotionInterface::controlLoop() {
-  // The latest human and autonomy twists are stored in lastHumanTwist and lastAutonomyTwist
-  // populated from their respective subscriber callbacks
-  // Generate a fused velocity vector with the human twist and autonomy twist
-  auto fusedTwist = this->fuseTwists(this->lastHumanTwist, this->lastAutonomyTwist);
-  // Clamp velocity vector to be within the defined limits
-  auto clampedTwist = this->clampTwist(fusedTwist);
-  // Send the velocity vector to the robot and start it's controller
-  // The max duration of the commanded velocity should be the period of this control loop
-  // so once the motion finishes, the next command is sent
-  auto period = std::chrono::duration<double>(1.0 / this->controlLoopFreq);
-  this->motionPlugin->sendCartesianTwist(clampedTwist.twist);
+  if (reached) RCLCPP_INFO(this->get_logger(), "Plan path succeeded in %u iterations", iter);
+  else if (iter >= max_iters) RCLCPP_WARN(this->get_logger(), "Plan path reached iteration limit without reaching goal");
 }
 
 geometry_msgs::msg::TwistStamped MotionInterface::fuseTwists(
@@ -226,20 +214,41 @@ geometry_msgs::msg::TwistStamped MotionInterface::fuseTwists(
   const geometry_msgs::msg::TwistStamped::SharedPtr autonomyTwist) {
   geometry_msgs::msg::TwistStamped fusedTwist;
   fusedTwist.header.stamp = this->now();
-  fusedTwist.header.frame_id = autonomyTwist->header.frame_id;
+
+  // If autonomyTwist is null, use a default frame and zero twist
+  std::string frame = "";
+  if (autonomyTwist) frame = autonomyTwist->header.frame_id;
+  fusedTwist.header.frame_id = frame;
+
+  // Helper to extract values safely (treat missing twist as zero)
+  auto safe_linear = [](const geometry_msgs::msg::TwistStamped::SharedPtr t, int idx) {
+    if (!t) return 0.0;
+    switch (idx) {
+    case 0: return t->twist.linear.x;
+    case 1: return t->twist.linear.y;
+    default: return t->twist.linear.z;
+    }
+  };
+  auto safe_angular = [](const geometry_msgs::msg::TwistStamped::SharedPtr t, int idx) {
+    if (!t) return 0.0;
+    switch (idx) {
+    case 0: return t->twist.angular.x;
+    case 1: return t->twist.angular.y;
+    default: return t->twist.angular.z;
+    }
+  };
 
   auto fuseValue = [](double humanValue, double autonomyValue, double alpha) {
     return alpha * autonomyValue + (1.0 - alpha) * humanValue;
   };
 
-  // Simple linear fusion based on alpha parameter
-  // When alpha = 1.0, the output is only the autonomy command
-  fusedTwist.twist.linear.x = fuseValue(humanTwist->twist.linear.x, autonomyTwist->twist.linear.x, this->fusionAlpha);
-  fusedTwist.twist.linear.y = fuseValue(humanTwist->twist.linear.y, autonomyTwist->twist.linear.y, this->fusionAlpha);
-  fusedTwist.twist.linear.z = fuseValue(humanTwist->twist.linear.z, autonomyTwist->twist.linear.z, this->fusionAlpha);
-  fusedTwist.twist.angular.x = fuseValue(humanTwist->twist.angular.x, autonomyTwist->twist.angular.x, this->fusionAlpha);
-  fusedTwist.twist.angular.y = fuseValue(humanTwist->twist.angular.y, autonomyTwist->twist.angular.y, this->fusionAlpha);
-  fusedTwist.twist.angular.z = fuseValue(humanTwist->twist.angular.z, autonomyTwist->twist.angular.z, this->fusionAlpha);
+  // Simple linear fusion based on alpha parameter. Missing inputs are treated as zeros.
+  fusedTwist.twist.linear.x = fuseValue(safe_linear(humanTwist, 0), safe_linear(autonomyTwist, 0), this->fusionAlpha);
+  fusedTwist.twist.linear.y = fuseValue(safe_linear(humanTwist, 1), safe_linear(autonomyTwist, 1), this->fusionAlpha);
+  fusedTwist.twist.linear.z = fuseValue(safe_linear(humanTwist, 2), safe_linear(autonomyTwist, 2), this->fusionAlpha);
+  fusedTwist.twist.angular.x = fuseValue(safe_angular(humanTwist, 0), safe_angular(autonomyTwist, 0), this->fusionAlpha);
+  fusedTwist.twist.angular.y = fuseValue(safe_angular(humanTwist, 1), safe_angular(autonomyTwist, 1), this->fusionAlpha);
+  fusedTwist.twist.angular.z = fuseValue(safe_angular(humanTwist, 2), safe_angular(autonomyTwist, 2), this->fusionAlpha);
 
   return fusedTwist;
 }

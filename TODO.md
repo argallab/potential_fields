@@ -13,7 +13,15 @@
   - Should extract both EE Pose Trajectory, EE Velocity Trajectory, and Joint Trajectory
 - Create a demo where PlanPath service sends JointTrajectory into MoveIt JointTrajectory Action Server
 - Include installation instructions for fcl and libfranka and other external dependencies
+
+# Future TODOs and Refactors
 - Condense ROS Nodes into a single node and condense PF library code together.
   - The `pfield` library should contain its own path planning function
   - `pfield` should also contain its own IKSolver and MotionPlugin instances with a factory method to create them
   - ROS Wrapper node should just handle ROS communication and call the `pfield` library functions
+- Use Pinnochio/KDL library on the given URDF to compute FK and update robot obstacles instead of TF
+  - Previous data-flow for URDF to PF Obstacles: URDF -> RSP (updates from JSP) -> TF -> PF Obstacles
+  - New data-flow for URDF to PF Obstacles: URDF -> Pinnochio/KDL -> FK Definition -> Joint Angles -> PF Obstacles
+- Think about smoothness while still enforcing velocity and acceleration limits
+  - User should define motion constraints (velocity, acceleration, jerk) and planned path should respect those constraints
+  - Somehow derive PF parameters from motion constraints (Repulsive Gain, Attractive Gain, Influence Zone Size, etc)
