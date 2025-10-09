@@ -50,6 +50,11 @@ public:
   bool solve(const Eigen::Isometry3d& targetPose, const std::vector<double>& seed,
     std::vector<double>& solution, Eigen::Matrix<double, 6, Eigen::Dynamic>& J) override;
 
+  std::vector<std::string> getJointNames() const override {
+    return {"panda_joint1", "panda_joint2", "panda_joint3", "panda_joint4",
+            "panda_joint5", "panda_joint6", "panda_joint7"};
+  }
+
 private:
   // The joint angles of the franka in the "home" position [rad]
   const std::array<double, 7> homeJointAngles = {0, -M_PI_4, 0, -3 * M_PI_4, 0, M_PI_2, M_PI_4};

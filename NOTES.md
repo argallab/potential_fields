@@ -130,6 +130,29 @@ Generic programming (Policy based design) for different IK solvers.
     - Service internally requires a `MotionPlugin` for the robot (includes `IKSolver`)
     - Receive planned path as `trajectory_msgs/JointTrajectory` message
 
+# Path Planning Notes
+```cpp
+// interpolatePath will need to account for robot motion influencing the PF
+// during the motion so the function will need to be re-written.
+// Start is not guaranteed to be at the robot's current EE position since
+// planning should be supported for any arbitrary starting Pose
+// 1. Given the current EE Pose (starting at Start), compute the robot's joint angles with an IKSolver attached to PFM
+//    - For picking one of many IK solutions, use solution most similar to current robot state OR neutral/home robot state
+//    - Also initialize/reset our planning PField if not initialized already.
+// 2. Now that we have joint angles from the IK solver, publish these joint angles to the planning-copy of the JointStates
+//    - Once planning JS are published, the planning copy of the robot's TF frames will update and RobotParser
+//      will handle them and publish planning obstacles.
+// 3. Take a look at the planning obstacles that were published by RobotParser and update the planning PField with them
+//    - The planning PField should now have new obstacles but the same goal as the normal PField
+// 4. Compute a new velocity from the planning PField
+// 5. Project the new velocity onto the current EE pose using the deltaTime to obtain a new EE Pose
+// 6. The new EE Pose is used for the loop and we repeat steps 1-5 until the EE Pose and the goal Pose are within the tolerance
+// 7. Return the EE Path (nav_msgs/Path) and the Robot's joint positions (trajectory_msgs/JointTrajectory)
+// 8. Compute the joint velocities and put the joint velocity path into the msg (trajectory_msgs/JointTrajectory)
+//    - In order to do this, the IKSolver must offer the Jacobian to convert EE Velocites into Joint Velocities
+```
+
+
 # Notes for 10/08 Meeting
 KDL and Pinnochio: input a URDF and get FK from that
 Use IK -> Obstacles more directly

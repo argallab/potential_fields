@@ -8,7 +8,8 @@
 #include "geometry_msgs/msg/twist.hpp"
 #include "geometry_msgs/msg/twist_stamped.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
-#include "std_srvs/srv/empty.hpp"
+#include "nav_msgs/msg/path.hpp"
+#include "trajectory_msgs/msg/joint_trajectory.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
 #include "robot_plugins/motion_plugin.hpp"
 #include "potential_fields_interfaces/srv/plan_path.hpp"
@@ -26,7 +27,8 @@ struct PlanningResult {
 
 class MotionInterface : public rclcpp::Node {
 public:
-  explicit MotionInterface(const rclcpp::NodeOptions& opts);
+  MotionInterface();
+  ~MotionInterface() = default;
 
 private:
   rclcpp::Subscription<geometry_msgs::msg::TwistStamped>::SharedPtr humanTwistSub;
@@ -34,7 +36,6 @@ private:
   rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr fusedTwistPub;
   rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr goalPoseSub;
   rclcpp::Publisher<JointState>::SharedPtr planningJointStatePub; // Publisher for planning joint states
-  rclcpp::Service<std_srvs::srv::Empty>::SharedPtr startSrv, stopSrv;
   rclcpp::TimerBase::SharedPtr controlTimer;
 
   double fusionAlpha;

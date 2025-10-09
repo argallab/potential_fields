@@ -18,10 +18,11 @@ public:
   virtual bool sendJointStates(const sensor_msgs::msg::JointState& js) = 0;
   virtual bool readRobotState(sensor_msgs::msg::JointState& js, geometry_msgs::msg::PoseStamped& endEffectorPose) = 0;
   virtual void assignSharedClock(rclcpp::Clock::SharedPtr clock) { this->clock = clock; }
-  virtual void assignIKSolver(std::unique_ptr<IKSolver> ikSolver) { this->ikSolver = std::move(ikSolver); }
+  virtual void assignIKSolver(std::shared_ptr<IKSolver> ikSolver) { this->ikSolver = ikSolver; }
+  virtual std::shared_ptr<IKSolver> getIKSolver() const { return ikSolver; }
 protected:
   rclcpp::Clock::SharedPtr clock;
-  std::unique_ptr<IKSolver> ikSolver;
+  std::shared_ptr<IKSolver> ikSolver;
 };
 
 #endif // !MOTION_PLUGIN_HPP

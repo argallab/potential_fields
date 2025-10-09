@@ -1,8 +1,10 @@
 #include "ros/motion_interface.hpp"
 #include "rclcpp/rclcpp.hpp"
 
-explicit MotionInterface::MotionInterface(const rclcpp::NodeOptions& opts)
-  : Node("motion_interface", opts) {
+#include "tf2_eigen/tf2_eigen.hpp"
+#include <Eigen/Dense>
+
+MotionInterface::MotionInterface() : Node("motion_interface") {
   RCLCPP_INFO(this->get_logger(), "MotionInterface Initialized");
 
   // Declare parameters
@@ -57,23 +59,6 @@ explicit MotionInterface::MotionInterface(const rclcpp::NodeOptions& opts)
     this->currentGoal = msg;
   }
   );
-  // Setup Services
-  this->startSrv = this->create_service<std_srvs::srv::Empty>(
-    "pfield/start_control",
-    [this](const std_srvs::srv::Empty::Request::SharedPtr /*req*/,
-      std_srvs::srv::Empty::Response::SharedPtr /*res*/) {
-    RCLCPP_INFO(this->get_logger(), "Starting control");
-    this->controlEnabled = true;
-  }
-  );
-  this->stopSrv = this->create_service<std_srvs::srv::Empty>(
-    "pfield/stop_control",
-    [this](const std_srvs::srv::Empty::Request::SharedPtr /*req*/,
-      std_srvs::srv::Empty::Response::SharedPtr /*res*/) {
-    RCLCPP_INFO(this->get_logger(), "Stopping control");
-    this->controlEnabled = false;
-  }
-  );
 
   // Setup planning joint state publisher
   this->planningJointStatePub = this->create_publisher<JointState>("planning_joint_states", 10);
@@ -104,6 +89,40 @@ void MotionInterface::handlePlanPath(const PlanPath::Request::SharedPtr request,
     return;
   }
 
+  // Save the IKSolver
+  if (!this->motionPlugin) {
+    RCLCPP_WARN(this->get_logger(), "motionPlugin not initialized");
+    response->success = false;
+    return;
+  }
+  auto ikSolver = this->motionPlugin->getIKSolver();
+  if (!ikSolver) {
+    RCLCPP_WARN(this->get_logger(), "IKSolver not available from motionPlugin");
+    response->success = false;
+    return;
+  }
+
+  auto getJointAngles = [this, ikSolver](const geometry_msgs::msg::PoseStamped& pose) -> std::vector<double> {
+    // Use current robot state as seed
+    sensor_msgs::msg::JointState js;
+    geometry_msgs::msg::PoseStamped currentEEPose;
+    if (!this->motionPlugin->readRobotState(js, currentEEPose)) {
+      RCLCPP_WARN(this->get_logger(), "Failed to read robot state for IK");
+      return {};
+    }
+    std::vector<double> seed = js.position;
+    std::vector<double> solution;
+    // Build target isometry from the provided pose (not from current EE pose)
+    Eigen::Isometry3d targetIso;
+    tf2::fromMsg(pose.pose, targetIso);
+    Eigen::Matrix<double, 6, Eigen::Dynamic> J;
+    if (!ikSolver->solve(targetIso, seed, solution, /*J=*/J)) {
+      RCLCPP_WARN(this->get_logger(), "IK solver failed to find a solution for target pose");
+      return {};
+    }
+    return solution;
+  };
+
   auto pfStep = [this](const geometry_msgs::msg::PoseStamped currentPose, const double dt, const double goalTol) -> PFieldStep::Response {
     // Prepare PF step request
     auto pfStepRequest = std::make_shared<PFieldStep::Request>();
@@ -121,7 +140,20 @@ void MotionInterface::handlePlanPath(const PlanPath::Request::SharedPtr request,
       return pfStepResponse;
     }
     auto res = future.get();
+    if (!res) {
+      PFieldStep::Response pfStepResponse;
+      pfStepResponse.success = false;
+      return pfStepResponse;
+    }
     return *res;
+  };
+
+  auto publishPlanningJointStates = [this](const std::vector<double>& jointPositions) {
+    JointState js;
+    js.header.stamp = this->now();
+    js.name = this->motionPlugin->getIKSolver()->getJointNames();
+    js.position = jointPositions;
+    this->planningJointStatePub->publish(js);
   };
 
   // Build initial pose
@@ -129,42 +161,48 @@ void MotionInterface::handlePlanPath(const PlanPath::Request::SharedPtr request,
   nav_msgs::msg::Path path;
   path.header.frame_id = "world"; // default; could be parameterized
   path.header.stamp = this->now();
-  path.poses.push_back(currentPose);
+  trajectory_msgs::msg::JointTrajectory jointTrajectory;
+  jointTrajectory.header = path.header;
+  jointTrajectory.joint_names = ikSolver->getJointNames();
   // Interpolate until goal reached or max iterations
-  const int max_iters = 10000; // TODO(Sharwin): Parameterize this (or derive from MotionPlugin)
+  const int max_iters = 30000; // TODO(Sharwin): Parameterize this (or derive from MotionPlugin)
   unsigned int iter = 0;
   bool reached = false;
+  const auto startTime = this->now();
   while (iter++ < max_iters) {
-    // TODO(Sharwin): Implement the new functionality here
-    // interpolatePath will need to account for robot motion influencing the PF
-    // during the motion so the function will need to be re-written.
-    // Start is not guaranteed to be at the robot's current EE position since
-    // planning should be supported for any arbitrary starting Pose
-    // 1. Given the current EE Pose (starting at Start), compute the robot's joint angles with an IKSolver attached to PFM
-    //    - For picking one of many IK solutions, use solution most similar to current robot state OR neutral/home robot state
-    //    - Also initialize/reset our planning PField if not initialized already.
-    // 2. Now that we have joint angles from the IK solver, publish these joint angles to the planning-copy of the JointStates
-    //    - Once planning JS are published, the planning copy of the robot's TF frames will update and RobotParser
-    //      will handle them and publish planning obstacles.
-    // 3. Take a look at the planning obstacles that were published by RobotParser and update the planning PField with them
-    //    - The planning PField should now have new obstacles but the same goal as the normal PField
-    // 4. Compute a new velocity from the planning PField
-    // 5. Project the new velocity onto the current EE pose using the deltaTime to obtain a new EE Pose
-    // 6. The new EE Pose is used for the loop and we repeat steps 1-5 until the EE Pose and the goal Pose are within the tolerance
-    // 7. Return the EE Path (nav_msgs/Path) and the Robot's joint positions (trajectory_msgs/JointTrajectory)
-    // 8. Compute the joint velocities and put the joint velocity path into the msg (trajectory_msgs/JointTrajectory)
-    //    - In order to do this, the IKSolver must offer the Jacobian to convert EE Velocites into Joint Velocities
     // Check if we reached the goal within the tolerance and exit early if so
+    if (reached) break;
+    // Save current pose and current joint state
+    path.poses.push_back(currentPose);
     // Call IK on current pose to get current joint angles
-    // Publish joint angles to planned joint state for PFManager to update its internal PF
+    auto jointAngles = getJointAngles(currentPose);
+    if (jointAngles.empty()) {
+      RCLCPP_WARN(this->get_logger(), "Failed to get joint angles from IK, aborting plan");
+      response->success = false;
+      return;
+    }
     // Save joint angles for JointTrajectory
+    trajectory_msgs::msg::JointTrajectoryPoint jointTrajectoryPoint;
+    jointTrajectoryPoint.positions = jointAngles;
+    const auto timeFromStart = this->now() - startTime;
+    jointTrajectoryPoint.time_from_start = rclcpp::Duration::from_seconds(timeFromStart.seconds());
+    jointTrajectory.points.push_back(jointTrajectoryPoint);
+    // Publish joint angles to planned joint state for PFManager to update its internal PF
+    publishPlanningJointStates(jointAngles);
     // Call PFStep to get next pose from current pose (handles waiting for PF to update from PJSP update)
-    // TODO(Sharwin): Implement internal waiting for PF update from PJSP
-    // Save pose for EE path
+    auto pfResponse = pfStep(currentPose, /*dt=*/request->delta_time, /*goalTol=*/request->goal_tolerance);
+    // Validate PF response
+    if (!pfResponse.success) {
+      RCLCPP_WARN(this->get_logger(), "pfield/step returned unsuccessful");
+      response->success = false;
+      return;
+    }
+    // Update the current pose before moving to next iteration
+    reached = pfResponse.reached_goal;
+    currentPose = pfResponse.next_pose;
   }
-
   response->plan = path;
-  response->joint_trajectory = trajectory_msgs::msg::JointTrajectory(); // TODO: fill using IK
+  response->joint_trajectory = jointTrajectory;
   response->success = reached;
   if (!reached) RCLCPP_WARN(this->get_logger(), "Plan path reached iteration limit without reaching goal");
 }
@@ -204,4 +242,26 @@ geometry_msgs::msg::TwistStamped MotionInterface::fuseTwists(
   fusedTwist.twist.angular.z = fuseValue(humanTwist->twist.angular.z, autonomyTwist->twist.angular.z, this->fusionAlpha);
 
   return fusedTwist;
+}
+
+geometry_msgs::msg::TwistStamped MotionInterface::clampTwist(const geometry_msgs::msg::TwistStamped& twist) {
+  geometry_msgs::msg::TwistStamped clampedTwist = twist; // Start with the input twist
+
+  // Clamp linear velocities
+  clampedTwist.twist.linear.x = std::clamp(clampedTwist.twist.linear.x, -this->twistLimits->linear.x, this->twistLimits->linear.x);
+  clampedTwist.twist.linear.y = std::clamp(clampedTwist.twist.linear.y, -this->twistLimits->linear.y, this->twistLimits->linear.y);
+  clampedTwist.twist.linear.z = std::clamp(clampedTwist.twist.linear.z, -this->twistLimits->linear.z, this->twistLimits->linear.z);
+  // Clamp angular velocities
+  clampedTwist.twist.angular.x = std::clamp(clampedTwist.twist.angular.x, -this->twistLimits->angular.x, this->twistLimits->angular.x);
+  clampedTwist.twist.angular.y = std::clamp(clampedTwist.twist.angular.y, -this->twistLimits->angular.y, this->twistLimits->angular.y);
+  clampedTwist.twist.angular.z = std::clamp(clampedTwist.twist.angular.z, -this->twistLimits->angular.z, this->twistLimits->angular.z);
+
+  return clampedTwist;
+}
+
+int main(int argc, char* argv[]) {
+  rclcpp::init(argc, argv);
+  rclcpp::spin(std::make_shared<MotionInterface>());
+  rclcpp::shutdown();
+  return 0;
 }

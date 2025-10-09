@@ -69,7 +69,7 @@ bool FrankaIKSolver::solve(
 }
 
 FrankaPlugin::FrankaPlugin(const std::string& hostname) : MotionPlugin() {
-  this->assignIKSolver(std::make_unique<FrankaIKSolver>());
+  this->assignIKSolver(std::make_shared<FrankaIKSolver>());
   this->initializeRobot(hostname);
 }
 
