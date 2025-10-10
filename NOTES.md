@@ -139,3 +139,7 @@ No need for MotionInterface, PFieldManager should be the only node.
 1. Finishing Planning Service (PlanPath) Set Goal, Obstacles, Franka MoveIt Simulation moves to that goal
 2. Start designing out diagram (ROS interaction, PF)
 3. Lower dimensional interface with Franka
+
+# Franka Emika Panda Notes
+- [Kris' Joystick Repo](https://github.com/wengmister/franka_joystick_teleop/blob/main/README.md)
+- [Franka User Setup (Matt Elwin's Notes)](https://nu-msr.github.io/ros_notes/ros2/franka.html)
