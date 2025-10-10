@@ -3,6 +3,9 @@
 #include "tf2_ros/static_transform_broadcaster.h"
 #include "potential_fields_interfaces/srv/plan_path.hpp"
 
+template<typename T>
+using ServiceResponseFuture = rclcpp::Client<T>::SharedFuture;
+
 PFDemo::PFDemo() : Node("pfield_demo") {
   RCLCPP_INFO(this->get_logger(), "PFDemo Initialized");
 
@@ -10,7 +13,7 @@ PFDemo::PFDemo() : Node("pfield_demo") {
   // Get parameters from yaml file
   this->fixedFrame = this->get_parameter("fixed_frame").as_string();
 
-  // Static transform is now published via launch (tf2_ros/static_transform_publisher)
+  this->goalPosePub = this->create_publisher<geometry_msgs::msg::PoseStamped>("/goal_pose", 10);
 
   // Wait for the service to be available
   this->planPathClient = this->create_client<PlanPath>("pfield/plan_path");
@@ -25,48 +28,57 @@ PFDemo::PFDemo() : Node("pfield_demo") {
 
   // Initialize demo service
   this->runPlanPathDemoService = this->create_service<std_srvs::srv::Empty>(
-    "run_plan_path_demo",
-    [this](const std_srvs::srv::Empty::Request::SharedPtr request,
-      std_srvs::srv::Empty::Response::SharedPtr response) {
-    (void)request;
-    (void)response;
+    "/pfield_demo/run_plan_path_demo",
+    [this](
+      [[maybe_unused]] const std_srvs::srv::Empty::Request::SharedPtr request,
+      [[maybe_unused]] std_srvs::srv::Empty::Response::SharedPtr response) {
     RCLCPP_INFO(this->get_logger(), "Running plan path demo...");
 
     // Create a request for the plan_path service
     auto pathPlanRequest = std::make_shared<PlanPath::Request>();
     // Define start and goal poses
     geometry_msgs::msg::PoseStamped startPose;
+    startPose.header.stamp = this->now();
     startPose.header.frame_id = this->fixedFrame;
-    startPose.pose.position.x = 0.0;
+    startPose.pose.position.x = 0.466;
     startPose.pose.position.y = 0.0;
-    startPose.pose.position.z = 0.0;
-    startPose.pose.orientation.w = 1.0; // Neutral orientation
+    startPose.pose.position.z = 0.644;
+    startPose.pose.orientation.x = 0.0;
+    startPose.pose.orientation.y = 0.0;
+    startPose.pose.orientation.z = 0.0;
+    startPose.pose.orientation.w = 1.0;
 
     geometry_msgs::msg::PoseStamped goalPose;
+    goalPose.header.stamp = this->now();
     goalPose.header.frame_id = this->fixedFrame;
-    goalPose.pose.position.x = 1.0; // Move to x=1.0
-    goalPose.pose.position.y = 1.0; // Move to y=1.0
+    goalPose.pose.position.x = 0.478;
+    goalPose.pose.position.y = -0.117513;
     goalPose.pose.position.z = 0.0;
-    goalPose.pose.orientation.w = 1.0; // Neutral orientation
+    goalPose.pose.orientation.y = 0.0;
+    goalPose.pose.orientation.z = 0.0;
+    goalPose.pose.orientation.x = 0.0;
+    goalPose.pose.orientation.w = 1.0;
 
     pathPlanRequest->start = startPose;
     pathPlanRequest->goal = goalPose;
 
+    // Publish the goal pose
+    this->goalPosePub->publish(goalPose);
+
     // Call the plan_path service
-    auto future = this->planPathClient->async_send_request(pathPlanRequest);
-    // Wait for the result
-    if (rclcpp::spin_until_future_complete(this->get_node_base_interface(), future) !=
-      rclcpp::FutureReturnCode::SUCCESS) {
-      RCLCPP_ERROR(this->get_logger(), "Failed to call plan_path service");
-      return;
-    }
-    auto pathPlanResponse = future.get();
-    if (!pathPlanResponse || !pathPlanResponse->success) {
-      RCLCPP_ERROR(this->get_logger(), "Path planning failed");
-      return;
-    }
-    RCLCPP_INFO(this->get_logger(), "Path planning succeeded, received %zu waypoints",
-      pathPlanResponse->end_effector_path.poses.size());
+    PlanPath::Response::SharedPtr pathPlanResponse;
+    auto future_result = this->planPathClient->async_send_request(
+      pathPlanRequest,
+      [this, &pathPlanResponse](ServiceResponseFuture<PlanPath> future) {
+      auto response = future.get();
+      if (response) {
+        pathPlanResponse = response;
+      }
+    });
+
+    // Once received paths, publish a path to /nav_msgs/msg/Path for visualization
+    auto pathPub = this->create_publisher<nav_msgs::msg::Path>("/nav_msgs/msg/Path", 10);
+    pathPub->publish(pathPlanResponse->end_effector_path);
   });
 }
 

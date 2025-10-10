@@ -208,6 +208,18 @@ void PotentialFieldManager::handleComputeAutonomyVector(const ComputeAutonomyVec
 
 void PotentialFieldManager::handlePFieldStep(const PFieldStep::Request::SharedPtr request, PFieldStep::Response::SharedPtr response) {
   RCLCPP_DEBUG(this->get_logger(), "Received pfield step request");
+  // Log incoming request details for debugging
+  RCLCPP_DEBUG(this->get_logger(), "Request current_pose: pos=(%.4f, %.4f, %.4f) quat=(%.4f, %.4f, %.4f, %.4f)",
+    request->current_pose.pose.position.x, request->current_pose.pose.position.y, request->current_pose.pose.position.z,
+    request->current_pose.pose.orientation.w, request->current_pose.pose.orientation.x,
+    request->current_pose.pose.orientation.y, request->current_pose.pose.orientation.z);
+  RCLCPP_DEBUG(this->get_logger(), "Request delta_time=%.4f, goal_tolerance=%.4f", request->delta_time, request->goal_tolerance);
+
+  if (!this->planningPField) {
+    RCLCPP_ERROR(this->get_logger(), "planningPField is null");
+    response->success = false;
+    return;
+  }
   // Build SpatialVector from request current_pose
   SpatialVector currentPose(
     Eigen::Vector3d(
@@ -222,15 +234,59 @@ void PotentialFieldManager::handlePFieldStep(const PFieldStep::Request::SharedPt
   );
 
   // Evaluate autonomy vector using planning copy of the potential field
-  SpatialVector autonomyVec = this->planningPField->evaluateVelocityAtPose(currentPose);
+  SpatialVector autonomyVec;
+  try {
+    autonomyVec = this->planningPField->evaluateVelocityAtPose(currentPose);
+  }
+  catch (const std::exception& e) {
+    RCLCPP_ERROR(this->get_logger(), "Exception evaluating autonomy vector: %s", e.what());
+    response->success = false;
+    return;
+  }
+
+  // Sanity-check autonomy vector values
+  const Eigen::Vector3d lin = autonomyVec.getPosition();
+  const Eigen::Quaterniond ori = autonomyVec.getOrientation();
+  double lin_norm = lin.norm();
+  Eigen::Vector3d euler = ori.toRotationMatrix().eulerAngles(2, 1, 0);
+  double ang_norm = euler.norm();
+  RCLCPP_DEBUG(this->get_logger(), "Autonomy vector linear=(%.6f, %.6f, %.6f) norm=%.6f", lin.x(), lin.y(), lin.z(), lin_norm);
+  RCLCPP_DEBUG(this->get_logger(), "Autonomy vector angular (RPY)=(%.6f, %.6f, %.6f) norm=%.6f", euler[2], euler[1], euler[0], ang_norm);
+  if (!std::isfinite(lin.x()) || !std::isfinite(lin.y()) || !std::isfinite(lin.z()) ||
+    !std::isfinite(euler[0]) || !std::isfinite(euler[1]) || !std::isfinite(euler[2])) {
+    RCLCPP_ERROR(this->get_logger(), "Non-finite autonomy vector detected");
+    response->success = false;
+    return;
+  }
 
   // Compute next pose by integrating linear and angular components
   Eigen::Vector3d nextPosition = currentPose.getPosition() + (autonomyVec.getPosition() * request->delta_time);
-  Eigen::Quaterniond nextOrientation = this->planningPField->integrateAngularVelocity(currentPose.getOrientation(), request->delta_time);
+  Eigen::Quaterniond nextOrientation;
+  try {
+    nextOrientation = this->planningPField->integrateAngularVelocity(currentPose.getOrientation(), request->delta_time);
+  }
+  catch (const std::exception& e) {
+    RCLCPP_ERROR(this->get_logger(), "Exception integrating angular velocity: %s", e.what());
+    response->success = false;
+    return;
+  }
+
+  // Log predicted next pose for debugging
+  RCLCPP_DEBUG(this->get_logger(), "Predicted next_position=(%.6f, %.6f, %.6f)", nextPosition.x(), nextPosition.y(), nextPosition.z());
+  RCLCPP_DEBUG(this->get_logger(), "Predicted next_orientation=(%.6f, %.6f, %.6f, %.6f)", nextOrientation.w(), nextOrientation.x(), nextOrientation.y(), nextOrientation.z());
+  if (!std::isfinite(nextPosition.x()) || !std::isfinite(nextPosition.y()) || !std::isfinite(nextPosition.z()) ||
+    !std::isfinite(nextOrientation.x()) || !std::isfinite(nextOrientation.y()) || !std::isfinite(nextOrientation.z()) || !std::isfinite(nextOrientation.w())) {
+    RCLCPP_ERROR(this->get_logger(), "Non-finite next pose computed");
+    response->success = false;
+    return;
+  }
 
   // Fill response
   response->success = true;
-  response->reached_goal = (currentPose.euclideanDistance(this->planningPField->getGoalPose()) <= request->goal_tolerance);
+  double dist_to_goal = currentPose.euclideanDistance(this->planningPField->getGoalPose());
+  response->reached_goal = (dist_to_goal <= request->goal_tolerance);
+  RCLCPP_DEBUG(this->get_logger(), "Distance to goal=%.6f, goal_tolerance=%.6f, reached_goal=%s",
+    dist_to_goal, request->goal_tolerance, response->reached_goal ? "true" : "false");
   response->autonomy_vector.header.frame_id = this->fixedFrame;
   response->autonomy_vector.header.stamp = this->now();
   response->autonomy_vector.twist.linear.x = autonomyVec.getPosition().x();

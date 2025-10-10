@@ -6,6 +6,9 @@
 #include <algorithm>
 #include "robot_plugins/null_motion_plugin.hpp"
 
+template<typename T>
+using ServiceResponseFuture = typename rclcpp::Client<T>::SharedFuture;
+
 MotionInterface::MotionInterface() : Node("motion_interface") {
   RCLCPP_INFO(this->get_logger(), "MotionInterface Initialized");
 
@@ -118,29 +121,26 @@ void MotionInterface::handlePlanPath(const PlanPath::Request::SharedPtr request,
     return solution;
   };
 
-  auto pfStep = [this](const geometry_msgs::msg::PoseStamped currentPose, const double dt, const double goalTol) -> PFieldStep::Response {
+  // Return pfStepResponse by reference
+  auto pfStep = [this](const geometry_msgs::msg::PoseStamped currentPose, const double dt, const double goalTol,
+    PFieldStep::Response& pfStepResponse) {
     // Prepare PF step request
     auto pfStepRequest = std::make_shared<PFieldStep::Request>();
     pfStepRequest->current_pose = currentPose;
     pfStepRequest->delta_time = dt;
     pfStepRequest->goal_tolerance = goalTol;
     // Get Service future and spin until it's done
-    auto future = this->pfieldStepClient->async_send_request(pfStepRequest);
-    // Wait for response (synchronous)
-    if (rclcpp::spin_until_future_complete(this->get_node_base_interface(), future) !=
-      rclcpp::FutureReturnCode::SUCCESS) {
-      RCLCPP_WARN(this->get_logger(), "Failed to call pfield/step service");
-      auto pfStepResponse = PFieldStep::Response();
-      pfStepResponse.success = false;
-      return pfStepResponse;
-    }
-    auto res = future.get();
-    if (!res) {
-      PFieldStep::Response pfStepResponse;
-      pfStepResponse.success = false;
-      return pfStepResponse;
-    }
-    return *res;
+    auto future_result = this->pfieldStepClient->async_send_request(
+      pfStepRequest,
+      [this, &pfStepResponse](ServiceResponseFuture<PFieldStep> future) {
+      auto response = future.get();
+      if (response->success) {
+        pfStepResponse = *response;
+      }
+      else {
+        RCLCPP_WARN(this->get_logger(), "pfield/step service call failed");
+      }
+    });
   };
 
   auto publishPlanningJointStates = [this](const std::vector<double>& jointPositions) {
@@ -187,10 +187,11 @@ void MotionInterface::handlePlanPath(const PlanPath::Request::SharedPtr request,
     // Publish joint angles to planned joint state for PFManager to update its internal PF
     publishPlanningJointStates(jointAngles);
     // Call PFStep to get next pose from current pose (handles waiting for PF to update from PJSP update)
-    auto pfResponse = pfStep(currentPose, /*dt=*/request->delta_time, /*goalTol=*/request->goal_tolerance);
+    PFieldStep::Response pfResponse;
+    pfStep(currentPose, /*dt=*/request->delta_time, /*goalTol=*/request->goal_tolerance, pfResponse);
     // Validate PF response
     if (!pfResponse.success) {
-      RCLCPP_WARN(this->get_logger(), "pfield/step returned unsuccessful");
+      RCLCPP_WARN(this->get_logger(), "pfield/step was unsuccessful");
       response->success = false;
       return;
     }
