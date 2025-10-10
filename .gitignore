@@ -2,3 +2,5 @@
 build/
 log/
 install/
+.copilot/
+.prompts/
