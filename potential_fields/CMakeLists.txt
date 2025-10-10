@@ -65,7 +65,6 @@ include_directories(
 
 add_executable(pfield_manager src/ros/pfield_manager.cpp)
 add_executable(robot_parser src/ros/robot_parser.cpp)
-add_executable(motion_interface src/ros/motion_interface.cpp)
 
 # Library version of robot_parser (without main) for unit testing
 add_library(robot_parser_lib STATIC src/ros/robot_parser.cpp)
@@ -105,20 +104,6 @@ ament_target_dependencies(robot_parser
   visualization_msgs
 )
 
-ament_target_dependencies(motion_interface
-  Eigen3
-  geometry_msgs
-  nav_msgs
-  sensor_msgs
-  potential_fields_interfaces
-  rclcpp
-  tf2_eigen
-  tf2_ros
-  trajectory_msgs
-  urdf
-  visualization_msgs
-)
-
 target_link_libraries(pfield_manager
   ${potential_fields_interfaces_LIBRARIES}
   pfield_lib
@@ -126,11 +111,6 @@ target_link_libraries(pfield_manager
 
 target_link_libraries(robot_parser
   ${potential_fields_interfaces_LIBRARIES}
-)
-
-target_link_libraries(motion_interface
-  ${potential_fields_interfaces_LIBRARIES}
-  pfield_lib
 )
 
 # Install the shared library so runtime linker can find it
@@ -148,11 +128,6 @@ install(
 
 install(
   TARGETS robot_parser
-  DESTINATION lib/${PROJECT_NAME}
-)
-
-install(
-  TARGETS motion_interface
   DESTINATION lib/${PROJECT_NAME}
 )
 

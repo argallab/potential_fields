@@ -27,6 +27,7 @@
 ///   ~/pfield/planning_markers (visualization_msgs::msg::MarkerArray): Markers for Planning PF visualization in RViz
 
 #include "ros/pfield_manager.hpp"
+#include "robot_plugins/null_motion_plugin.hpp"
 
 PotentialFieldManager::PotentialFieldManager()
   : Node("potential_field_manager") {
@@ -55,6 +56,9 @@ PotentialFieldManager::PotentialFieldManager()
   // Initialize the potential fields
   this->pField = std::make_shared<PotentialField>(this->attractiveGain, this->rotationalAttractiveGain);
   this->planningPField = std::make_shared<PotentialField>(this->attractiveGain, this->rotationalAttractiveGain);
+
+  // Initialize a null motion plugin by default so the node can run without a real robot
+  this->motionPlugin = std::make_unique<NullMotionPlugin>();
 
   // Setup TF2 broadcaster, buffer, and listener
   this->dynamicTfBroadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(this);
@@ -143,16 +147,21 @@ PotentialFieldManager::PotentialFieldManager()
   }
   );
 
-  // Create service to perform a single potential-field planning step (evaluate PF and return next pose)
-  this->pfieldStepService = this->create_service<PFieldStep>(
-    "pfield/step",
-    std::bind(&PotentialFieldManager::handlePFieldStep, this, std::placeholders::_1, std::placeholders::_2)
-  );
+  // Setup planning joint state publisher
+  this->planningJointStatePub = this->create_publisher<JointState>("planning_joint_states", 10);
+  RCLCPP_INFO(this->get_logger(), "Planning joint states publishing on: %s", this->planningJointStatePub->get_topic_name());
 
   // Create service to compute the autonomy vector at a given pose
   this->autonomyVectorService = this->create_service<ComputeAutonomyVector>(
     "pfield/compute_autonomy_vector",
     std::bind(&PotentialFieldManager::handleComputeAutonomyVector, this, std::placeholders::_1, std::placeholders::_2)
+  );
+
+
+  // Create the PlanPath service
+  this->pathPlanningService = this->create_service<PlanPath>(
+    "pfield/plan_path",
+    std::bind(&PotentialFieldManager::handlePlanPath, this, std::placeholders::_1, std::placeholders::_2)
   );
 
   // Create a CSV file to store the potential field data for python to plot
@@ -206,106 +215,161 @@ void PotentialFieldManager::handleComputeAutonomyVector(const ComputeAutonomyVec
   );
 }
 
-void PotentialFieldManager::handlePFieldStep(const PFieldStep::Request::SharedPtr request, PFieldStep::Response::SharedPtr response) {
-  RCLCPP_DEBUG(this->get_logger(), "Received pfield step request");
-  // Log incoming request details for debugging
-  RCLCPP_DEBUG(this->get_logger(), "Request current_pose: pos=(%.4f, %.4f, %.4f) quat=(%.4f, %.4f, %.4f, %.4f)",
-    request->current_pose.pose.position.x, request->current_pose.pose.position.y, request->current_pose.pose.position.z,
-    request->current_pose.pose.orientation.w, request->current_pose.pose.orientation.x,
-    request->current_pose.pose.orientation.y, request->current_pose.pose.orientation.z);
-  RCLCPP_DEBUG(this->get_logger(), "Request delta_time=%.4f, goal_tolerance=%.4f", request->delta_time, request->goal_tolerance);
+void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr request, PlanPath::Response::SharedPtr response) {
+  RCLCPP_INFO(this->get_logger(), "Received plan_path request");
 
-  if (!this->planningPField) {
-    RCLCPP_ERROR(this->get_logger(), "planningPField is null");
+  // Save the IKSolver
+  if (!this->motionPlugin) {
+    RCLCPP_WARN(this->get_logger(), "motionPlugin not initialized");
     response->success = false;
     return;
   }
-  // Build SpatialVector from request current_pose
-  SpatialVector currentPose(
-    Eigen::Vector3d(
-      request->current_pose.pose.position.x,
-      request->current_pose.pose.position.y,
-      request->current_pose.pose.position.z
-    ),
-    Eigen::Quaterniond(
-      request->current_pose.pose.orientation.w, request->current_pose.pose.orientation.x,
-      request->current_pose.pose.orientation.y, request->current_pose.pose.orientation.z
-    )
-  );
-
-  // Evaluate autonomy vector using planning copy of the potential field
-  SpatialVector autonomyVec;
-  try {
-    autonomyVec = this->planningPField->evaluateVelocityAtPose(currentPose);
-  }
-  catch (const std::exception& e) {
-    RCLCPP_ERROR(this->get_logger(), "Exception evaluating autonomy vector: %s", e.what());
+  auto ikSolver = this->motionPlugin->getIKSolver();
+  if (!ikSolver) {
+    RCLCPP_WARN(this->get_logger(), "IKSolver not available from motionPlugin");
     response->success = false;
     return;
   }
 
-  // Sanity-check autonomy vector values
-  const Eigen::Vector3d lin = autonomyVec.getPosition();
-  const Eigen::Quaterniond ori = autonomyVec.getOrientation();
-  double lin_norm = lin.norm();
-  Eigen::Vector3d euler = ori.toRotationMatrix().eulerAngles(2, 1, 0);
-  double ang_norm = euler.norm();
-  RCLCPP_DEBUG(this->get_logger(), "Autonomy vector linear=(%.6f, %.6f, %.6f) norm=%.6f", lin.x(), lin.y(), lin.z(), lin_norm);
-  RCLCPP_DEBUG(this->get_logger(), "Autonomy vector angular (RPY)=(%.6f, %.6f, %.6f) norm=%.6f", euler[2], euler[1], euler[0], ang_norm);
-  if (!std::isfinite(lin.x()) || !std::isfinite(lin.y()) || !std::isfinite(lin.z()) ||
-    !std::isfinite(euler[0]) || !std::isfinite(euler[1]) || !std::isfinite(euler[2])) {
-    RCLCPP_ERROR(this->get_logger(), "Non-finite autonomy vector detected");
-    response->success = false;
-    return;
-  }
+  auto getJointAngles = [this, ikSolver](const geometry_msgs::msg::PoseStamped& pose) -> std::vector<double> {
+    // Use current robot state as seed
+    sensor_msgs::msg::JointState js;
+    geometry_msgs::msg::PoseStamped currentEEPose;
+    if (!this->motionPlugin->readRobotState(js, currentEEPose)) {
+      RCLCPP_WARN(this->get_logger(), "Failed to read robot state for IK");
+      return {};
+    }
+    std::vector<double> seed = js.position;
+    std::vector<double> solution;
+    // Build target isometry from the provided pose (not from current EE pose)
+    Eigen::Isometry3d targetIso;
+    tf2::fromMsg(pose.pose, targetIso);
+    Eigen::Matrix<double, 6, Eigen::Dynamic> J;
+    if (!ikSolver->solve(targetIso, seed, solution, /*J=*/J)) {
+      RCLCPP_WARN(this->get_logger(), "IK solver failed to find a solution for target pose");
+      return {};
+    }
+    return solution;
+  };
 
-  // Compute next pose by integrating linear and angular components
-  Eigen::Vector3d nextPosition = currentPose.getPosition() + (autonomyVec.getPosition() * request->delta_time);
-  Eigen::Quaterniond nextOrientation;
-  try {
-    nextOrientation = this->planningPField->integrateAngularVelocity(currentPose.getOrientation(), request->delta_time);
-  }
-  catch (const std::exception& e) {
-    RCLCPP_ERROR(this->get_logger(), "Exception integrating angular velocity: %s", e.what());
-    response->success = false;
-    return;
-  }
+  auto publishPlanningJointStates = [this](const std::vector<double>& jointPositions) {
+    JointState js;
+    js.header.stamp = this->now();
+    js.name = this->motionPlugin->getIKSolver()->getJointNames();
+    js.position = jointPositions;
+    this->planningJointStatePub->publish(js);
+  };
 
-  // Log predicted next pose for debugging
-  RCLCPP_DEBUG(this->get_logger(), "Predicted next_position=(%.6f, %.6f, %.6f)", nextPosition.x(), nextPosition.y(), nextPosition.z());
-  RCLCPP_DEBUG(this->get_logger(), "Predicted next_orientation=(%.6f, %.6f, %.6f, %.6f)", nextOrientation.w(), nextOrientation.x(), nextOrientation.y(), nextOrientation.z());
-  if (!std::isfinite(nextPosition.x()) || !std::isfinite(nextPosition.y()) || !std::isfinite(nextPosition.z()) ||
-    !std::isfinite(nextOrientation.x()) || !std::isfinite(nextOrientation.y()) || !std::isfinite(nextOrientation.z()) || !std::isfinite(nextOrientation.w())) {
-    RCLCPP_ERROR(this->get_logger(), "Non-finite next pose computed");
-    response->success = false;
-    return;
+  auto checkReached = [this](const geometry_msgs::msg::PoseStamped& current,
+    const geometry_msgs::msg::PoseStamped& goal, double tolerance) -> bool {
+    double dx = current.pose.position.x - goal.pose.position.x;
+    double dy = current.pose.position.y - goal.pose.position.y;
+    double dz = current.pose.position.z - goal.pose.position.z;
+    double dist = std::sqrt(dx * dx + dy * dy + dz * dz);
+    return dist <= tolerance;
+  };
+
+  auto toTwistStamped = [this](const SpatialVector& sv) -> geometry_msgs::msg::TwistStamped {
+    geometry_msgs::msg::TwistStamped ts;
+    ts.header.frame_id = this->fixedFrame;
+    ts.header.stamp = this->now();
+    ts.twist.linear.x = sv.getPosition().x();
+    ts.twist.linear.y = sv.getPosition().y();
+    ts.twist.linear.z = sv.getPosition().z();
+    Eigen::Vector3d eulerAngles = sv.getOrientation().toRotationMatrix().eulerAngles(2, 1, 0);
+    ts.twist.angular.x = eulerAngles[2]; // roll
+    ts.twist.angular.y = eulerAngles[1]; // pitch
+    ts.twist.angular.z = eulerAngles[0]; // yaw
+    return ts;
+  };
+
+  auto toPoseStamped = [this](const SpatialVector& sv) -> geometry_msgs::msg::PoseStamped {
+    geometry_msgs::msg::PoseStamped ps;
+    ps.header.frame_id = this->fixedFrame;
+    ps.header.stamp = this->now();
+    ps.pose.position.x = sv.getPosition().x();
+    ps.pose.position.y = sv.getPosition().y();
+    ps.pose.position.z = sv.getPosition().z();
+    ps.pose.orientation.w = sv.getOrientation().w();
+    ps.pose.orientation.x = sv.getOrientation().x();
+    ps.pose.orientation.y = sv.getOrientation().y();
+    ps.pose.orientation.z = sv.getOrientation().z();
+    return ps;
+  };
+
+  // Build initial pose
+  geometry_msgs::msg::PoseStamped currentPose = request->start;
+  nav_msgs::msg::Path path;
+  path.header.frame_id = "world"; // default; could be parameterized
+  path.header.stamp = this->now();
+  trajectory_msgs::msg::JointTrajectory jointTrajectory;
+  jointTrajectory.header = path.header;
+  jointTrajectory.joint_names = ikSolver->getJointNames();
+  // Container to accumulate end-effector velocity (TwistStamped) trajectory
+  std::vector<geometry_msgs::msg::TwistStamped> eeVelocityTrajectory;
+  // Interpolate until goal reached or max iterations
+  const int max_iters = 30000; // TODO(Sharwin): Parameterize this (or derive from MotionPlugin)
+  unsigned int iter = 0;
+  bool reached = false;
+  const auto startTime = this->now();
+  while (iter++ < max_iters && !reached) {
+    // Check if we reached the goal within the tolerance and exit early if so
+    if (checkReached(currentPose, request->goal, request->goal_tolerance)) {
+      reached = true;
+      break;
+    }
+    // Save current pose and current joint state
+    path.poses.push_back(currentPose);
+    // Call IK on current pose to get current joint angles
+    auto jointAngles = getJointAngles(currentPose);
+    if (jointAngles.empty()) {
+      RCLCPP_WARN(this->get_logger(), "Failed to get joint angles from IK, aborting plan");
+      response->success = false;
+      return;
+    }
+    // Save joint angles for JointTrajectory
+    trajectory_msgs::msg::JointTrajectoryPoint jointTrajectoryPoint;
+    jointTrajectoryPoint.positions = jointAngles;
+    const auto timeFromStart = this->now() - startTime;
+    jointTrajectoryPoint.time_from_start = rclcpp::Duration::from_seconds(timeFromStart.seconds());
+    jointTrajectory.points.push_back(jointTrajectoryPoint);
+    // Publish joint angles to planned joint state for PFManager to update its internal PF
+    publishPlanningJointStates(jointAngles);
+    // Call pfield interpolate function to get the next pose and the autonomy vector
+    auto autonomyVector = this->pField->evaluateVelocityAtPose(SpatialVector(
+      Eigen::Vector3d(
+        currentPose.pose.position.x,
+        currentPose.pose.position.y,
+        currentPose.pose.position.z
+      ),
+      Eigen::Quaterniond(
+        currentPose.pose.orientation.w, currentPose.pose.orientation.x,
+        currentPose.pose.orientation.y, currentPose.pose.orientation.z
+      )
+    ));
+    auto nextPose = this->pField->interpolateNextPose(SpatialVector(
+      Eigen::Vector3d(
+        currentPose.pose.position.x,
+        currentPose.pose.position.y,
+        currentPose.pose.position.z
+      ),
+      Eigen::Quaterniond(
+        currentPose.pose.orientation.w, currentPose.pose.orientation.x,
+        currentPose.pose.orientation.y, currentPose.pose.orientation.z
+      )
+    ), request->delta_time);
+    // Store the autonomy vector (end-effector velocity) returned by PF interpolation
+    eeVelocityTrajectory.push_back(toTwistStamped(autonomyVector));
+    // Update the current pose before moving to next iteration
+    currentPose = toPoseStamped(nextPose);
   }
-
-  // Fill response
-  response->success = true;
-  double dist_to_goal = currentPose.euclideanDistance(this->planningPField->getGoalPose());
-  response->reached_goal = (dist_to_goal <= request->goal_tolerance);
-  RCLCPP_DEBUG(this->get_logger(), "Distance to goal=%.6f, goal_tolerance=%.6f, reached_goal=%s",
-    dist_to_goal, request->goal_tolerance, response->reached_goal ? "true" : "false");
-  response->autonomy_vector.header.frame_id = this->fixedFrame;
-  response->autonomy_vector.header.stamp = this->now();
-  response->autonomy_vector.twist.linear.x = autonomyVec.getPosition().x();
-  response->autonomy_vector.twist.linear.y = autonomyVec.getPosition().y();
-  response->autonomy_vector.twist.linear.z = autonomyVec.getPosition().z();
-  Eigen::Vector3d eulerAngles = autonomyVec.getOrientation().toRotationMatrix().eulerAngles(2, 1, 0);
-  response->autonomy_vector.twist.angular.x = eulerAngles[2];
-  response->autonomy_vector.twist.angular.y = eulerAngles[1];
-  response->autonomy_vector.twist.angular.z = eulerAngles[0];
-
-  response->next_pose.header.frame_id = this->fixedFrame;
-  response->next_pose.header.stamp = this->now();
-  response->next_pose.pose.position.x = nextPosition.x();
-  response->next_pose.pose.position.y = nextPosition.y();
-  response->next_pose.pose.position.z = nextPosition.z();
-  response->next_pose.pose.orientation.x = nextOrientation.x();
-  response->next_pose.pose.orientation.y = nextOrientation.y();
-  response->next_pose.pose.orientation.z = nextOrientation.z();
-  response->next_pose.pose.orientation.w = nextOrientation.w();
+  response->end_effector_path = path;
+  response->joint_trajectory = jointTrajectory;
+  // Move accumulated EE velocity trajectory into the response
+  response->end_effector_velocity_trajectory = eeVelocityTrajectory;
+  response->success = reached;
+  if (reached) RCLCPP_INFO(this->get_logger(), "Plan path succeeded in %u iterations", iter);
+  else if (iter >= max_iters) RCLCPP_WARN(this->get_logger(), "Plan path reached iteration limit without reaching goal");
 }
 
 PFLimits PotentialFieldManager::getPFLimits(std::shared_ptr<PotentialField> pf) {
@@ -616,6 +680,41 @@ MarkerArray PotentialFieldManager::createPotentialVectorMarkers(std::shared_ptr<
     }
   }
   return markerArray;
+}
+
+geometry_msgs::msg::Twist PotentialFieldManager::fuseTwists(
+  const geometry_msgs::msg::Twist::SharedPtr twist1,
+  const geometry_msgs::msg::Twist::SharedPtr twist2,
+  const double alpha) {
+  geometry_msgs::msg::Twist fusedTwist;
+
+  // Alpha = 0 -> A, Alpha = 1 -> B
+  auto fuseValue = [](double A, double B, double alpha) {
+    return alpha * B + (1.0 - alpha) * A;
+  };
+
+  // Simple linear fusion based on alpha parameter. Missing inputs are treated as zeros.
+  fusedTwist.linear.x = fuseValue(twist1->linear.x, twist2->linear.x, alpha);
+  fusedTwist.linear.y = fuseValue(twist1->linear.y, twist2->linear.y, alpha);
+  fusedTwist.linear.z = fuseValue(twist1->linear.z, twist2->linear.z, alpha);
+  fusedTwist.angular.x = fuseValue(twist1->angular.x, twist2->angular.x, alpha);
+  fusedTwist.angular.y = fuseValue(twist1->angular.y, twist2->angular.y, alpha);
+  fusedTwist.angular.z = fuseValue(twist1->angular.z, twist2->angular.z, alpha);
+
+  return fusedTwist;
+}
+
+geometry_msgs::msg::Twist clampTwist(const geometry_msgs::msg::Twist& twist, const geometry_msgs::msg::Twist& limits) {
+  geometry_msgs::msg::Twist clampedTwist = twist; // Start with the input twist
+  // Clamp linear velocities
+  clampedTwist.linear.x = std::clamp(clampedTwist.linear.x, -limits.linear.x, limits.linear.x);
+  clampedTwist.linear.y = std::clamp(clampedTwist.linear.y, -limits.linear.y, limits.linear.y);
+  clampedTwist.linear.z = std::clamp(clampedTwist.linear.z, -limits.linear.z, limits.linear.z);
+  // Clamp angular velocities
+  clampedTwist.angular.x = std::clamp(clampedTwist.angular.x, -limits.angular.x, limits.angular.x);
+  clampedTwist.angular.y = std::clamp(clampedTwist.angular.y, -limits.angular.y, limits.angular.y);
+  clampedTwist.angular.z = std::clamp(clampedTwist.angular.z, -limits.angular.z, limits.angular.z);
+  return clampedTwist;
 }
 
 void PotentialFieldManager::exportFieldDataToCSV(std::shared_ptr<PotentialField> pf, const std::string& base_filename) {

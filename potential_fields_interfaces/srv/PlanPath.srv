@@ -11,8 +11,6 @@ float32 goal_tolerance
 ---
 bool success
 nav_msgs/Path end_effector_path
-
 trajectory_msgs/JointTrajectory joint_trajectory
-
 # End-effector velocity trajectory (one TwistStamped per planning step)
 geometry_msgs/TwistStamped[] end_effector_velocity_trajectory

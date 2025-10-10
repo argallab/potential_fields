@@ -76,6 +76,13 @@ Eigen::Vector3d PotentialField::angularVelocityFromQuaternion(const Eigen::Quate
   return axis.normalized() * (angle / deltaTime);
 }
 
+SpatialVector PotentialField::interpolateNextPose(const SpatialVector& currentPose, const double deltaTime) {
+  SpatialVector velocity = this->evaluateVelocityAtPose(currentPose);
+  Eigen::Vector3d nextPosition = this->integrateLinearVelocity(currentPose.getPosition(), velocity.getPosition(), deltaTime);
+  Eigen::Quaterniond nextOrientation = this->integrateAngularVelocity(currentPose.getOrientation(), deltaTime);
+  return SpatialVector(nextPosition, nextOrientation);
+}
+
 Eigen::Quaterniond PotentialField::integrateAngularVelocity(const Eigen::Quaterniond& currentOrientation, double deltaTime) {
   Eigen::Vector3d angularVelocity = angularVelocityFromQuaternion(currentOrientation, deltaTime);
   const double epsilon = 1e-6; // Small value to avoid division by zero

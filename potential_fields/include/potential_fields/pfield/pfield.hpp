@@ -121,6 +121,18 @@ public:
   Eigen::Vector3d angularVelocityFromQuaternion(const Eigen::Quaterniond& q, double deltaTime);
 
   /**
+   * @brief Given a current pose and a delta time, computes the next pose after the time step.
+   *
+   * @note This function uses both integrateLinearVelocity and integrateAngularVelocity and
+   *       combines their results to compute the next pose.
+   *
+   * @param currentPose The starting pose as a SpatialVector.
+   * @param deltaTime The time step over which to compute the next pose [s].
+   * @return SpatialVector The resulting pose after applying the velocity field for the time step.
+   */
+  SpatialVector interpolateNextPose(const SpatialVector& currentPose, const double deltaTime);
+
+  /**
    * @brief Given a current orientation and a delta time, computes the angular velocity
    *        to compute the new orientation after the time step.
    *

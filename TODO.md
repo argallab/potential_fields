@@ -25,3 +25,8 @@
 - Think about smoothness while still enforcing velocity and acceleration limits
   - User should define motion constraints (velocity, acceleration, jerk) and planned path should respect those constraints
   - Somehow derive PF parameters from motion constraints (Repulsive Gain, Attractive Gain, Influence Zone Size, etc)
+- Refactor pfield_lib to resemble a velocity field not a potential force field
+  - This means SpatialVector should actually be a SpatialTwist or something similar
+  - Update the wording/naming for gain parameters, influence zones, and function/variables
+  - Update the README and in-code documentation to reflect this change as well
+  - Update plots and visualizations to reflect the correct units/etc.
