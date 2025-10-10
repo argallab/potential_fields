@@ -168,8 +168,6 @@ PotentialFieldManager::PotentialFieldManager()
   // std::string filename = "pfield_data";
   // this->exportFieldDataToCSV(filename);
 
-  // Initialize IKSolver depending on robot type
-
   // Run the timer for visualizing the potential field
   this->timer = this->create_wall_timer(
     std::chrono::duration<double>(1.0 / this->visualizerFrequency), // Timer period based on frequency
