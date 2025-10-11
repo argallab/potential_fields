@@ -123,6 +123,10 @@ PotentialFieldManager::PotentialFieldManager()
   this->planningJointStatePub = this->create_publisher<JointState>("planning_joint_states", 10);
   RCLCPP_INFO(this->get_logger(), "Planning joint states publishing on: %s", this->planningJointStatePub->get_topic_name());
 
+  // Setup planned end-effector path publisher
+  this->plannedEndEffectorPathPub = this->create_publisher<Path>("pfield/planned_path", 10);
+  RCLCPP_INFO(this->get_logger(), "Planned end-effector path publishing on: %s", this->plannedEndEffectorPathPub->get_topic_name());
+
   // Create service to compute the autonomy vector at a given pose
   this->autonomyVectorService = this->create_service<ComputeAutonomyVector>(
     "pfield/compute_autonomy_vector",
@@ -346,6 +350,7 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
     // Update the current pose before moving to next iteration
     currentPose = toPoseStamped(nextPose);
   }
+  this->plannedEndEffectorPathPub->publish(path);
   response->end_effector_path = path;
   response->joint_trajectory = jointTrajectory;
   // Move accumulated EE velocity trajectory into the response

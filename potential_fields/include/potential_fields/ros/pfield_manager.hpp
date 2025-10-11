@@ -94,9 +94,10 @@ private:
   std::shared_ptr<tf2_ros::Buffer> tfBuffer; // TF buffer for transform lookups
   std::shared_ptr<tf2_ros::TransformListener> tfListener; // TF Listener for populating the TF buffer
   rclcpp::Publisher<MarkerArray>::SharedPtr pFieldMarkerPub; // Publisher for PF Markers
+  rclcpp::Publisher<JointState>::SharedPtr planningJointStatePub; // Publisher for planning joint states
+  rclcpp::Publisher<Path>::SharedPtr plannedEndEffectorPathPub; // Publisher for planned end-effector path
   rclcpp::Subscription<PoseStamped>::SharedPtr goalPoseSub; // Subscriber for the goal pose
   rclcpp::Subscription<ObstacleArray>::SharedPtr obstacleSub; // Subscriber for obstacles
-  rclcpp::Publisher<JointState>::SharedPtr planningJointStatePub; // Publisher for planning joint states
   rclcpp::Service<PlanPath>::SharedPtr pathPlanningService; // Now hosted here
   rclcpp::Service<ComputeAutonomyVector>::SharedPtr autonomyVectorService; // Service to compute velocity vector at a given pose
 

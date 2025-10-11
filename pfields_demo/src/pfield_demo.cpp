@@ -67,13 +67,6 @@ PFDemo::PFDemo() : Node("pfield_demo") {
     // Publish the goal pose
     this->goalPosePub->publish(goalPose);
 
-    // Create a transient_local, reliable publisher (so RViz sees it even if it comes late)
-    auto pathPub = this->create_publisher<nav_msgs::msg::Path>(
-      "/pfield_demo/path",
-      rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable()
-    );
-
-
     RCLCPP_INFO(this->get_logger(), "Sending plan_path request...");
     auto future_result = this->planPathClient->async_send_request(pathPlanRequest);
 
@@ -108,9 +101,6 @@ PFDemo::PFDemo() : Node("pfield_demo") {
       const auto& v = pathPlanResponse->end_effector_velocity_trajectory.front().twist.linear;
       RCLCPP_INFO(this->get_logger(), "First EE linear velocity: (%.6f, %.6f, %.6f)", v.x, v.y, v.z);
     }
-
-    // Publish the path for visualization
-    pathPub->publish(pathPlanResponse->end_effector_path);
   });
 }
 
