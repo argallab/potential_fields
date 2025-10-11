@@ -57,17 +57,20 @@ public:
   explicit PotentialField(SpatialVector goalPose) :
     attractiveGain(1.0),
     rotationalAttractiveGain(0.7),
-    goalPose(goalPose) {}
+    goalPose(goalPose),
+    maxVelocity(1.0) {}
 
   PotentialField(SpatialVector goalPose, double attractiveGain, double rotationalAttractiveGain) :
     attractiveGain(attractiveGain),
     rotationalAttractiveGain(rotationalAttractiveGain),
-    goalPose(goalPose) {}
+    goalPose(goalPose),
+    maxVelocity(1.0) {}
 
-  PotentialField(double attractiveGain, double rotationalAttractiveGain) :
+  PotentialField(double attractiveGain, double rotationalAttractiveGain, double maxVelocity) :
     attractiveGain(attractiveGain),
     rotationalAttractiveGain(rotationalAttractiveGain),
-    goalPose(SpatialVector(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity())) {}
+    goalPose(SpatialVector(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity())),
+    maxVelocity(maxVelocity) {}
 
   /**
  * @brief Updates the goal position (3D Vector) in the potential field.
@@ -76,7 +79,7 @@ public:
  *
  * @param newGoalPose The new goal position to be set.
  */
-  void updateGoalPosition(SpatialVector newGoalPose);
+  void updateGoalPosition(SpatialVector newGoalPose) { this->goalPose = newGoalPose; }
 
   /**
    * @brief Updates the attractive gain, scaling the force
@@ -84,7 +87,14 @@ public:
    *
    * @param newAttractiveGain The new attractive gain to be set.
    */
-  void updateAttractiveGain(double newAttractiveGain);
+  void updateAttractiveGain(double newAttractiveGain) { this->attractiveGain = newAttractiveGain; }
+
+  /**
+   * @brief Updates the maximum velocity the potential field is allowed to express
+   *
+   * @param newMaxVelocity The new max velocity [m/s]
+   */
+  void updateMaxVelocity(double newMaxVelocity) { this->maxVelocity = newMaxVelocity; }
 
   /**
    * @brief Adds a new obstacle to the potential field.
@@ -192,10 +202,11 @@ private:
   double rotationalAttractiveGain; // Gain for rotational attractive force
   double translationalTolerance = 1e-3; // Threshold for distances to the goal and obstacles
   double rotationalThreshold = 0.06; // Threshold for rotational geodesic distance
-  SpatialVector goalPose;
-  std::vector<PotentialFieldObstacle> obstacles;
+  SpatialVector goalPose; // Current GoalPose
+  std::vector<PotentialFieldObstacle> obstacles; // Obstacle list
   // Fast lookup for obstacle updates/removals by ID
   std::unordered_map<std::string, size_t> obstacleIndex;
+  double maxVelocity; // Max linear velocity [m/s]
 
   /**
    * @brief Computes the attractive force towards the goal pose. Also computes the

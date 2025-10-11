@@ -20,11 +20,9 @@
 /// SUBSCRIBERS:
 ///   ~/goal_pose (geometry_msgs::msg::PoseStamped): Updates the goal pose in the potential field
 ///   ~/pfield/obstacles (potential_fields_interfaces::msg::ObstacleArray): All PF Obstacles
-///   ~/pfield/planning_obstacles (potential_fields_interfaces::msg::ObstacleArray): Planning PF Obstacles
 ///
 /// PUBLISHERS:
 ///   ~/pfield/markers (visualization_msgs::msg::MarkerArray): Markers for PF visualization in RViz
-///   ~/pfield/planning_markers (visualization_msgs::msg::MarkerArray): Markers for Planning PF visualization in RViz
 
 #include "ros/pfield_manager.hpp"
 #include "robot_plugins/null_motion_plugin.hpp"
@@ -54,8 +52,7 @@ PotentialFieldManager::PotentialFieldManager()
   this->fieldResolution = this->get_parameter("field_resolution").as_double();
 
   // Initialize the potential fields
-  this->pField = std::make_shared<PotentialField>(this->attractiveGain, this->rotationalAttractiveGain);
-  this->planningPField = std::make_shared<PotentialField>(this->attractiveGain, this->rotationalAttractiveGain);
+  this->pField = std::make_shared<PotentialField>(this->attractiveGain, this->rotationalAttractiveGain, this->maxForce);
 
   // Initialize a null motion plugin by default so the node can run without a real robot
   this->motionPlugin = std::make_unique<NullMotionPlugin>();
@@ -74,8 +71,6 @@ PotentialFieldManager::PotentialFieldManager()
     .transient_local();
   this->pFieldMarkerPub = this->create_publisher<MarkerArray>("pfield/markers", markerPubQos);
   RCLCPP_INFO(this->get_logger(), "PF Markers publishing on: %s", this->pFieldMarkerPub->get_topic_name());
-  this->planningPFieldMarkerPub = this->create_publisher<MarkerArray>("pfield/planning_markers", markerPubQos);
-  RCLCPP_INFO(this->get_logger(), "Planning markers publishing on: %s", this->planningPFieldMarkerPub->get_topic_name());
 
   // Setup goal pose subscriber
   this->goalPoseSub = this->create_subscription<geometry_msgs::msg::PoseStamped>(
@@ -97,7 +92,6 @@ PotentialFieldManager::PotentialFieldManager()
       )
     );
     this->pField->updateGoalPosition(goalPose);
-    this->planningPField->updateGoalPosition(goalPose);
   }
   );
 
@@ -121,29 +115,6 @@ PotentialFieldManager::PotentialFieldManager()
       );
       RCLCPP_DEBUG(this->get_logger(), "Added/Updated obstacle: %s", obst.frame_id.c_str());
       this->pField->addObstacle(obstacle);
-    }
-  }
-  );
-
-  // Setup Planning Obstacle Subscriber
-  this->planningObstacleSub = this->create_subscription<ObstacleArray>("pfield/planning_obstacles", obstacleSubQos,
-    [this](const ObstacleArray::SharedPtr msg) {
-    const auto& obstacles = msg->obstacles;
-    for (const auto& obst : obstacles) {
-      PotentialFieldObstacle obstacle(
-        obst.frame_id,
-        Eigen::Vector3d(obst.pose.position.x, obst.pose.position.y, obst.pose.position.z),
-        Eigen::Quaterniond(obst.pose.orientation.w, obst.pose.orientation.x, obst.pose.orientation.y, obst.pose.orientation.z),
-        stringToObstacleType(obst.type),
-        stringToObstacleGroup(obst.group),
-        ObstacleGeometry{obst.radius, obst.length, obst.width, obst.height},
-        this->influenceZoneScale,
-        this->repulsiveGain,
-        obst.mesh_resource,
-        Eigen::Vector3d(obst.scale_x, obst.scale_y, obst.scale_z)
-      );
-      RCLCPP_DEBUG(this->get_logger(), "Added/Updated obstacle: %s", obst.frame_id.c_str());
-      this->planningPField->addObstacle(obstacle);
     }
   }
   );
@@ -174,9 +145,7 @@ PotentialFieldManager::PotentialFieldManager()
     std::chrono::duration<double>(1.0 / this->visualizerFrequency), // Timer period based on frequency
     [this]() {
     MarkerArray pfieldMarkers = this->visualizePF(this->pField);
-    MarkerArray planningPFMarkers = this->visualizePF(this->planningPField);
     this->pFieldMarkerPub->publish(pfieldMarkers);
-    this->planningPFieldMarkerPub->publish(planningPFMarkers);
   }
   );
 }
@@ -344,7 +313,7 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
     // Publish joint angles to planned joint state for PFManager to update its internal PF
     publishPlanningJointStates(jointAngles);
     // Call pfield interpolate function to get the next pose and the autonomy vector
-    auto autonomyVector = this->planningPField->evaluateVelocityAtPose(SpatialVector(
+    auto autonomyVector = this->pField->evaluateVelocityAtPose(SpatialVector(
       Eigen::Vector3d(
         currentPose.pose.position.x,
         currentPose.pose.position.y,
@@ -355,7 +324,7 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
         currentPose.pose.orientation.y, currentPose.pose.orientation.z
       )
     ));
-    auto nextPose = this->planningPField->interpolateNextPose(SpatialVector(
+    auto nextPose = this->pField->interpolateNextPose(SpatialVector(
       Eigen::Vector3d(
         currentPose.pose.position.x,
         currentPose.pose.position.y,

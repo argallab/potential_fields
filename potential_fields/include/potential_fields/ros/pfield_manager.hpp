@@ -83,7 +83,6 @@ private:
   std::string fixedFrame; // RViz fixed frame for visualization and PF computation
   // Potential field instances (shared_ptr to avoid inadvertent copying when passing to visualization helpers)
   std::shared_ptr<PotentialField> pField; // Primary Potential Field
-  std::shared_ptr<PotentialField> planningPField; // Planning Potential Field
   double visualizerBufferArea; // Extra area around obstacles and goal to visualize the PF [m]
   double fieldResolution; // Resolution of the potential field grid [m]
 
@@ -95,10 +94,8 @@ private:
   std::shared_ptr<tf2_ros::Buffer> tfBuffer; // TF buffer for transform lookups
   std::shared_ptr<tf2_ros::TransformListener> tfListener; // TF Listener for populating the TF buffer
   rclcpp::Publisher<MarkerArray>::SharedPtr pFieldMarkerPub; // Publisher for PF Markers
-  rclcpp::Publisher<MarkerArray>::SharedPtr planningPFieldMarkerPub; // Publisher for Planning PF Markers
   rclcpp::Subscription<PoseStamped>::SharedPtr goalPoseSub; // Subscriber for the goal pose
   rclcpp::Subscription<ObstacleArray>::SharedPtr obstacleSub; // Subscriber for obstacles
-  rclcpp::Subscription<ObstacleArray>::SharedPtr planningObstacleSub; // Subscriber for planning obstacles
   rclcpp::Publisher<JointState>::SharedPtr planningJointStatePub; // Publisher for planning joint states
   rclcpp::Service<PlanPath>::SharedPtr pathPlanningService; // Now hosted here
   rclcpp::Service<ComputeAutonomyVector>::SharedPtr autonomyVectorService; // Service to compute velocity vector at a given pose

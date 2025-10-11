@@ -2,14 +2,6 @@
 #include "pfield/pf_obstacle.hpp"
 #include "pfield/spatial_vector.hpp"
 
-void PotentialField::updateGoalPosition(SpatialVector newGoalPose) {
-  this->goalPose = newGoalPose;
-}
-
-void PotentialField::updateAttractiveGain(double newAttractiveGain) {
-  this->attractiveGain = newAttractiveGain;
-}
-
 void PotentialField::addObstacle(PotentialFieldObstacle obstacle) {
   const std::string frameID = obstacle.getFrameID();
   auto itIndex = this->obstacleIndex.find(frameID);
@@ -56,6 +48,10 @@ SpatialVector PotentialField::evaluateVelocityAtPose(SpatialVector queryPose) {
   Eigen::Vector3d totalForce = attractiveForce.getPosition() + repulsiveForce.getPosition();
   Eigen::Quaterniond totalOrientation = attractiveForce.getOrientation() * repulsiveForce.getOrientation();
   totalOrientation.normalize();
+  // Clamp totalForce to maxVelocity
+  if (totalForce.norm() > this->maxVelocity) {
+    totalForce = totalForce.normalized() * this->maxVelocity;
+  }
   return SpatialVector(totalForce, totalOrientation);
 }
 
@@ -183,7 +179,7 @@ SpatialVector PotentialField::computeRepulsiveForces(SpatialVector queryPose) {
       direction.normalize();
       // Calculate the repulsive force magnitude
       double magnitude = obst.getRepulsiveGain() *
-        ((1 / distance) - (1 / obst.getInfluenceZoneScale())) * (1.0f / (distance * distance));
+        ((1.0 / distance) - (1.0 / obst.getInfluenceZoneScale())) * (1.0 / (distance * distance));
       // Add the repulsive forces together
       repulsiveForceVector += (direction * magnitude);
     }

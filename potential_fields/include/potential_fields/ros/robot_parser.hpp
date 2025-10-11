@@ -63,7 +63,6 @@ private:
 
   rclcpp::TimerBase::SharedPtr timer; // Timer for updating Robot and Planning TFs
   rclcpp::Publisher<ObstacleArray>::SharedPtr obstaclePub; // Publisher for Obstacles from Robot Collision Geometry
-  rclcpp::Publisher<ObstacleArray>::SharedPtr planningObstaclePub; // Publisher for Planning Obstacles
   rclcpp::Publisher<std_msgs::msg::String>::SharedPtr planningRobotDescriptionPub; // Publishes planning robot_description
   std::shared_ptr<tf2_ros::TransformBroadcaster> dynamicTfBroadcaster; // Broadcaster for dynamic TFs from Robot
   std::shared_ptr<tf2_ros::Buffer> tfBuffer; // TF buffer for listening to Robot TFs
