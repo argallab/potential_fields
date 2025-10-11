@@ -90,7 +90,6 @@ private:
   // The MotionPlugin containing robot-specific functions (Kinematics, Motion Planning, etc.)
   std::unique_ptr<MotionPlugin> motionPlugin;
 
-
   rclcpp::TimerBase::SharedPtr timer; // Timer to periodically update the potential field
   std::shared_ptr<tf2_ros::TransformBroadcaster> dynamicTfBroadcaster; // Dynamic transform broadcaster
   std::shared_ptr<tf2_ros::Buffer> tfBuffer; // TF buffer for transform lookups

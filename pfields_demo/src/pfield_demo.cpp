@@ -61,23 +61,55 @@ PFDemo::PFDemo() : Node("pfield_demo") {
 
     pathPlanRequest->start = startPose;
     pathPlanRequest->goal = goalPose;
+    pathPlanRequest->delta_time = 0.1; // 100 ms between waypoints
+    pathPlanRequest->goal_tolerance = 0.1; // 10 cm tolerance
 
     // Publish the goal pose
     this->goalPosePub->publish(goalPose);
 
-    // Call the plan_path service
-    PlanPath::Response::SharedPtr pathPlanResponse;
-    auto future_result = this->planPathClient->async_send_request(
-      pathPlanRequest,
-      [this, &pathPlanResponse](ServiceResponseFuture<PlanPath> future) {
-      auto response = future.get();
-      if (response) {
-        pathPlanResponse = response;
-      }
-    });
+    // Create a transient_local, reliable publisher (so RViz sees it even if it comes late)
+    auto pathPub = this->create_publisher<nav_msgs::msg::Path>(
+      "/pfield_demo/path",
+      rclcpp::QoS(rclcpp::KeepLast(1)).transient_local().reliable()
+    );
 
-    // Once received paths, publish a path to /nav_msgs/msg/Path for visualization
-    auto pathPub = this->create_publisher<nav_msgs::msg::Path>("/nav_msgs/msg/Path", 10);
+
+    RCLCPP_INFO(this->get_logger(), "Sending plan_path request...");
+    auto future_result = this->planPathClient->async_send_request(pathPlanRequest);
+
+    // Wait for the response without calling rclcpp::spin_until_future_complete()
+    // Use a bounded wait to avoid hanging indefinitely
+    using namespace std::chrono_literals;
+    auto wait_time = 10s;
+    auto status = future_result.wait_for(wait_time);
+    if (status != std::future_status::ready) {
+      RCLCPP_ERROR(this->get_logger(), "Timeout waiting for plan_path response after %ld seconds", (long)wait_time.count());
+      return;
+    }
+
+    auto pathPlanResponse = future_result.get();
+    if (!pathPlanResponse) {
+      RCLCPP_ERROR(this->get_logger(), "plan_path service returned an empty response");
+      return;
+    }
+
+    // Log a small summary of the returned trajectories to help debug crashes
+    size_t ee_path_len = pathPlanResponse->end_effector_path.poses.size();
+    size_t jt_points = pathPlanResponse->joint_trajectory.points.size();
+    size_t ee_vels = pathPlanResponse->end_effector_velocity_trajectory.size();
+    RCLCPP_INFO(this->get_logger(), "Received plan_path response: success=%s, end_effector_path.len=%zu, joint_trajectory.points=%zu, ee_velocity_traj=%zu",
+      pathPlanResponse->success ? "true" : "false", ee_path_len, jt_points, ee_vels);
+
+    if (ee_path_len > 0) {
+      const auto& p = pathPlanResponse->end_effector_path.poses.front().pose.position;
+      RCLCPP_INFO(this->get_logger(), "First EE pose: (%.4f, %.4f, %.4f)", p.x, p.y, p.z);
+    }
+    if (ee_vels > 0) {
+      const auto& v = pathPlanResponse->end_effector_velocity_trajectory.front().twist.linear;
+      RCLCPP_INFO(this->get_logger(), "First EE linear velocity: (%.6f, %.6f, %.6f)", v.x, v.y, v.z);
+    }
+
+    // Publish the path for visualization
     pathPub->publish(pathPlanResponse->end_effector_path);
   });
 }

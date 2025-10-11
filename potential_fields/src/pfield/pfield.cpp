@@ -77,22 +77,34 @@ Eigen::Vector3d PotentialField::angularVelocityFromQuaternion(const Eigen::Quate
 }
 
 SpatialVector PotentialField::interpolateNextPose(const SpatialVector& currentPose, const double deltaTime) {
-  SpatialVector velocity = this->evaluateVelocityAtPose(currentPose);
-  Eigen::Vector3d nextPosition = this->integrateLinearVelocity(currentPose.getPosition(), velocity.getPosition(), deltaTime);
-  Eigen::Quaterniond nextOrientation = this->integrateAngularVelocity(currentPose.getOrientation(), deltaTime);
+  // 1) Linear velocity from the field
+  SpatialVector vel = this->evaluateVelocityAtPose(currentPose);
+  // 2) Rotational velocity from orientation error (not from the absolute quaternion)
+  Eigen::Vector3d w = this->computeRotationalVelocity(currentPose);
+  // 3) Integrate
+  Eigen::Vector3d nextPosition = this->integrateLinearVelocity(currentPose.getPosition(), vel.getPosition(), deltaTime);
+  Eigen::Quaterniond nextOrientation = this->integrateAngularVelocity(currentPose.getOrientation(), w, deltaTime);
   return SpatialVector(nextPosition, nextOrientation);
 }
 
-Eigen::Quaterniond PotentialField::integrateAngularVelocity(const Eigen::Quaterniond& currentOrientation, double deltaTime) {
-  Eigen::Vector3d angularVelocity = angularVelocityFromQuaternion(currentOrientation, deltaTime);
-  const double epsilon = 1e-6; // Small value to avoid division by zero
-  if (angularVelocity.norm() < epsilon) {
-    // If angular velocity is near zero, return the current orientation
-    return currentOrientation;
-  }
-  Eigen::Quaterniond deltaOrientation;
-  deltaOrientation = Eigen::AngleAxisd(angularVelocity.norm() * deltaTime, angularVelocity.normalized());
-  return (currentOrientation * deltaOrientation).normalized();
+Eigen::Quaterniond PotentialField::integrateAngularVelocity(const Eigen::Quaterniond& currentOrientation,
+  const Eigen::Vector3d& angularVelocity,
+  double deltaTime) {
+  const double wnorm = angularVelocity.norm();
+  if (wnorm < 1e-9 || deltaTime <= 0.0) return currentOrientation;
+  // Exponential map: dq = exp( [w]^ * dt ) ≈ AngleAxis( |w|*dt, w/|w| )
+  Eigen::Quaterniond dq(Eigen::AngleAxisd(wnorm * deltaTime, angularVelocity / wnorm));
+  return (currentOrientation * dq).normalized();
+}
+
+Eigen::Vector3d PotentialField::computeRotationalVelocity(const SpatialVector& queryPose) const {
+  // Orientation error from current to goal
+  Eigen::Quaterniond q_err = queryPose.getOrientation().conjugate() * this->goalPose.getOrientation();
+  q_err.normalize();
+  Eigen::AngleAxisd aa(q_err);
+  // Drive along error axis, proportional to error angle
+  // (Negative sign pulls toward goal, mirroring your translational attractive force)
+  return -this->rotationalAttractiveGain * (aa.axis() * aa.angle());
 }
 
 Eigen::Vector3d PotentialField::integrateLinearVelocity(const Eigen::Vector3d& currentPosition,

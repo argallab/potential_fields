@@ -13,6 +13,7 @@
 
 class MotionPlugin {
 public:
+  explicit MotionPlugin(const std::string& name) : name(name) {}
   virtual ~MotionPlugin() = default;
   virtual bool sendCartesianTwist(const geometry_msgs::msg::Twist& endEffectorTwist) = 0;
   virtual bool sendJointStates(const sensor_msgs::msg::JointState& js) = 0;
@@ -20,9 +21,11 @@ public:
   virtual void assignSharedClock(rclcpp::Clock::SharedPtr clock) { this->clock = clock; }
   virtual void assignIKSolver(std::shared_ptr<IKSolver> ikSolver) { this->ikSolver = ikSolver; }
   virtual std::shared_ptr<IKSolver> getIKSolver() const { return ikSolver; }
+  virtual std::string getName() const { return name; }
 protected:
   rclcpp::Clock::SharedPtr clock;
   std::shared_ptr<IKSolver> ikSolver;
+  std::string name;
 };
 
 #endif // !MOTION_PLUGIN_HPP

@@ -20,7 +20,7 @@
 //   long duration_microseconds;
 // };
 
-FrankaIKSolver::FrankaIKSolver(IKSolverSearchParameters params) : IKSolver(), ikParams(params) {
+FrankaIKSolver::FrankaIKSolver(IKSolverSearchParameters params) : IKSolver("GeoFIK"), ikParams(params) {
   this->homeTransformOE = franka_fk(this->homeJointAngles);
   this->solver = std::make_unique<WeightedIKSolver>(
     /*neutral_pose=*/ this->homeJointAngles,
@@ -68,7 +68,7 @@ bool FrankaIKSolver::solve(
   return result.success;
 }
 
-FrankaPlugin::FrankaPlugin(const std::string& hostname) : MotionPlugin() {
+FrankaPlugin::FrankaPlugin(const std::string& hostname) : MotionPlugin("FrankaPlugin") {
   this->assignIKSolver(std::make_shared<FrankaIKSolver>());
   this->initializeRobot(hostname);
 }

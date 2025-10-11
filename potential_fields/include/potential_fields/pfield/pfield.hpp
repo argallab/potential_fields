@@ -137,10 +137,14 @@ public:
    *        to compute the new orientation after the time step.
    *
    * @param currentOrientation The starting orientation as a quaternion.
+   * @param angularVelocity The instantaneous angular velocity vector in radians per second.
    * @param deltaTime The time step over which to integrate the angular velocity [s].
    * @return Eigen::Quaterniond The resulting orientation after integrating the angular velocity.
    */
-  Eigen::Quaterniond integrateAngularVelocity(const Eigen::Quaterniond& currentOrientation, double deltaTime);
+  Eigen::Quaterniond integrateAngularVelocity(
+    const Eigen::Quaterniond& currentOrientation,
+    const Eigen::Vector3d& angularVelocity,
+    double deltaTime);
 
   /**
    * @brief Given a current position, an instantaneous linear velocity vector, and a delta time,
@@ -153,6 +157,8 @@ public:
    */
   Eigen::Vector3d integrateLinearVelocity(const Eigen::Vector3d& currentPosition,
     const Eigen::Vector3d& linearVelocity, double deltaTime);
+
+  Eigen::Vector3d computeRotationalVelocity(const SpatialVector& queryPose) const;
 
   SpatialVector getGoalPose() const;
   std::vector<PotentialFieldObstacle> getObstacles() const;

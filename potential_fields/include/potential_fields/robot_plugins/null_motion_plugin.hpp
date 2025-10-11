@@ -7,7 +7,7 @@
 // A minimal IK solver that returns the seed as the solution (useful for offline testing)
 class SimpleIKSolver : public IKSolver {
 public:
-  SimpleIKSolver() = default;
+  SimpleIKSolver() : IKSolver("SimpleIKSolver") {}
   ~SimpleIKSolver() override = default;
 
   bool solve([[maybe_unused]] const Eigen::Isometry3d& targetPose, const std::vector<double>& seed,
@@ -38,7 +38,7 @@ public:
 // A null MotionPlugin which performs no real robot IO and is suitable for offline testing
 class NullMotionPlugin : public MotionPlugin {
 public:
-  NullMotionPlugin() {
+  NullMotionPlugin() : MotionPlugin("NullMotionPlugin") {
     this->assignIKSolver(std::make_shared<SimpleIKSolver>());
     this->assignSharedClock(std::make_shared<rclcpp::Clock>(RCL_SYSTEM_TIME));
   }
