@@ -9,19 +9,17 @@
 ---
 
 # Immediate TODOs
-- Finish PlanPath Service Implementation
-  - Should extract both EE Pose Trajectory, EE Velocity Trajectory, and Joint Trajectory
+- Finish PlanPath Service Implementation with FrankaIKPlugin
 - Create a demo where PlanPath service sends JointTrajectory into MoveIt JointTrajectory Action Server
-- Include installation instructions for fcl and libfranka and other external dependencies
-
-# Future TODOs and Refactors
+- Use Pinnochio/KDL library on the given URDF to compute FK and update robot obstacles instead of TF
+  - Previous data-flow for URDF to PF Obstacles: URDF -> RSP (updates from JSP) -> TF -> PF Obstacles
+  - New data-flow for URDF to PF Obstacles: URDF -> Pinnochio/KDL -> FK Definition -> Joint Angles -> PF Obstacles
 - Condense ROS Nodes into a single node and condense PF library code together.
   - The `pfield` library should contain its own path planning function
   - `pfield` should also contain its own IKSolver and MotionPlugin instances with a factory method to create them
   - ROS Wrapper node should just handle ROS communication and call the `pfield` library functions
-- Use Pinnochio/KDL library on the given URDF to compute FK and update robot obstacles instead of TF
-  - Previous data-flow for URDF to PF Obstacles: URDF -> RSP (updates from JSP) -> TF -> PF Obstacles
-  - New data-flow for URDF to PF Obstacles: URDF -> Pinnochio/KDL -> FK Definition -> Joint Angles -> PF Obstacles
+
+# Future TODOs and Refactors
 - Think about smoothness while still enforcing velocity and acceleration limits
   - User should define motion constraints (velocity, acceleration, jerk) and planned path should respect those constraints
   - Somehow derive PF parameters from motion constraints (Repulsive Gain, Attractive Gain, Influence Zone Size, etc)
@@ -30,3 +28,4 @@
   - Update the wording/naming for gain parameters, influence zones, and function/variables
   - Update the README and in-code documentation to reflect this change as well
   - Update plots and visualizations to reflect the correct units/etc.
+- Include installation instructions for fcl and libfranka and other external dependencies
