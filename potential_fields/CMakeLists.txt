@@ -3,6 +3,7 @@ project(potential_fields)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
@@ -26,6 +27,7 @@ find_package(urdf REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(geometric_shapes REQUIRED)
 find_package(fcl REQUIRED)
+find_package(pinocchio REQUIRED)
 
 
 # Setup pfield_lib library
@@ -34,21 +36,26 @@ add_library(pfield_lib SHARED
   src/pfield/pf_obstacle.cpp
   src/pfield/pfield.cpp
   src/pfield/spatial_vector.cpp
+  src/pfield/pf_kinematics.cpp
 )
-target_link_libraries(pfield_lib
-  fcl
-)
+
 ament_target_dependencies(pfield_lib
   Eigen3
   geometric_shapes
 )
 target_include_directories(pfield_lib PUBLIC
   include/potential_fields
+  PRIVATE ${pinocchio_INCLUDE_DIRS}
+)
+target_link_libraries(pfield_lib
+  fcl
+  pinocchio::pinocchio
 )
 
 # Use precompiled headers to speed up builds (CMake >= 3.16)
 if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.16)
   target_precompile_headers(pfield_lib PRIVATE
+    <Eigen/Dense>
     <Eigen/Core>
     <Eigen/Geometry>
     <vector>
