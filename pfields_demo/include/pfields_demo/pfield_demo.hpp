@@ -22,6 +22,8 @@ private:
   rclcpp::Client<PlanPath>::SharedPtr planPathClient;
   rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr goalPosePub;
   rclcpp::Service<std_srvs::srv::Empty>::SharedPtr runPlanPathDemoService;
+  // Save a PlanPath response to CSV (same format as pf_demo.py)
+  void save_planned_path_response(const std::shared_ptr<potential_fields_interfaces::srv::PlanPath::Response>& res);
 };
 
 #endif // PFIELD_DEMO_HPP
