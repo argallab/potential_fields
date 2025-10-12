@@ -61,14 +61,4 @@
     <param name="robot_description" value="" type="str"/>
     <remap from="joint_states" to="planning_joint_states"/>
   </node>
-
-  <!-- Motion Interface (path planning service) -->
-  <node pkg="potential_fields" exec="motion_interface" name="motion_interface" output="screen">
-    <param from="$(find-pkg-share potential_fields)/config/pfield_config.yaml"/>
-    <param name="fixed_frame" value="$(var rviz_fixed_frame)"/>
-    <!-- Remap the namespaced pfield/goal_pose used in code to the global /goal_pose
-         so RViz's 'Publish Pose' button (which publishes to /goal_pose) still works
-         while keeping the pfield namespace in the code. -->
-    <remap from="pfield/goal_pose" to="/goal_pose"/>
-  </node>
 </launch>

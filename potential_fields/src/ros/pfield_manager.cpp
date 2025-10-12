@@ -339,7 +339,7 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
         currentPose.pose.orientation.y, currentPose.pose.orientation.z
       )
     ), request->delta_time);
-    if (iter % 100 == 0) {
+    if (iter % 10000 == 0) {
       RCLCPP_INFO(this->get_logger(), "Planning iter=%u: path_len=%zu, joint_points=%zu", iter, path.poses.size(), jointTrajectory.points.size());
       RCLCPP_INFO(this->get_logger(), "iter=%u autonomy linear=(%.4f, %.4f, %.4f) next_pos=(%.4f, %.4f, %.4f)",
         iter, autonomyVector.getPosition().x(), autonomyVector.getPosition().y(), autonomyVector.getPosition().z(),
