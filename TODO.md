@@ -28,4 +28,4 @@
   - Update the wording/naming for gain parameters, influence zones, and function/variables
   - Update the README and in-code documentation to reflect this change as well
   - Update plots and visualizations to reflect the correct units/etc.
-- Include installation instructions for fcl and libfranka and other external dependencies
+- Include installation instructions for fcl, pinnochio, libfranka and other external dependencies
