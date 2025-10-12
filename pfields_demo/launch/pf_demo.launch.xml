@@ -18,7 +18,7 @@
   <arg name="base_pitch" default="0.0" description="Pitch of the robot's base frame relative to RViz fixed frame"/>
   <arg name="base_yaw" default="0.0" description="Yaw of the robot's base frame relative to RViz fixed frame"/>
 
-  <node pkg="pfields_demo" exec="pf_demo" name="pf_demo_node" output="screen">
+  <node pkg="pfields_demo" exec="pf_demo.py" name="pf_demo_node" output="screen">
     <param name="fixed_frame" value="$(var rviz_fixed_frame)"/>
   </node>
 

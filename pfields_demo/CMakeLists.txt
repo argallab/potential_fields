@@ -10,8 +10,10 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(ament_cmake_python REQUIRED)
 find_package(ament_cmake_gtest REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclpy REQUIRED)
 find_package(potential_fields REQUIRED)
 find_package(potential_fields_interfaces REQUIRED)
 find_package(Doxygen)
@@ -30,28 +32,11 @@ include_directories(
   include/pfields_demo
   ${potential_fields_interfaces_INCLUDE_DIRS}
 )
-add_executable(pf_demo src/pfield_demo.cpp)
-ament_target_dependencies(pf_demo
-  rclcpp
-  Eigen3
-  potential_fields
-  potential_fields_interfaces
-  geometry_msgs
-  visualization_msgs
-  sensor_msgs
-  trajectory_msgs
-  std_srvs
-  nav_msgs
-  tf2_ros
-  tf2_eigen
-  urdf
-)
-target_link_libraries(pf_demo
-  ${potential_fields_interfaces_LIBRARIES}
-)
 
+# Install the Python demo node
 install(
-  TARGETS pf_demo
+  PROGRAMS
+  pfields_demo/pf_demo.py
   DESTINATION lib/${PROJECT_NAME}
 )
 install(
@@ -85,4 +70,5 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 
+ament_python_install_package(${PROJECT_NAME})
 ament_package()

@@ -8,7 +8,9 @@
   <license>Apache 2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>ament_cmake_python</buildtool_depend>
   <depend>rclcpp</depend>
+  <depend>rclpy</depend>
   <depend>potential_fields</depend>
   <depend>potential_fields_interfaces</depend>
   <depend>geometry_msgs</depend>
@@ -21,6 +23,9 @@
   <depend>tf2_eigen</depend>
   <depend>urdf</depend>
   <depend>Eigen3</depend>
+
+  <!-- Python packaging support -->
+  <exec_depend>ament_cmake_python</exec_depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
