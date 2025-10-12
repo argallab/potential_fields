@@ -163,6 +163,16 @@ No need for MotionInterface, PFieldManager should be the only node.
 2. Start designing out diagram (ROS interaction, PF)
 3. Lower dimensional interface with Franka
 
+## Progress Notes
+Paths are able to be planned from the service and the demo node shows how to call the service and visualize it.
+A couple of notes:
+- Need velocity/acceleration limits defined in the PF to prevent excessive EE velocities
+- Need to clean up RSP/JSP confusion with a simple Pinnochio-powered RobotParser to convert Joint Positions to Obstacle Positions
+- Need to use a single ROS node (PFM) that wraps around the PField class
+- pfield c++ library needs to contain `MotionPlugin`. and support a planPath function that the ros service just calls
+- pfield c++ library maybe needs a `update` function that the ROS node should call on a timer
+- The new `RobotParser` should simply just call the c++ library functions to add obstacles
+
 # Franka Emika Panda Notes
 - [Kris' Joystick Repo](https://github.com/wengmister/franka_joystick_teleop/blob/main/README.md)
 - [Franka User Setup (Matt Elwin's Notes)](https://nu-msr.github.io/ros_notes/ros2/franka.html)
