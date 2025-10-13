@@ -7,15 +7,16 @@ CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 
 
 def get_latest_csv_file():
-    name_template = "planned_path_"
-    files = [f for f in os.listdir(CURRENT_DIR) if f.startswith(
-        name_template) and f.endswith('.csv')]
-    if not files:
-        raise FileNotFoundError(
-            "No planned_path_<timestamp>.csv files found in 'data' directory.")
-    latest_file = max(files, key=lambda f: os.path.getctime(
-        os.path.join(CURRENT_DIR, f)))
-    return os.path.join(CURRENT_DIR, latest_file)
+    return "planned_path.csv"
+    # name_template = "planned_path_"
+    # files = [f for f in os.listdir(CURRENT_DIR) if f.startswith(
+    #     name_template) and f.endswith('.csv')]
+    # if not files:
+    #     raise FileNotFoundError(
+    #         "No planned_path_<timestamp>.csv files found in 'data' directory.")
+    # latest_file = max(files, key=lambda f: os.path.getctime(
+    #     os.path.join(CURRENT_DIR, f)))
+    # return os.path.join(CURRENT_DIR, latest_file)
 
 
 def extrapolate_accel(df):
