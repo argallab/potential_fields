@@ -94,28 +94,15 @@ class PFDemo(Node):
         joint_names = list(jt.joint_names) if jt and jt.joint_names else []
         n_joints = len(joint_names)
 
-        # Compute time base: prefer path pose stamps, then velocity stamps, then joint time_from_start, else index*time_step
+        # Compute time base: prefer EE velocity trajectory stamps (closest to PF output),
+        # then path pose stamps, then joint time_from_start, else synthesize index * dt
         times = []
-        if n_path > 0 and path_poses[0].header.stamp.sec != 0:
-            t0 = path_poses[0].header.stamp.sec + \
-                path_poses[0].header.stamp.nanosec * 1e-9
-            for p in path_poses:
-                ts = p.header.stamp.sec + p.header.stamp.nanosec * 1e-9
-                times.append(ts - t0)
-        elif n_vel > 0 and ee_vels[0].header.stamp.sec != 0:
+        if n_vel > 0 and ee_vels[0].header.stamp.sec != 0:
             t0 = ee_vels[0].header.stamp.sec + \
                 ee_vels[0].header.stamp.nanosec * 1e-9
             for v in ee_vels:
                 ts = v.header.stamp.sec + v.header.stamp.nanosec * 1e-9
                 times.append(ts - t0)
-        elif n_jt > 0 and hasattr(jt_points[0], 'time_from_start'):
-            # Use joint trajectory time_from_start
-            t0 = jt_points[0].time_from_start.sec + \
-                getattr(jt_points[0].time_from_start, 'nanosec', 0) * 1e-9
-            for pt in jt_points:
-                tfs = pt.time_from_start.sec + \
-                    getattr(pt.time_from_start, 'nanosec', 0) * 1e-9
-                times.append(tfs - t0)
         else:
             # fallback: use index with assumed dt of 0.1s
             est_dt = 0.1
@@ -195,8 +182,7 @@ class PFDemo(Node):
             rows.append(row)
 
         # Write CSV
-        timestamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        filename = f'data/planned_path_{timestamp}.csv'
+        filename = f'data/planned_path.csv'
         header = ['time_s', 'ee_px', 'ee_py', 'ee_pz', 'ee_qx',
                   'ee_qy', 'ee_qz', 'ee_qw', 'ee_vx', 'ee_vy', 'ee_vz']
         header += joint_names if joint_names else [
@@ -211,8 +197,8 @@ class PFDemo(Node):
                        for x in r]
                 writer.writerow(out)
 
-        self.get_logger().info(
-            f'Saved planned path CSV to {os.path.abspath(filename)}')
+        abs_path = os.path.abspath(filename)
+        self.get_logger().info(f'Saved planned path CSV to {abs_path}')
 
     def _on_plan_path_response(self, future):
         # Called when the async plan_path future is ready
@@ -228,19 +214,16 @@ class PFDemo(Node):
             return
 
         ee_path_len = len(res.end_effector_path.poses)
-        jt_points = len(res.joint_trajectory.points)
         ee_vels = len(res.end_effector_velocity_trajectory)
         self.get_logger().info(
-            f"(async) Received plan_path response: success={res.success}, end_effector_path.len={ee_path_len}, joint_trajectory.points={jt_points}, ee_velocity_traj={ee_vels}")
-
-        if ee_path_len > 0:
-            p = res.end_effector_path.poses[0].pose.position
-            self.get_logger().info(
-                f"(async) First EE pose: ({p.x:.4f}, {p.y:.4f}, {p.z:.4f})")
+            f"Received plan_path response: success={res.success}, Path Length={ee_path_len}")
+        p = res.end_effector_path.poses[0].pose.position
+        self.get_logger().info(
+            f"First EE pose: ({p.x:.4f}, {p.y:.4f}, {p.z:.4f})")
         if ee_vels > 0:
             v = res.end_effector_velocity_trajectory[0].twist.linear
             self.get_logger().info(
-                f"(async) First EE linear velocity: ({v.x:.6f}, {v.y:.6f}, {v.z:.6f})")
+                f"First EE linear velocity: ({v.x:.6f}, {v.y:.6f}, {v.z:.6f})")
 
         # Save CSV for offline plotting
         try:
