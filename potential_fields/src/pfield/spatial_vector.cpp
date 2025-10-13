@@ -24,6 +24,6 @@ double SpatialVector::euclideanDistance(const SpatialVector& other) const {
   return (this->position - other.position).norm();
 }
 
-double SpatialVector::angularDistance(const SpatialVector& other) {
+double SpatialVector::angularDistance(const SpatialVector& other) const {
   return this->orientation.angularDistance(other.getOrientation());
 }

@@ -87,7 +87,7 @@ public:
    * @param other the other spatial vector to compare its orientation
    * @return double the geodesic distance [rad]
    */
-  double angularDistance(const SpatialVector& other);
+  double angularDistance(const SpatialVector& other) const;
 
   bool operator==(const SpatialVector& other) const {
     return  this->position == other.position && this->orientation == other.orientation;

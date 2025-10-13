@@ -36,7 +36,10 @@ PotentialFieldManager::PotentialFieldManager()
   this->attractiveGain = this->declare_parameter("attractive_gain", 1.0f); // [Ns/m]
   this->rotationalAttractiveGain = this->declare_parameter("rotational_attractive_gain", 0.7f); // [Ns/m]
   this->repulsiveGain = this->declare_parameter("repulsive_gain", 1.0f); // [Ns/m]
-  this->maxVelocity = this->declare_parameter("max_velocity", 1.0f); // [m/s]
+  this->maxLinearVelocity = this->declare_parameter("max_linear_velocity", 1.0f); // [m/s]
+  this->maxAngularVelocity = this->declare_parameter("max_angular_velocity", 1.0f); // [rad/s]
+  this->maxLinearAcceleration = this->declare_parameter("max_linear_acceleration", 1.0f); // [m/s^2]
+  this->maxAngularAcceleration = this->declare_parameter("max_angular_acceleration", 1.0f); // [rad/s^2]
   this->influenceZoneScale = this->declare_parameter("influence_zone_scale", 2.0f); // Influence zone scaling factor
   this->fixedFrame = this->declare_parameter("fixed_frame", "world"); // RViz fixed frame
   this->visualizerBufferArea = this->declare_parameter("visualizer_buffer_area", 1.0f); // Extra area to visualize the PF [m]
@@ -46,14 +49,20 @@ PotentialFieldManager::PotentialFieldManager()
   this->attractiveGain = this->get_parameter("attractive_gain").as_double();
   this->rotationalAttractiveGain = this->get_parameter("rotational_attractive_gain").as_double();
   this->repulsiveGain = this->get_parameter("repulsive_gain").as_double();
-  this->maxVelocity = this->get_parameter("max_velocity").as_double();
+  this->maxLinearVelocity = this->get_parameter("max_linear_velocity").as_double();
+  this->maxAngularVelocity = this->get_parameter("max_angular_velocity").as_double();
+  this->maxLinearAcceleration = this->get_parameter("max_linear_acceleration").as_double();
+  this->maxAngularAcceleration = this->get_parameter("max_angular_acceleration").as_double();
   this->influenceZoneScale = this->get_parameter("influence_zone_scale").as_double();
   this->fixedFrame = this->get_parameter("fixed_frame").as_string();
   this->visualizerBufferArea = this->get_parameter("visualizer_buffer_area").as_double();
   this->fieldResolution = this->get_parameter("field_resolution").as_double();
 
   // Initialize the potential fields
-  this->pField = std::make_shared<PotentialField>(this->attractiveGain, this->rotationalAttractiveGain, this->maxVelocity);
+  this->pField = std::make_shared<PotentialField>(
+    this->attractiveGain, this->rotationalAttractiveGain, this->maxLinearVelocity, this->maxAngularVelocity,
+    this->maxLinearAcceleration, this->maxAngularAcceleration
+  );
 
   // Initialize a null motion plugin by default so the node can run without a real robot
   this->motionPlugin = std::make_unique<NullMotionPlugin>();
@@ -93,7 +102,7 @@ PotentialFieldManager::PotentialFieldManager()
         msg->pose.orientation.z
       )
     );
-    this->pField->updateGoalPosition(goalPose);
+    this->pField->setGoalPose(goalPose);
   }
   );
 
@@ -170,22 +179,24 @@ void PotentialFieldManager::handleComputeAutonomyVector(const ComputeAutonomyVec
       request->start.pose.orientation.y, request->start.pose.orientation.z
     )
   );
-  SpatialVector autonomyVector = this->pField->evaluateVelocityAtPose(queryPose);
+  TaskSpaceTwist autonomyVector = this->pField->evaluateVelocityAtPose(queryPose);
   response->autonomy_vector.header.frame_id = this->fixedFrame;
   response->autonomy_vector.header.stamp = this->now();
-  response->autonomy_vector.twist.linear.x = autonomyVector.getPosition().x();
-  response->autonomy_vector.twist.linear.y = autonomyVector.getPosition().y();
-  response->autonomy_vector.twist.linear.z = autonomyVector.getPosition().z();
-  // For angular velocity, convert quaternion to euler angles (yaw, pitch, roll)
-  Eigen::Vector3d eulerAngles = autonomyVector.getOrientation().toRotationMatrix().eulerAngles(2, 1, 0);
-  response->autonomy_vector.twist.angular.x = eulerAngles[2]; // roll
-  response->autonomy_vector.twist.angular.y = eulerAngles[1]; // pitch
-  response->autonomy_vector.twist.angular.z = eulerAngles[0]; // yaw
+  response->autonomy_vector.twist.linear.x = autonomyVector.getLinearVelocity().x();
+  response->autonomy_vector.twist.linear.y = autonomyVector.getLinearVelocity().y();
+  response->autonomy_vector.twist.linear.z = autonomyVector.getLinearVelocity().z();
+  response->autonomy_vector.twist.angular.x = autonomyVector.getAngularVelocity().x();
+  response->autonomy_vector.twist.angular.y = autonomyVector.getAngularVelocity().y();
+  response->autonomy_vector.twist.angular.z = autonomyVector.getAngularVelocity().z();
+  Eigen::Vector3d eulerAngles = queryPose.getOrientation().toRotationMatrix().eulerAngles(0, 1, 2);
+  const double roll = eulerAngles[0];
+  const double pitch = eulerAngles[1];
+  const double yaw = eulerAngles[2];
   RCLCPP_INFO(
     this->get_logger(),
     "Autonomy vector computed at pose: pos=(%.2f, %.2f, %.2f), RPY=(%.2f, %.2f, %.2f)",
     queryPose.getPosition().x(), queryPose.getPosition().y(), queryPose.getPosition().z(),
-    eulerAngles[2], eulerAngles[1], eulerAngles[0]
+    roll, pitch, yaw
   );
 }
 
@@ -249,17 +260,16 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
     return dist <= tolerance;
   };
 
-  auto toTwistStamped = [this](const SpatialVector& sv, const rclcpp::Time& stamp) -> geometry_msgs::msg::TwistStamped {
+  auto toTwistStamped = [this](const TaskSpaceTwist& twist, const rclcpp::Time& stamp) -> geometry_msgs::msg::TwistStamped {
     geometry_msgs::msg::TwistStamped ts;
     ts.header.frame_id = this->fixedFrame;
     ts.header.stamp = stamp;
-    ts.twist.linear.x = sv.getPosition().x();
-    ts.twist.linear.y = sv.getPosition().y();
-    ts.twist.linear.z = sv.getPosition().z();
-    Eigen::Vector3d eulerAngles = sv.getOrientation().toRotationMatrix().eulerAngles(2, 1, 0);
-    ts.twist.angular.x = eulerAngles[2]; // roll
-    ts.twist.angular.y = eulerAngles[1]; // pitch
-    ts.twist.angular.z = eulerAngles[0]; // yaw
+    ts.twist.linear.x = twist.getLinearVelocity().x();
+    ts.twist.linear.y = twist.getLinearVelocity().y();
+    ts.twist.linear.z = twist.getLinearVelocity().z();
+    ts.twist.angular.x = twist.getAngularVelocity().x();
+    ts.twist.angular.y = twist.getAngularVelocity().y();
+    ts.twist.angular.z = twist.getAngularVelocity().z();
     return ts;
   };
 
@@ -353,7 +363,7 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
     if (iter % 10000 == 0) {
       RCLCPP_INFO(this->get_logger(), "Planning iter=%u: path_len=%zu, joint_points=%zu", iter, path.poses.size(), jointTrajectory.points.size());
       RCLCPP_INFO(this->get_logger(), "iter=%u autonomy linear=(%.4f, %.4f, %.4f) next_pos=(%.4f, %.4f, %.4f)",
-        iter, autonomyVector.getPosition().x(), autonomyVector.getPosition().y(), autonomyVector.getPosition().z(),
+        iter, autonomyVector.getLinearVelocity().x(), autonomyVector.getLinearVelocity().y(), autonomyVector.getLinearVelocity().z(),
         nextPose.getPosition().x(), nextPose.getPosition().y(), nextPose.getPosition().z());
     }
     // Store the autonomy vector (end-effector velocity) with deterministic stamp
@@ -656,10 +666,8 @@ MarkerArray PotentialFieldManager::createPotentialVectorMarkers(std::shared_ptr<
         if (pf->isPointInsideObstacle(point)) { continue; }
         Marker vectorMarker;
         SpatialVector position{point};
-        SpatialVector velocity = pf->evaluateVelocityAtPose(position);
-        double magnitude = velocity.getPosition().norm();
-        // Normalize the velocity vector since we want to show direction
-        velocity.normalizePosition();
+        TaskSpaceTwist velocity = pf->evaluateVelocityAtPose(position);
+        double magnitude = velocity.getLinearVelocity().norm();
         vectorMarker.header.frame_id = this->fixedFrame;
         vectorMarker.header.stamp = this->now();
         vectorMarker.ns = "potential_vectors";
@@ -670,7 +678,8 @@ MarkerArray PotentialFieldManager::createPotentialVectorMarkers(std::shared_ptr<
         vectorMarker.pose.position.y = position.getPosition().y();
         vectorMarker.pose.position.z = position.getPosition().z();
         // Set the orientation of the arrow to point in the direction of the velocity vector
-        double yaw = std::atan2(velocity.getPosition().y(), velocity.getPosition().x());
+        const auto unitDirectionVector = velocity.getLinearVelocity().normalized();
+        double yaw = std::atan2(unitDirectionVector.y(), unitDirectionVector.x());
         vectorMarker.pose.orientation = PotentialFieldManager::getQuaternionFromYaw(yaw);
         vectorMarker.scale.x = 0.15f; // Length of the arrow
         vectorMarker.scale.y = 0.05f; // Shaft diameter
@@ -678,7 +687,7 @@ MarkerArray PotentialFieldManager::createPotentialVectorMarkers(std::shared_ptr<
         // Color the arrows using a gradient depending on
         // the magnitude of the velocity vector
         // max velocity is red and 0 is blue
-        double colorScale = std::min<double>(magnitude / this->maxVelocity, 1.0f);
+        double colorScale = std::min<double>(magnitude / this->maxLinearVelocity, 1.0f);
         vectorMarker.color.r = 1.0f - colorScale;
         vectorMarker.color.g = 0.0f;
         vectorMarker.color.b = colorScale;
@@ -761,11 +770,11 @@ void PotentialFieldManager::exportFieldDataToCSV(std::shared_ptr<PotentialField>
           continue;
         }
         SpatialVector position{point};
-        SpatialVector velocity = pf->evaluateVelocityAtPose(position);
+        TaskSpaceTwist velocity = pf->evaluateVelocityAtPose(position);
         vectors_file << x << "," << y << "," << z << ","
-          << velocity.getPosition().x() << ","
-          << velocity.getPosition().y() << ","
-          << velocity.getPosition().z() << "\n";
+          << velocity.getLinearVelocity().x() << ","
+          << velocity.getLinearVelocity().y() << ","
+          << velocity.getLinearVelocity().z() << "\n";
       }
     }
     vectors_file.close();

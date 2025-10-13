@@ -4,6 +4,10 @@
  * @brief Library for managing a vector field overlaid onto a
  *        robot's task-space (3D World) as a potential force field
  *        to plan motion trajectories.
+ *
+ * @details The field produces a task-space wrench (F) assuming a massless system: linear force [F] and torque [Nm]
+ *          The wrench is converted to a velocity vector (V): linear velocity [m/s] and angular velocity [rad/s]
+ *
  * @version 2.0
  * @date 2025-05-08
  *
@@ -15,11 +19,9 @@
 #ifndef PFIELDS_HPP
 #define PFIELDS_HPP
 
-#include <math.h>
-#include <stdexcept>
 #include <string>
-#include <unordered_map>
 #include <unordered_set>
+#include <unordered_map>
 #include <vector>
 
 #include <eigen3/Eigen/Core>
@@ -28,16 +30,96 @@
 #include "spatial_vector.hpp"
 #include "pf_obstacle.hpp"
 
+struct TaskSpaceWrench {
+  Eigen::Vector3d force{Eigen::Vector3d::Zero()}; // Linear Force [N]
+  Eigen::Vector3d torque{Eigen::Vector3d::Zero()}; // Torque [Nm]
+
+  TaskSpaceWrench(Eigen::Vector3d force, Eigen::Vector3d torque)
+    : force(force), torque(torque) {}
+};
+
+struct TaskSpaceTwist {
+  Eigen::Vector3d linearVelocity{Eigen::Vector3d::Zero()}; // Linear Velocity [m/s]
+  Eigen::Vector3d angularVelocity{Eigen::Vector3d::Zero()}; // Angular Velocity [rad/s]
+
+  TaskSpaceTwist(Eigen::Vector3d linearVelocity, Eigen::Vector3d angularVelocity)
+    : linearVelocity(linearVelocity), angularVelocity(angularVelocity) {}
+
+  Eigen::Vector3d getLinearVelocity() const { return this->linearVelocity; }
+  Eigen::Vector3d getAngularVelocity() const { return this->angularVelocity; }
+};
+
+// Default values
+constexpr double DEFAULT_ATTRACTIVE_GAIN = 1.0; // Gain for attractive force [Ns/m]
+constexpr double DEFAULT_ROTATIONAL_ATTRACTIVE_GAIN = 0.7; // Gain for rotational attractive force [Ns/m]
+constexpr double DEFAULT_MAX_LINEAR_VELOCITY = 5.0; // [m/s]
+constexpr double DEFAULT_MAX_ANGULAR_VELOCITY = 1.0; // [rad/s]
+constexpr double DEFAULT_MAX_LINEAR_ACCELERATION = 1.0; // [m/s^2]
+constexpr double DEFAULT_MAX_ANGULAR_ACCELERATION = 1.0; // [rad/s^2]
+
 class PotentialField {
 public:
+  // =========== Constructors and Operators ===========
   PotentialField() = default;
   ~PotentialField() = default;
 
   PotentialField(const PotentialField& other) :
     attractiveGain(other.attractiveGain),
     rotationalAttractiveGain(other.rotationalAttractiveGain),
+    maxLinearVelocity(other.maxLinearVelocity),
+    maxAngularVelocity(other.maxAngularVelocity),
+    maxLinearAcceleration(other.maxLinearAcceleration),
+    maxAngularAcceleration(other.maxAngularAcceleration),
     goalPose(other.goalPose),
     obstacles(other.obstacles) {}
+
+  /**
+   * @brief Constructs a PotentialField with the specified goal position.
+   *        The attractive gain and rotational attractive gain are set to default values.
+   *
+   * @param goalPose The pose in 3D space that will generate an attractive force.
+   */
+  explicit PotentialField(SpatialVector goalPose) :
+    attractiveGain(1.0),
+    rotationalAttractiveGain(0.7),
+    maxLinearVelocity(DEFAULT_MAX_LINEAR_VELOCITY),
+    maxAngularVelocity(DEFAULT_MAX_ANGULAR_VELOCITY),
+    maxLinearAcceleration(DEFAULT_MAX_LINEAR_ACCELERATION),
+    maxAngularAcceleration(DEFAULT_MAX_ANGULAR_ACCELERATION),
+    goalPose(goalPose) {}
+
+  PotentialField(SpatialVector goalPose, double attractiveGain, double rotationalAttractiveGain) :
+    attractiveGain(attractiveGain),
+    rotationalAttractiveGain(rotationalAttractiveGain),
+    maxLinearVelocity(DEFAULT_MAX_LINEAR_VELOCITY),
+    maxAngularVelocity(DEFAULT_MAX_ANGULAR_VELOCITY),
+    maxLinearAcceleration(DEFAULT_MAX_LINEAR_ACCELERATION),
+    maxAngularAcceleration(DEFAULT_MAX_ANGULAR_ACCELERATION),
+    goalPose(goalPose) {}
+
+  PotentialField(
+    double attractiveGain, double rotationalAttractiveGain,
+    double maxLinearVelocity, double maxAngularVelocity) :
+    attractiveGain(attractiveGain),
+    rotationalAttractiveGain(rotationalAttractiveGain),
+    maxLinearVelocity(maxLinearVelocity),
+    maxAngularVelocity(maxAngularVelocity),
+    maxLinearAcceleration(DEFAULT_MAX_LINEAR_ACCELERATION),
+    maxAngularAcceleration(DEFAULT_MAX_ANGULAR_ACCELERATION),
+    goalPose(SpatialVector(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity())) {}
+
+  PotentialField(
+    double attractiveGain, double rotationalAttractiveGain,
+    double maxLinearVelocity, double maxAngularVelocity,
+    double maxLinearAcceleration, double maxAngularAcceleration) :
+    attractiveGain(attractiveGain),
+    rotationalAttractiveGain(rotationalAttractiveGain),
+    maxLinearVelocity(maxLinearVelocity),
+    maxAngularVelocity(maxAngularVelocity),
+    maxLinearAcceleration(maxLinearAcceleration),
+    maxAngularAcceleration(maxAngularAcceleration),
+    goalPose(SpatialVector(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity())) {}
+
 
   PotentialField& operator=(const PotentialField& other) {
     if (this != &other) {
@@ -49,53 +131,44 @@ public:
     return *this;
   }
 
-  /**
-   * @brief Constructs a PotentialField with the specified goal position.
-   *        The attractive gain and rotational attractive gain are set to default values.
-   *
-   * @param goalPose The pose in 3D space that will generate an attractive force.
-   */
-  explicit PotentialField(SpatialVector goalPose) :
-    attractiveGain(1.0),
-    rotationalAttractiveGain(0.7),
-    goalPose(goalPose),
-    maxVelocity(1.0) {}
+  bool operator==(const PotentialField& other) const {
+    auto obstaclesEqual = [this, &other]() -> bool {
+      if (this->obstacles.size() != other.obstacles.size()) return false;
+      // Convert both obstacle lists to unordered_sets for comparison
+      std::unordered_set<PotentialFieldObstacle, PotentialFieldObstacleHash> thisObstaclesSet(
+        this->obstacles.cbegin(), this->obstacles.cend()
+      );
+      std::unordered_set<PotentialFieldObstacle, PotentialFieldObstacleHash> otherObstaclesSet(
+        other.obstacles.cbegin(), other.obstacles.cend()
+      );
+      return thisObstaclesSet == otherObstaclesSet;
+    }();
+    return this->attractiveGain == other.attractiveGain &&
+      this->rotationalAttractiveGain == other.rotationalAttractiveGain &&
+      this->goalPose == other.goalPose &&
+      obstaclesEqual;
+  }
 
-  PotentialField(SpatialVector goalPose, double attractiveGain, double rotationalAttractiveGain) :
-    attractiveGain(attractiveGain),
-    rotationalAttractiveGain(rotationalAttractiveGain),
-    goalPose(goalPose),
-    maxVelocity(1.0) {}
+  bool operator!=(const PotentialField& other) const { return !(*this == other); }
 
-  PotentialField(double attractiveGain, double rotationalAttractiveGain, double maxVelocity) :
-    attractiveGain(attractiveGain),
-    rotationalAttractiveGain(rotationalAttractiveGain),
-    goalPose(SpatialVector(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity())),
-    maxVelocity(maxVelocity) {}
+  // ============ Getters and Setters ============
+  void setAttractiveGain(double newAttractiveGain) { this->attractiveGain = newAttractiveGain; }
+  void setRotationalAttractiveGain(double newRotationalAttractiveGain) { this->rotationalAttractiveGain = newRotationalAttractiveGain; }
+  void setMaxLinearVelocity(double newMaxLinearVelocity) { this->maxLinearVelocity = newMaxLinearVelocity; }
+  void setMaxAngularVelocity(double newMaxAngularVelocity) { this->maxAngularVelocity = newMaxAngularVelocity; }
+  void setMaxLinearAcceleration(double newMaxLinearAcceleration) { this->maxLinearAcceleration = newMaxLinearAcceleration; }
+  void setMaxAngularAcceleration(double newMaxAngularAcceleration) { this->maxAngularAcceleration = newMaxAngularAcceleration; }
+  void setGoalPose(SpatialVector newGoalPose) { this->goalPose = newGoalPose; }
+  double getAttractiveGain() const { return this->attractiveGain; }
+  double getRotationalAttractiveGain() const { return this->rotationalAttractiveGain; }
+  double getMaxLinearVelocity() const { return this->maxLinearVelocity; }
+  double getMaxAngularVelocity() const { return this->maxAngularVelocity; }
+  double getMaxLinearAcceleration() const { return this->maxLinearAcceleration; }
+  double getMaxAngularAcceleration() const { return this->maxAngularAcceleration; }
+  SpatialVector getGoalPose() const { return this->goalPose; }
+  std::vector<PotentialFieldObstacle> getObstacles() const { return this->obstacles; }
 
-  /**
- * @brief Updates the goal position (3D Vector) in the potential field.
- *
- * @note The Goal Position creates an attractive force towards it
- *
- * @param newGoalPose The new goal position to be set.
- */
-  void updateGoalPosition(SpatialVector newGoalPose) { this->goalPose = newGoalPose; }
-
-  /**
-   * @brief Updates the attractive gain, scaling the force
-   *        applied pulling points towards the goal.
-   *
-   * @param newAttractiveGain The new attractive gain to be set.
-   */
-  void updateAttractiveGain(double newAttractiveGain) { this->attractiveGain = newAttractiveGain; }
-
-  /**
-   * @brief Updates the maximum velocity the potential field is allowed to express
-   *
-   * @param newMaxVelocity The new max velocity [m/s]
-   */
-  void updateMaxVelocity(double newMaxVelocity) { this->maxVelocity = newMaxVelocity; }
+  // ============ Obstacle Management ============
 
   /**
    * @brief Adds a new obstacle to the potential field.
@@ -120,16 +193,50 @@ public:
 
   PotentialFieldObstacle getObstacleByID(const std::string& obstacleFrameID) const;
 
+  bool isPointInsideObstacle(Eigen::Vector3d point) const;
+  bool isPointWithinInfluenceZone(Eigen::Vector3d point) const;
+
+  // ============ Force and Velocity Computation ============
+
   /**
-   * @brief Given a 3D position, computes the velocity vector
+   * @brief Given a 3D position, computes the task-space wrench
    *        by combining attractive and repulsive forces.
    *
-   * @param queryPose The pose in 3D space to compute the velocity vector.
-   * @return SpatialVector The resultant velocity vector.
+   * @param queryPose The pose in 3D space to compute the wrench.
+   * @return TaskSpaceWrench The resultant task-space wrench [N, Nm]
    */
-  SpatialVector evaluateVelocityAtPose(SpatialVector queryPose);
+  TaskSpaceWrench evaluateWrenchAtPose(const SpatialVector& queryPose) const;
 
-  Eigen::Vector3d angularVelocityFromQuaternion(const Eigen::Quaterniond& q, double deltaTime);
+  /**
+   * @brief Given a 3D position, computes the task-space twist (velocity)
+   *        by combining attractive and repulsive forces and converting to velocity vectors
+   *
+   * @param queryPose The pose in 3D space to compute the velocity
+   * @return TaskSpaceTwist The resultant task-space twist [m/s, rad/s]
+   */
+  TaskSpaceTwist evaluateVelocityAtPose(const SpatialVector& queryPose) const;
+
+  /**
+   * @brief Converts a task-space wrench to a task-space twist (velocity)
+   *        using gain parameters converting force to velocity [m/s per N] and [rad/s per Nm]
+   *
+   * @note This function assumes a massless system where linearGain [(m/s)/N] and angularGain [(rad/s)/Nm] are both 1.0
+   *
+   * @param wrench The task-space wrench to convert.
+   * @return TaskSpaceTwist The resultant task-space twist [m/s, rad/s].
+   */
+  TaskSpaceTwist wrenchToTwist(const TaskSpaceWrench& wrench) const;
+
+  /**
+   * @brief Applies velocity and acceleration limits to a task-space twist
+   *
+   * @param twist The input task-space twist to be limited
+   * @param prevTwist The previous task-space twist for acceleration limiting, can use zero if not available
+   * @param dt The time step over which to apply acceleration limits [s]
+   * @return TaskSpaceTwist The limited task-space twist
+   */
+  TaskSpaceTwist applyVelocityLimits(
+    const TaskSpaceTwist& twist, const TaskSpaceTwist& prevTwist, const double dt) const;
 
   /**
    * @brief Given a current pose and a delta time, computes the next pose after the time step.
@@ -142,6 +249,18 @@ public:
    * @return SpatialVector The resulting pose after applying the velocity field for the time step.
    */
   SpatialVector interpolateNextPose(const SpatialVector& currentPose, const double deltaTime);
+
+  /**
+   * @brief Given a current position, an instantaneous linear velocity vector, and a delta time,
+   *        integrates the linear velocity to compute the new position after the time step.
+   *
+   * @param currentPosition The starting position as a 3D vector.
+   * @param linearVelocity The instantaneous linear velocity vector in meters per second.
+   * @param deltaTime The time step over which to integrate the linear velocity [s].
+   * @return Eigen::Vector3d The resulting position after integrating the linear velocity.
+   */
+  Eigen::Vector3d integrateLinearVelocity(const Eigen::Vector3d& currentPosition,
+    const Eigen::Vector3d& linearVelocity, double deltaTime);
 
   /**
    * @brief Given a current orientation and a delta time, computes the angular velocity
@@ -157,81 +276,48 @@ public:
     const Eigen::Vector3d& angularVelocity,
     double deltaTime);
 
-  /**
-   * @brief Given a current position, an instantaneous linear velocity vector, and a delta time,
-   *        integrates the linear velocity to compute the new position after the time step.
-   *
-   * @param currentPosition The starting position as a 3D vector.
-   * @param linearVelocity The instantaneous linear velocity vector in meters per second.
-   * @param deltaTime The time step over which to integrate the linear velocity [s].
-   * @return Eigen::Vector3d The resulting position after integrating the linear velocity.
-   */
-  Eigen::Vector3d integrateLinearVelocity(const Eigen::Vector3d& currentPosition,
-    const Eigen::Vector3d& linearVelocity, double deltaTime);
-
-  Eigen::Vector3d computeRotationalVelocity(const SpatialVector& queryPose) const;
-
-  SpatialVector getGoalPose() const;
-  std::vector<PotentialFieldObstacle> getObstacles() const;
-
-  bool isPointInsideObstacle(Eigen::Vector3d point) const;
-
-  bool isPointWithinInfluenceZone(Eigen::Vector3d point) const;
-
-  bool operator==(const PotentialField& other) const {
-    auto obstaclesEqual = [this, &other]() -> bool {
-      if (this->obstacles.size() != other.obstacles.size()) return false;
-      // Convert both obstacle lists to unordered_sets for comparison
-      std::unordered_set<PotentialFieldObstacle, PotentialFieldObstacleHash> thisObstaclesSet(
-        this->obstacles.cbegin(), this->obstacles.cend()
-      );
-      std::unordered_set<PotentialFieldObstacle, PotentialFieldObstacleHash> otherObstaclesSet(
-        other.obstacles.cbegin(), other.obstacles.cend()
-      );
-      return thisObstaclesSet == otherObstaclesSet;
-    }();
-    return this->attractiveGain == other.attractiveGain &&
-      this->rotationalAttractiveGain == other.rotationalAttractiveGain &&
-      this->goalPose == other.goalPose &&
-      obstaclesEqual;
-  }
-
-  bool operator!=(const PotentialField& other) const { return !(*this == other); }
-
 private:
   double attractiveGain; // Gain for attractive force
   double rotationalAttractiveGain; // Gain for rotational attractive force
-  double translationalTolerance = 1e-3; // Threshold for distances to the goal and obstacles
-  double rotationalThreshold = 0.06; // Threshold for rotational geodesic distance
+  double maxLinearVelocity; // [m/s]
+  double maxAngularVelocity; // [rad/s]
+  double maxLinearAcceleration; // [m/s^2]
+  double maxAngularAcceleration; // [rad/s^2]
   SpatialVector goalPose; // Current GoalPose
   std::vector<PotentialFieldObstacle> obstacles; // Obstacle list
-  // Fast lookup for obstacle updates/removals by ID
-  std::unordered_map<std::string, size_t> obstacleIndex;
-  double maxVelocity; // Max linear velocity [m/s]
+  std::unordered_map<std::string, size_t> obstacleIndex; // Fast lookup for obstacle updates/removals by ID
+  const double translationalTolerance = 1e-3; // Threshold for distances to the goal and obstacles [m]
+  const double rotationalThreshold = 0.02; // Threshold for rotational geodesic distance [rad]
 
   /**
-   * @brief Computes the attractive force towards the goal pose. Also computes the
-   * rotational force to align the query pose with the goal pose.
+   * @brief Computes the attractive force towards the goal position
    *
-   * @note Equation: F = -attractiveGain * (distace * direction)
-   *       where direction is a unit vector pointing towards the goal.
+   * @note Equation: F = -attractiveGain * (distance * direction)
    *
-   * @param queryPose The pose in 3D space to compute the force from.
-   * @return SpatialVector The attractive force vector.
+   * @param queryPose The pose in 3D space to compute the force from
+   * @return Eigen::Vector3d The attractive force vector [N]
    */
-  SpatialVector computeAttractiveForces(SpatialVector queryPose);
+  Eigen::Vector3d computeAttractiveForceLinear(const SpatialVector& queryPose) const;
 
   /**
-   * @brief Computes the repulsive forces from all obstacles
-   *        and returns the resultant vector.
+   * @brief Computes the attractive moment (torque) to align the query pose's orientation with the goal pose's orientation
+   *
+   * @note Equation: M = -rotationalAttractiveGain * (angle * axis)
+   *
+   * @param queryPose The pose in 3D space to compute the moment from
+   * @return Eigen::Vector3d The attractive moment vector [Nm]
+   */
+  Eigen::Vector3d computeAttractiveMoment(const SpatialVector& queryPose) const;
+
+  /**
+   * @brief Computes the repulsive linear force from all obstacles
    *
    * @note Equation: F = repulsiveGain * (1/distance - 1/influence) * (1 / distance^2) * direction
-   *       where direction is a unit vector pointing away from the obstacle.
    *
-   * @param queryPose The position in 3D space to compute the force from.
-   * @return SpatialVector The repulsive force vector.
+   * @param queryPose The position in 3D space to compute the force from
+   * @return Eigen::Vector3d The repulsive force vector [N]
    */
-  SpatialVector computeRepulsiveForces(SpatialVector queryPose);
+  Eigen::Vector3d computeRepulsiveForceLinear(const SpatialVector& queryPose) const;
 };
 
 #endif // PFIELDS_HPP

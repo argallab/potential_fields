@@ -78,7 +78,10 @@ private:
   double attractiveGain; // Attractive gain [Ns/m]
   double rotationalAttractiveGain; // Rotational attractive gain [Ns/m]
   double repulsiveGain; // Repulsive gain [Ns/m]
-  double maxVelocity; // Maximum Velocity [m/s]
+  double maxLinearVelocity; // Maximum Linear Velocity [m/s]
+  double maxAngularVelocity; // Maximum Angular Velocity [rad/s]
+  double maxLinearAcceleration; // Maximum Linear Acceleration [m/s^2]
+  double maxAngularAcceleration; // Maximum Angular Acceleration [rad/s^2]
   double influenceZoneScale; // Influence zone scaling factor
   std::string fixedFrame; // RViz fixed frame for visualization and PF computation
   // Potential field instances (shared_ptr to avoid inadvertent copying when passing to visualization helpers)
