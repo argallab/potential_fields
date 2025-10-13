@@ -4,8 +4,8 @@ pfield_manager:
     attractive_gain: 1.0 # [Ns/m]
     rotational_attractive_gain: 0.7 # [Ns/m]
     repulsive_gain: 20.0 # [Ns/m]
-    max_force: 10.0 # [N]
-    influence_zone_scale: 2.0 # Influence zone scaling factor
+    max_velocity: 1.0 # [m/s]
+    influence_zone_scale: 1.25 # Influence zone scaling factor
     visualizer_buffer_area: 0.5 # Extra area around obstacles and goal to visualize the PF [m]
     field_resolution: 0.5 # Resolution to show PF velocity arrows in RViz [m]
 robot_parser:

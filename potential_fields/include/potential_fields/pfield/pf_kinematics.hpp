@@ -2,7 +2,7 @@
 #define PF_KINEMATICS_HPP
 #include <string>
 #include <vector>
-#include <Eigen/Dense>
+#include <Eigen/Geometry>
 #include <unordered_map>
 
 // Pinocchio full headers (Model and Data must be complete in the header)

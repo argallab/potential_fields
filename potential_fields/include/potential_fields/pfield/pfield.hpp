@@ -2,9 +2,9 @@
  * @file pfield.hpp
  * @author Sharwin Patil (sharwinpatil@u.northwestern.edu)
  * @brief Library for managing a vector field overlaid onto a
- *        robot's task-space (3D World) as a velocity field
+ *        robot's task-space (3D World) as a potential force field
  *        to plan motion trajectories.
- * @version 1.0
+ * @version 2.0
  * @date 2025-05-08
  *
  *
@@ -22,7 +22,8 @@
 #include <unordered_set>
 #include <vector>
 
-#include <eigen3/Eigen/Dense>
+#include <eigen3/Eigen/Core>
+#include <eigen3/Eigen/Geometry>
 
 #include "spatial_vector.hpp"
 #include "pf_obstacle.hpp"

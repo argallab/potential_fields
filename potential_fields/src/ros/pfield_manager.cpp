@@ -26,6 +26,7 @@
 
 #include "ros/pfield_manager.hpp"
 #include "robot_plugins/null_motion_plugin.hpp"
+#include "robot_plugins/franka_plugin.hpp"
 
 PotentialFieldManager::PotentialFieldManager()
   : Node("potential_field_manager") {
@@ -35,7 +36,7 @@ PotentialFieldManager::PotentialFieldManager()
   this->attractiveGain = this->declare_parameter("attractive_gain", 1.0f); // [Ns/m]
   this->rotationalAttractiveGain = this->declare_parameter("rotational_attractive_gain", 0.7f); // [Ns/m]
   this->repulsiveGain = this->declare_parameter("repulsive_gain", 1.0f); // [Ns/m]
-  this->maxForce = this->declare_parameter("max_force", 10.0f); // [N]
+  this->maxVelocity = this->declare_parameter("max_velocity", 1.0f); // [m/s]
   this->influenceZoneScale = this->declare_parameter("influence_zone_scale", 2.0f); // Influence zone scaling factor
   this->fixedFrame = this->declare_parameter("fixed_frame", "world"); // RViz fixed frame
   this->visualizerBufferArea = this->declare_parameter("visualizer_buffer_area", 1.0f); // Extra area to visualize the PF [m]
@@ -45,17 +46,18 @@ PotentialFieldManager::PotentialFieldManager()
   this->attractiveGain = this->get_parameter("attractive_gain").as_double();
   this->rotationalAttractiveGain = this->get_parameter("rotational_attractive_gain").as_double();
   this->repulsiveGain = this->get_parameter("repulsive_gain").as_double();
-  this->maxForce = this->get_parameter("max_force").as_double();
+  this->maxVelocity = this->get_parameter("max_velocity").as_double();
   this->influenceZoneScale = this->get_parameter("influence_zone_scale").as_double();
   this->fixedFrame = this->get_parameter("fixed_frame").as_string();
   this->visualizerBufferArea = this->get_parameter("visualizer_buffer_area").as_double();
   this->fieldResolution = this->get_parameter("field_resolution").as_double();
 
   // Initialize the potential fields
-  this->pField = std::make_shared<PotentialField>(this->attractiveGain, this->rotationalAttractiveGain, this->maxForce);
+  this->pField = std::make_shared<PotentialField>(this->attractiveGain, this->rotationalAttractiveGain, this->maxVelocity);
 
   // Initialize a null motion plugin by default so the node can run without a real robot
   this->motionPlugin = std::make_unique<NullMotionPlugin>();
+  // this->motionPlugin = std::make_unique<FrankaPlugin>();
   RCLCPP_INFO(this->get_logger(), "Using Motion Plugin: %s", this->motionPlugin->getName().c_str());
 
   // Setup TF2 broadcaster, buffer, and listener
@@ -247,10 +249,10 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
     return dist <= tolerance;
   };
 
-  auto toTwistStamped = [this](const SpatialVector& sv) -> geometry_msgs::msg::TwistStamped {
+  auto toTwistStamped = [this](const SpatialVector& sv, const rclcpp::Time& stamp) -> geometry_msgs::msg::TwistStamped {
     geometry_msgs::msg::TwistStamped ts;
     ts.header.frame_id = this->fixedFrame;
-    ts.header.stamp = this->now();
+    ts.header.stamp = stamp;
     ts.twist.linear.x = sv.getPosition().x();
     ts.twist.linear.y = sv.getPosition().y();
     ts.twist.linear.z = sv.getPosition().z();
@@ -261,10 +263,10 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
     return ts;
   };
 
-  auto toPoseStamped = [this](const SpatialVector& sv) -> geometry_msgs::msg::PoseStamped {
+  auto toPoseStamped = [this](const SpatialVector& sv, const rclcpp::Time& stamp) -> geometry_msgs::msg::PoseStamped {
     geometry_msgs::msg::PoseStamped ps;
     ps.header.frame_id = this->fixedFrame;
-    ps.header.stamp = this->now();
+    ps.header.stamp = stamp;
     ps.pose.position.x = sv.getPosition().x();
     ps.pose.position.y = sv.getPosition().y();
     ps.pose.position.z = sv.getPosition().z();
@@ -280,8 +282,9 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
   RCLCPP_INFO(this->get_logger(), "Starting planning from start pose (%.3f, %.3f, %.3f)",
     currentPose.pose.position.x, currentPose.pose.position.y, currentPose.pose.position.z);
   nav_msgs::msg::Path path;
-  path.header.frame_id = "world"; // default; could be parameterized
-  path.header.stamp = this->now();
+  const auto base_time = this->now();
+  path.header.frame_id = this->fixedFrame; // ensure consistent frame
+  path.header.stamp = base_time;
   trajectory_msgs::msg::JointTrajectory jointTrajectory;
   jointTrajectory.header = path.header;
   jointTrajectory.joint_names = ikSolver->getJointNames();
@@ -291,15 +294,23 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
   const int max_iters = 30000; // TODO(Sharwin): Parameterize this (or derive from MotionPlugin)
   unsigned int iter = 0;
   bool reached = false;
-  const auto startTime = this->now();
+  // Deterministic time base: t_i = base_time + i * delta_time
+  const double dt = (request->delta_time > 0.0) ? request->delta_time : 0.1;
+  std::size_t step = 0;
   while (iter++ < max_iters && !reached) {
     // Check if we reached the goal within the tolerance and exit early if so
     if (checkReached(currentPose, request->goal, request->goal_tolerance)) {
       reached = true;
       break;
     }
-    // Save current pose and current joint state
-    path.poses.push_back(currentPose);
+    // Save current pose (stamped deterministically)
+    {
+      const rclcpp::Time stamp_i = base_time + rclcpp::Duration::from_seconds(step * dt);
+      auto stampedPose = currentPose;
+      stampedPose.header.frame_id = this->fixedFrame;
+      stampedPose.header.stamp = stamp_i;
+      path.poses.push_back(stampedPose);
+    }
     // Call IK on current pose to get current joint angles
     auto jointAngles = getJointAngles(currentPose);
     if (jointAngles.empty()) {
@@ -311,8 +322,8 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
     // Save joint angles for JointTrajectory
     trajectory_msgs::msg::JointTrajectoryPoint jointTrajectoryPoint;
     jointTrajectoryPoint.positions = jointAngles;
-    const auto timeFromStart = this->now() - startTime;
-    jointTrajectoryPoint.time_from_start = rclcpp::Duration::from_seconds(timeFromStart.seconds());
+    // Deterministic time_from_start aligned with step index
+    jointTrajectoryPoint.time_from_start = rclcpp::Duration::from_seconds(step * dt);
     jointTrajectory.points.push_back(jointTrajectoryPoint);
     // Publish joint angles to planned joint state for PFManager to update its internal PF
     publishPlanningJointStates(jointAngles);
@@ -345,10 +356,17 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
         iter, autonomyVector.getPosition().x(), autonomyVector.getPosition().y(), autonomyVector.getPosition().z(),
         nextPose.getPosition().x(), nextPose.getPosition().y(), nextPose.getPosition().z());
     }
-    // Store the autonomy vector (end-effector velocity) returned by PF interpolation
-    eeVelocityTrajectory.push_back(toTwistStamped(autonomyVector));
-    // Update the current pose before moving to next iteration
-    currentPose = toPoseStamped(nextPose);
+    // Store the autonomy vector (end-effector velocity) with deterministic stamp
+    {
+      const rclcpp::Time stamp_i = base_time + rclcpp::Duration::from_seconds(step * dt);
+      eeVelocityTrajectory.push_back(toTwistStamped(autonomyVector, stamp_i));
+    }
+    // Update the current pose before moving to next iteration; stamp next pose for continuity
+    {
+      const rclcpp::Time stamp_next = base_time + rclcpp::Duration::from_seconds((step + 1) * dt);
+      currentPose = toPoseStamped(nextPose, stamp_next);
+    }
+    ++step;
   }
   this->plannedEndEffectorPathPub->publish(path);
   response->end_effector_path = path;
@@ -659,8 +677,8 @@ MarkerArray PotentialFieldManager::createPotentialVectorMarkers(std::shared_ptr<
         vectorMarker.scale.z = 0.1f; // Head diameter
         // Color the arrows using a gradient depending on
         // the magnitude of the velocity vector
-        // maxForce is red and 0 is blue
-        double colorScale = std::min<double>(magnitude / this->maxForce, 1.0f);
+        // max velocity is red and 0 is blue
+        double colorScale = std::min<double>(magnitude / this->maxVelocity, 1.0f);
         vectorMarker.color.r = 1.0f - colorScale;
         vectorMarker.color.g = 0.0f;
         vectorMarker.color.b = colorScale;

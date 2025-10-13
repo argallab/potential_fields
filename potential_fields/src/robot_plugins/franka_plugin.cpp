@@ -60,8 +60,8 @@ bool FrankaIKSolver::solve(
   solution = std::vector<double>(result.joint_angles.begin(), result.joint_angles.end());
   // Copy the result Jacobian to the output J matrix, resizing to 6x7 since  Franka is 7-DOF
   J.resize(6, 7);
-  for (size_t col = 0; col < J.cols(); ++col) {
-    for (size_t row = 0; row < J.rows(); ++row) {
+  for (int col = 0; col < J.cols(); ++col) {
+    for (int row = 0; row < J.rows(); ++row) {
       J(row, col) = result.jacobian.at(col).at(row);
     }
   }
@@ -69,7 +69,8 @@ bool FrankaIKSolver::solve(
 }
 
 FrankaPlugin::FrankaPlugin(const std::string& hostname) : MotionPlugin("FrankaPlugin") {
-  this->assignIKSolver(std::make_shared<FrankaIKSolver>());
+  IKSolverSearchParameters ikSolverParams;
+  this->assignIKSolver(std::make_shared<FrankaIKSolver>(ikSolverParams));
   this->initializeRobot(hostname);
 }
 
@@ -82,6 +83,8 @@ bool FrankaPlugin::initializeRobot(const std::string& hostname) {
     std::cerr << "Failed to connect to Franka robot at " << hostname << ": " << e.what() << std::endl;
     return false;
   }
+  // Successfully initialized the robot
+  return true;
 }
 
 bool FrankaPlugin::startControlLoop(const franka::Duration& movementDuration) {
@@ -91,7 +94,8 @@ bool FrankaPlugin::startControlLoop(const franka::Duration& movementDuration) {
   }
 
   auto controlTime = franka::Duration(0.0);
-  auto controlCallback = [this, &controlTime, &movementDuration](const franka::RobotState& robotState,
+  auto controlCallback = [this, &controlTime, &movementDuration](
+    [[maybe_unused]] const franka::RobotState& robotState,
     franka::Duration period) -> franka::CartesianVelocities {
     // Move along the controlTime to see if we should finish the motion
     controlTime += period;
@@ -136,7 +140,7 @@ bool FrankaPlugin::sendCartesianTwist(const geometry_msgs::msg::Twist& endEffect
   return true;
 }
 
-bool FrankaPlugin::sendJointStates(const sensor_msgs::msg::JointState& js) { return false; }
+bool FrankaPlugin::sendJointStates([[maybe_unused]] const sensor_msgs::msg::JointState& js) { return false; }
 
 bool FrankaPlugin::readRobotState(sensor_msgs::msg::JointState& js, geometry_msgs::msg::PoseStamped& endEffectorPose) {
   try {

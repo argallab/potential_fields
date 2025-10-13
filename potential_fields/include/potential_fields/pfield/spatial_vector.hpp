@@ -16,7 +16,8 @@
 #include <algorithm>
 #include <cmath>
 #include <stdexcept>
-#include <eigen3/Eigen/Dense>
+#include <eigen3/Eigen/Core>
+#include <eigen3/Eigen/Geometry>
 
 class SpatialVector {
 public:

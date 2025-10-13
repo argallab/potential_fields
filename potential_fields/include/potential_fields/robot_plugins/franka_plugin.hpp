@@ -13,6 +13,7 @@
 #include <franka/robot.h>
 
 #include "examples_common.h"
+#include "weighted_ik.h"
 #include "motion_plugin.hpp"
 
 /**
@@ -49,6 +50,14 @@ public:
    */
   bool solve(const Eigen::Isometry3d& targetPose, const std::vector<double>& seed,
     std::vector<double>& solution, Eigen::Matrix<double, 6, Eigen::Dynamic>& J) override;
+
+  // Jacobian-only computation to satisfy IKSolver interface,
+  // but Franka Jacobian needs targetPose so this function is not implemented
+  bool computeJacobian(
+    [[maybe_unused]] const std::vector<double>& jointPositions,
+    [[maybe_unused]] Eigen::Matrix<double, 6, Eigen::Dynamic>& J) override {
+    return false;
+  }
 
   std::vector<std::string> getJointNames() const override {
     return {"panda_joint1", "panda_joint2", "panda_joint3", "panda_joint4",
