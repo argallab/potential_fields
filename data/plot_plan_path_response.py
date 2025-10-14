@@ -110,8 +110,7 @@ def create_plot(df):
 
     plt.tight_layout()
     plt.savefig('planned_path_2d_plots.png')
-
-    print("Plots saved as 'planned_path_ee_path.png' and 'planned_path_2d_plots.png'")
+    plt.show()
 
 
 if __name__ == "__main__":
