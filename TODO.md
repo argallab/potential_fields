@@ -9,8 +9,12 @@
 ---
 
 # Immediate TODOs
-- Finish PlanPath Service Implementation with FrankaIKPlugin
-- Create a demo where PlanPath service sends JointTrajectory into MoveIt JointTrajectory Action Server (Franka moveit demo)
+- Finish PlanPath Service Implementation with FrankaIKPlugin to obtain a valid JointTrajectory
+  - Create 3 different demos for testing:
+    - No Obstacles and easy reachable goal (forwards or single motion)
+    - With Obstacles surrounding a easily reachable goal
+    - With obstacles obstructing the path to the goal
+- Implement sending the JointTrajectory to the MoveIt JointTrajectory Action Server (Franka moveit demo)
 - Use Pinnochio/KDL library on the given URDF to compute FK and update robot obstacles instead of listening to TF frames
   - Previous data-flow for URDF to PF Obstacles: URDF -> RSP (updates from JSP) -> TF -> PF Obstacles
   - New data-flow for URDF to PF Obstacles: URDF -> Pinnochio/KDL -> FK Definition -> Joint Angles -> PF Obstacles
