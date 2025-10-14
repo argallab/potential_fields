@@ -324,7 +324,7 @@ public:
    *
    * @param startPose The starting pose as a SpatialVector.
    * @param dt The time step for each iteration of the path planning [s].
-   * @param maxIterations The maximum number of iterations to perform for path planning.
+   * @param maxIterations The maximum number of iterations to perform for path planning, defaults to 30000.
    * @return PlannedPath The planned path containing poses, twists, joint angles, and timestamps.
    */
   PlannedPath planPath(const SpatialVector& startPose, double dt, unsigned int maxIterations = 30000);
