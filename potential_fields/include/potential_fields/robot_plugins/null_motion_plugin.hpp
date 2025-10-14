@@ -35,6 +35,8 @@ public:
   std::vector<std::string> getJointNames() const override {
     return {"joint1", "joint2", "joint3", "joint4", "joint5", "joint6", "joint7"};
   }
+
+  std::vector<double> getHomeConfiguration() const override { return std::vector<double>(7, 0.0); }
 };
 
 // A null MotionPlugin which performs no real robot IO and is suitable for offline testing

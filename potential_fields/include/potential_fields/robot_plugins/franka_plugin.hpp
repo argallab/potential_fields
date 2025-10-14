@@ -60,8 +60,12 @@ public:
   }
 
   std::vector<std::string> getJointNames() const override {
-    return {"panda_joint1", "panda_joint2", "panda_joint3", "panda_joint4",
-            "panda_joint5", "panda_joint6", "panda_joint7"};
+    return {"fer_joint1", "fer_joint2", "fer_joint3", "fer_joint4",
+            "fer_joint5", "fer_joint6", "fer_joint7"};
+  }
+
+  std::vector<double> getHomeConfiguration() const override {
+    return std::vector<double>(this->homeJointAngles.cbegin(), this->homeJointAngles.cend());
   }
 
 private:

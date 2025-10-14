@@ -169,6 +169,14 @@ install(
   RUNTIME DESTINATION bin
 )
 
+# Install the robot_plugins shared library so it is available at runtime
+install(
+  TARGETS robot_plugins
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION bin
+)
+
 install(
   TARGETS pfield_manager
   DESTINATION lib/${PROJECT_NAME}

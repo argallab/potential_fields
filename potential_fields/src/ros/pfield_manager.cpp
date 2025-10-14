@@ -64,11 +64,10 @@ PotentialFieldManager::PotentialFieldManager()
     this->maxLinearVelocity, this->maxAngularVelocity,
     this->maxLinearAcceleration, this->maxAngularAcceleration
   );
-  const std::string frankaHostName = "192.168.1.1";
 
-  // Initialize a null motion plugin by default so the node can run without a real robot
-  this->motionPlugin = std::make_unique<NullMotionPlugin>();
-  // this->motionPlugin = std::make_unique<FrankaPlugin>(frankaHostName);
+  const std::string frankaHostname = std::string();
+  // this->motionPlugin = std::make_unique<NullMotionPlugin>();
+  this->motionPlugin = std::make_unique<FrankaPlugin>(frankaHostname);
   RCLCPP_INFO(this->get_logger(), "Using Motion Plugin: %s", this->motionPlugin->getName().c_str());
 
   // Setup TF2 broadcaster, buffer, and listener
@@ -133,7 +132,7 @@ PotentialFieldManager::PotentialFieldManager()
   );
 
   // Setup planning joint state publisher
-  this->planningJointStatePub = this->create_publisher<JointState>("planning_joint_states", 10);
+  this->planningJointStatePub = this->create_publisher<JointState>("joint_states", 10);
   RCLCPP_INFO(this->get_logger(), "Planning joint states publishing on: %s", this->planningJointStatePub->get_topic_name());
 
   // Setup planned end-effector path publisher
@@ -208,7 +207,8 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
     "PlanPath request: start=(%.3f, %.3f, %.3f) goal=(%.3f, %.3f, %.3f) delta_time=%.4f goal_tolerance=%.6f",
     request->start.pose.position.x, request->start.pose.position.y, request->start.pose.position.z,
     request->goal.pose.position.x, request->goal.pose.position.y, request->goal.pose.position.z,
-    request->delta_time, request->goal_tolerance);
+    request->delta_time, request->goal_tolerance
+  );
 
   // Save the IKSolver
   if (!this->motionPlugin) {
@@ -225,7 +225,7 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
   RCLCPP_INFO(this->get_logger(), "Using IK Solver: %s", ikSolver->getName().c_str());
 
   auto getJointAngles = [this, ikSolver](const geometry_msgs::msg::PoseStamped& pose) -> std::vector<double> {
-    // Use current robot state as seed
+    // Use current robot state as seed if available
     sensor_msgs::msg::JointState js;
     geometry_msgs::msg::PoseStamped currentEEPose;
     if (!this->motionPlugin->readRobotState(js, currentEEPose)) {
@@ -303,13 +303,22 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
   // Container to accumulate end-effector velocity (TwistStamped) trajectory
   std::vector<geometry_msgs::msg::TwistStamped> eeVelocityTrajectory;
   // Interpolate until goal reached or max iterations
-  const int max_iters = 30000; // TODO(Sharwin): Parameterize this (or derive from MotionPlugin)
-  unsigned int iter = 0;
+  const size_t max_iters = 30000; // TODO(Sharwin): Parameterize this (or derive from MotionPlugin)
+  size_t iter = 0;
   bool reached = false;
   // Deterministic time base: t_i = base_time + i * delta_time
   const double dt = (request->delta_time > 0.0) ? request->delta_time : 0.1;
   std::size_t step = 0;
-  while (iter++ < max_iters && !reached) {
+  const double euclidDistance = std::sqrt(
+    std::pow(request->goal.pose.position.x - request->start.pose.position.x, 2) +
+    std::pow(request->goal.pose.position.y - request->start.pose.position.y, 2) +
+    std::pow(request->goal.pose.position.z - request->start.pose.position.z, 2)
+  );
+  const auto iterationsGuess = static_cast<size_t>(euclidDistance / dt);
+  RCLCPP_INFO(this->get_logger(),
+    "Estimated iterations to reach goal: %zu (euclid_dist=%.3f, dt=%.3f)", iterationsGuess, euclidDistance, dt
+  );
+  while (iter < max_iters && !reached) {
     // Check if we reached the goal within the tolerance and exit early if so
     if (checkReached(currentPose, request->goal, request->goal_tolerance)) {
       reached = true;
@@ -325,15 +334,16 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
     }
     // Call IK on current pose to get current joint angles
     auto jointAngles = getJointAngles(currentPose);
-    if (jointAngles.empty()) {
-      RCLCPP_WARN(this->get_logger(), "Failed to get joint angles from IK at iter=%u for pose (%.3f, %.3f, %.3f), aborting plan",
+    if (jointAngles.empty() && !jointTrajectory.points.empty()) {
+      RCLCPP_WARN(this->get_logger(),
+        "Failed to get joint angles from IK at iter=%zu for pose (%.3f, %.3f, %.3f), aborting plan",
         iter, currentPose.pose.position.x, currentPose.pose.position.y, currentPose.pose.position.z);
       response->success = false;
       return;
     }
     // Save joint angles for JointTrajectory
     trajectory_msgs::msg::JointTrajectoryPoint jointTrajectoryPoint;
-    jointTrajectoryPoint.positions = jointAngles;
+    jointTrajectoryPoint.positions = jointTrajectory.points.empty() ? ikSolver->getHomeConfiguration() : jointAngles;
     // Deterministic time_from_start aligned with step index
     jointTrajectoryPoint.time_from_start = rclcpp::Duration::from_seconds(step * dt);
     jointTrajectory.points.push_back(jointTrajectoryPoint);
@@ -379,10 +389,10 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
         )
       ), prevTwist, request->delta_time
     );
-    if (iter % 10000 == 0) {
+    if (iter % (iterationsGuess / 5) == 0) {
       RCLCPP_INFO(this->get_logger(),
-        "Planning iter=%u: path_len=%zu, joint_points=%zu", iter, path.poses.size(), jointTrajectory.points.size());
-      RCLCPP_INFO(this->get_logger(), "iter=%u autonomy linear=(%.4f, %.4f, %.4f) next_pos=(%.4f, %.4f, %.4f)", iter,
+        "Planning iter=%zu: path_len=%zu, joint_points=%zu", iter, path.poses.size(), jointTrajectory.points.size());
+      RCLCPP_INFO(this->get_logger(), "iter=%zu autonomy linear=(%.4f, %.4f, %.4f) next_pos=(%.4f, %.4f, %.4f)", iter,
         twistAtCurrentPose.getLinearVelocity().x(), twistAtCurrentPose.getLinearVelocity().y(),
         twistAtCurrentPose.getLinearVelocity().z(),
         nextPose.getPosition().x(), nextPose.getPosition().y(), nextPose.getPosition().z());
@@ -399,6 +409,7 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
     }
     // Move our step along before the next iteration
     ++step;
+    ++iter;
   }
   this->plannedEndEffectorPathPub->publish(path);
   response->end_effector_path = path;
@@ -407,11 +418,11 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
   response->end_effector_velocity_trajectory = eeVelocityTrajectory;
   response->success = reached;
   RCLCPP_INFO(this->get_logger(),
-    "Planning finished: success=%s, waypoints=%zu, joint_points=%zu, velocities=%zu, iterations=%u",
+    "Planning finished: success=%s, waypoints=%zu, joint_points=%zu, velocities=%zu, iterations=%zu",
     response->success ? "true" : "false",
     response->end_effector_path.poses.size(),
     response->joint_trajectory.points.size(), response->end_effector_velocity_trajectory.size(), iter);
-  if (reached) RCLCPP_INFO(this->get_logger(), "Plan path succeeded in %u iterations", iter);
+  if (reached) RCLCPP_INFO(this->get_logger(), "Plan path succeeded in %zu iterations", iter);
   else if (iter >= max_iters) RCLCPP_WARN(this->get_logger(), "Plan path reached iteration limit without reaching goal");
 }
 

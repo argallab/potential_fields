@@ -36,6 +36,12 @@ bool FrankaIKSolver::solve(
   const std::vector<double>& seed,
   std::vector<double>& solution,
   Eigen::Matrix<double, 6, Eigen::Dynamic>& J) {
+  // Use provided seed if valid, otherwise fall back to home configuration
+  const bool seed_ok = seed.size() == 7;
+  const std::array<double, 7> currentConfiguration = seed_ok
+    ? std::array<double, 7>{seed[0], seed[1], seed[2], seed[3], seed[4], seed[5], seed[6]}
+  : this->homeJointAngles;
+
   const std::array<double, 3> targetPosition = {
     targetPose.translation().x(), targetPose.translation().y(), targetPose.translation().z()
   };
@@ -43,9 +49,6 @@ bool FrankaIKSolver::solve(
     targetPose.rotation()(0, 0), targetPose.rotation()(0, 1), targetPose.rotation()(0, 2),
     targetPose.rotation()(1, 0), targetPose.rotation()(1, 1), targetPose.rotation()(1, 2),
     targetPose.rotation()(2, 0), targetPose.rotation()(2, 1), targetPose.rotation()(2, 2)
-  };
-  const std::array<double, 7> currentConfiguration = {
-    seed[0], seed[1], seed[2], seed[3], seed[4], seed[5], seed[6]
   };
   WeightedIKResult result = this->solver->solve_q7_optimized(
     /*target_position=*/targetPosition,
@@ -71,7 +74,7 @@ bool FrankaIKSolver::solve(
 FrankaPlugin::FrankaPlugin(const std::string& hostname) : MotionPlugin("FrankaPlugin") {
   IKSolverSearchParameters ikSolverParams;
   this->assignIKSolver(std::make_shared<FrankaIKSolver>(ikSolverParams));
-  this->initializeRobot(hostname);
+  if (!hostname.empty()) this->initializeRobot(hostname);
 }
 
 bool FrankaPlugin::initializeRobot(const std::string& hostname) {
@@ -143,28 +146,41 @@ bool FrankaPlugin::sendCartesianTwist(const geometry_msgs::msg::Twist& endEffect
 bool FrankaPlugin::sendJointStates([[maybe_unused]] const sensor_msgs::msg::JointState& js) { return false; }
 
 bool FrankaPlugin::readRobotState(sensor_msgs::msg::JointState& js, geometry_msgs::msg::PoseStamped& endEffectorPose) {
+  // Offline/simulation fallback: if robot connection is not initialized, provide a safe dummy state
+  if (!this->robot) {
+    if (this->clock) { js.header.stamp = this->clock->now(); }
+    else { js.header.stamp = rclcpp::Time(0); }
+    js.name = this->getIKSolver()->getJointNames();
+    js.position = std::vector<double>(7, 0.0);
+    js.velocity = std::vector<double>(7, 0.0);
+    js.effort = std::vector<double>(7, 0.0);
+
+    if (this->clock) { endEffectorPose.header.stamp = this->clock->now(); }
+    else { endEffectorPose.header.stamp = rclcpp::Time(0); }
+    endEffectorPose.header.frame_id = "fer_link8";
+    endEffectorPose.pose.position.x = 0.0;
+    endEffectorPose.pose.position.y = 0.0;
+    endEffectorPose.pose.position.z = 0.0;
+    endEffectorPose.pose.orientation.w = 1.0;
+    endEffectorPose.pose.orientation.x = 0.0;
+    endEffectorPose.pose.orientation.y = 0.0;
+    endEffectorPose.pose.orientation.z = 0.0;
+    return true;
+  }
   try {
     franka::RobotState robotState = this->robot->readOnce();
     // Convert franka::RobotState to sensor_msgs::msg::JointState
-    if (!this->clock) {
-      js.header.stamp = this->clock->now();
-    }
-    else {
-      js.header.stamp = rclcpp::Time(0);
-    }
-    js.name = {"panda_joint1", "panda_joint2", "panda_joint3", "panda_joint4", "panda_joint5", "panda_joint6", "panda_joint7"};
+    if (this->clock) { js.header.stamp = this->clock->now(); }
+    else { js.header.stamp = rclcpp::Time(0); }
+    js.name = this->getIKSolver()->getJointNames();
     js.position = std::vector<double>(robotState.q.data(), robotState.q.data() + 7);
     js.velocity = std::vector<double>(robotState.dq.data(), robotState.dq.data() + 7);
     js.effort = std::vector<double>(robotState.tau_J.data(), robotState.tau_J.data() + 7);
 
     // Set end-effector pose
-    if (this->clock) {
-      endEffectorPose.header.stamp = this->clock->now();
-    }
-    else {
-      endEffectorPose.header.stamp = rclcpp::Time(0);
-    }
-    endEffectorPose.header.frame_id = "panda_link0";
+    if (this->clock) { endEffectorPose.header.stamp = this->clock->now(); }
+    else { endEffectorPose.header.stamp = rclcpp::Time(0); }
+    endEffectorPose.header.frame_id = "fer_link8";
     endEffectorPose.pose.position.x = robotState.O_T_EE[12];
     endEffectorPose.pose.position.y = robotState.O_T_EE[13];
     endEffectorPose.pose.position.z = robotState.O_T_EE[14];
