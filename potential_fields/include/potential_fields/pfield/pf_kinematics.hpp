@@ -33,7 +33,6 @@ private:
   // Pinocchio model and data
   pinocchio::Model model;
   pinocchio::Data data;
-
 };
 
 #endif // PF_KINEMATICS_HPP

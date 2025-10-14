@@ -60,7 +60,14 @@ constexpr double DEFAULT_MAX_ANGULAR_ACCELERATION = 1.0; // [rad/s^2]
 class PotentialField {
 public:
   // =========== Constructors and Operators ===========
-  PotentialField() = default;
+  PotentialField()
+    : attractiveGain(DEFAULT_ATTRACTIVE_GAIN),
+    rotationalAttractiveGain(DEFAULT_ROTATIONAL_ATTRACTIVE_GAIN),
+    maxLinearVelocity(DEFAULT_MAX_LINEAR_VELOCITY),
+    maxAngularVelocity(DEFAULT_MAX_ANGULAR_VELOCITY),
+    maxLinearAcceleration(DEFAULT_MAX_LINEAR_ACCELERATION),
+    maxAngularAcceleration(DEFAULT_MAX_ANGULAR_ACCELERATION),
+    goalPose(SpatialVector(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity())) {}
   ~PotentialField() = default;
 
   PotentialField(const PotentialField& other) :
@@ -153,7 +160,9 @@ public:
 
   // ============ Getters and Setters ============
   void setAttractiveGain(double newAttractiveGain) { this->attractiveGain = newAttractiveGain; }
-  void setRotationalAttractiveGain(double newRotationalAttractiveGain) { this->rotationalAttractiveGain = newRotationalAttractiveGain; }
+  void setRotationalAttractiveGain(double newRotationalAttractiveGain) {
+    this->rotationalAttractiveGain = newRotationalAttractiveGain;
+  }
   void setMaxLinearVelocity(double newMaxLinearVelocity) { this->maxLinearVelocity = newMaxLinearVelocity; }
   void setMaxAngularVelocity(double newMaxAngularVelocity) { this->maxAngularVelocity = newMaxAngularVelocity; }
   void setMaxLinearAcceleration(double newMaxLinearAcceleration) { this->maxLinearAcceleration = newMaxLinearAcceleration; }
@@ -235,7 +244,7 @@ public:
    * @param dt The time step over which to apply acceleration limits [s]
    * @return TaskSpaceTwist The limited task-space twist
    */
-  TaskSpaceTwist applyVelocityLimits(
+  TaskSpaceTwist applyMotionConstraints(
     const TaskSpaceTwist& twist, const TaskSpaceTwist& prevTwist, const double dt) const;
 
   /**
@@ -245,10 +254,10 @@ public:
    *       combines their results to compute the next pose.
    *
    * @param currentPose The starting pose as a SpatialVector.
-   * @param deltaTime The time step over which to compute the next pose [s].
+   * @param dt The time step over which to compute the next pose [s].
    * @return SpatialVector The resulting pose after applying the velocity field for the time step.
    */
-  SpatialVector interpolateNextPose(const SpatialVector& currentPose, const double deltaTime);
+  SpatialVector interpolateNextPose(const SpatialVector& currentPose, const double dt);
 
   /**
    * @brief Given a current position, an instantaneous linear velocity vector, and a delta time,

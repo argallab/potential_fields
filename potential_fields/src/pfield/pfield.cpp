@@ -75,39 +75,54 @@ TaskSpaceTwist PotentialField::wrenchToTwist(const TaskSpaceWrench& wrench) cons
   return TaskSpaceTwist(wrench.force * linearGain, wrench.torque * angularGain);
 }
 
-TaskSpaceTwist PotentialField::applyVelocityLimits(
-  const TaskSpaceTwist& twist, const TaskSpaceTwist& prevTwist, const double deltaTime) const {
-  Eigen::Vector3d limitedLinear = twist.linearVelocity;
-  Eigen::Vector3d limitedAngular = twist.angularVelocity;
-  // Approximate acceleration using previous twist
-  Eigen::Vector3d linearAccel = (limitedLinear - prevTwist.linearVelocity) / deltaTime;
-  Eigen::Vector3d angularAccel = (limitedAngular - prevTwist.angularVelocity) / deltaTime;
-  double linearAccelNorm = linearAccel.norm();
-  double angularAccelNorm = angularAccel.norm();
-  // Clamp velocities and accelerations if they exceed limits
-  if (limitedLinear.norm() > this->maxLinearVelocity) {
-    limitedLinear = (limitedLinear / limitedLinear.norm()) * this->maxLinearVelocity;
+TaskSpaceTwist PotentialField::applyMotionConstraints(
+  const TaskSpaceTwist& twist, const TaskSpaceTwist& prevTwist, const double dt) const {
+  auto isPositiveFinite = [](const double val) -> bool { return std::isfinite(val) && val > 1e-12; };
+  auto clampNorm = [isPositiveFinite](const Eigen::Vector3d& vec, double maxNorm)-> Eigen::Vector3d {
+    if (maxNorm <= 0.0) return vec;
+    const double norm = vec.norm();
+    return norm > maxNorm && isPositiveFinite(norm) ? (vec / norm) * maxNorm : vec;
+  };
+  if (!isPositiveFinite(dt)) {
+    // If dt is too small, negative, or zero, only apply velocity limits
+    return TaskSpaceTwist(
+      clampNorm(twist.linearVelocity, this->maxLinearVelocity),
+      clampNorm(twist.angularVelocity, this->maxAngularVelocity));
   }
-  if (limitedAngular.norm() > this->maxAngularVelocity) {
-    limitedAngular = (limitedAngular / limitedAngular.norm()) * this->maxAngularVelocity;
-  }
-  if (linearAccelNorm > this->maxLinearAcceleration) {
-    linearAccel = (linearAccel / linearAccelNorm) * this->maxLinearAcceleration;
-    limitedLinear = prevTwist.linearVelocity + linearAccel * deltaTime;
-  }
-  if (angularAccelNorm > this->maxAngularAcceleration) {
-    angularAccel = (angularAccel / angularAccelNorm) * this->maxAngularAcceleration;
-    limitedAngular = prevTwist.angularVelocity + angularAccel * deltaTime;
-  }
-  return TaskSpaceTwist(limitedLinear, limitedAngular);
+  // Apply velocity limits first
+  Eigen::Vector3d limitedLinear = clampNorm(twist.linearVelocity, this->maxLinearVelocity);
+  Eigen::Vector3d limitedAngular = clampNorm(twist.angularVelocity, this->maxAngularVelocity);
+
+  // Approximate acceleration using previous twist and dt
+  const double dVMaxLinear = this->maxLinearAcceleration * dt; // m/s^2 * s = m/s
+  const double dVMaxAngular = this->maxAngularAcceleration * dt; // rad/s^2 * s = rad/s
+
+  auto limitStep = [isPositiveFinite](const Eigen::Vector3d& prev, const Eigen::Vector3d& curr, double dVMax) -> Eigen::Vector3d {
+    if (dVMax <= 0.0) return curr; // No acceleration limit
+    Eigen::Vector3d deltaV = curr - prev;
+    const double deltaVNorm = deltaV.norm();
+    if (deltaVNorm > dVMax && isPositiveFinite(deltaVNorm)) {
+      return prev + deltaV * (dVMax / deltaVNorm);
+    }
+    return curr;
+  };
+
+  Eigen::Vector3d accelLimitedLinear = limitStep(prevTwist.linearVelocity, limitedLinear, dVMaxLinear);
+  Eigen::Vector3d accelLimitedAngular = limitStep(prevTwist.angularVelocity, limitedAngular, dVMaxAngular);
+
+  // Re-apply velocity limits after acceleration limiting to prevent overshoot and return
+  return TaskSpaceTwist(
+    clampNorm(accelLimitedLinear, this->maxLinearVelocity),
+    clampNorm(accelLimitedAngular, this->maxAngularVelocity)
+  );
 }
 
-SpatialVector PotentialField::interpolateNextPose(const SpatialVector& currentPose, const double deltaTime) {
+SpatialVector PotentialField::interpolateNextPose(const SpatialVector& currentPose, const double dt) {
   // Compute the TaskSpaceTwist at the current pose
   TaskSpaceTwist vel = this->wrenchToTwist(this->evaluateWrenchAtPose(currentPose));
   // Integrate linear and angular velocities to get next pose
-  Eigen::Vector3d nextPosition = this->integrateLinearVelocity(currentPose.getPosition(), vel.linearVelocity, deltaTime);
-  Eigen::Quaterniond nextOrientation = this->integrateAngularVelocity(currentPose.getOrientation(), vel.angularVelocity, deltaTime);
+  Eigen::Vector3d nextPosition = this->integrateLinearVelocity(currentPose.getPosition(), vel.linearVelocity, dt);
+  Eigen::Quaterniond nextOrientation = this->integrateAngularVelocity(currentPose.getOrientation(), vel.angularVelocity, dt);
   return SpatialVector(nextPosition, nextOrientation);
 }
 

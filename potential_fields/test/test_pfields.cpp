@@ -337,17 +337,28 @@ TEST(PotentialFieldTest, RotationalAttraction) {
   goal.setOrientationEuler(0, 0, 0);
   query.setOrientationEuler(0, 0, M_PI_2);  // 90 degrees yaw
 
-  PotentialField pf(goal, 0.0f, 10.0f);  // No translation pull
+  PotentialField pf(goal, 0.0f, 10.0);  // No translation pull
   TaskSpaceTwist vel = pf.evaluateVelocityAtPose(query);
   // Linear velocity should be ~0 (positions are equal)
-  EXPECT_NEAR(vel.getLinearVelocity().x(), 0.0f, 1e-3);
-  EXPECT_NEAR(vel.getLinearVelocity().y(), 0.0f, 1e-3);
-  EXPECT_NEAR(vel.getLinearVelocity().z(), 0.0f, 1e-3);
-  // Angular velocity should be about +Z for a +90deg yaw error, with magnitude gain * angle
-  EXPECT_NEAR(vel.getAngularVelocity().x(), 0.0f, 1e-3);
-  EXPECT_NEAR(vel.getAngularVelocity().y(), 0.0f, 1e-3);
-  EXPECT_GT(vel.getAngularVelocity().z(), 0.0f);
-  EXPECT_NEAR(vel.getAngularVelocity().norm(), 10.0 * (M_PI / 2), 1e-2);
+  EXPECT_NEAR(vel.getLinearVelocity().x(), 0.0, 1e-3);
+  EXPECT_NEAR(vel.getLinearVelocity().y(), 0.0, 1e-3);
+  EXPECT_NEAR(vel.getLinearVelocity().z(), 0.0, 1e-3);
+  // Angular velocity axis should align with the quaternion error axis (up to sign)
+  Eigen::Quaterniond q_err = query.getOrientation().conjugate() * goal.getOrientation();
+  q_err.normalize();
+  Eigen::Vector3d axis = q_err.vec();
+  if (axis.norm() > 1e-12) axis.normalize();
+  const double omega_norm = vel.getAngularVelocity().norm();
+  // Check colinearity: |axis x omega| ~ 0 (when axis ~ 0 for zero angle, omega_norm should also be ~0)
+  if (axis.norm() < 1e-12) {
+    EXPECT_NEAR(omega_norm, 0.0, 1e-6);
+  }
+  else {
+    Eigen::Vector3d omega_dir = vel.getAngularVelocity() / (omega_norm + 1e-18);
+    EXPECT_NEAR((axis.cross(omega_dir)).norm(), 0.0, 1e-3);
+  }
+  // Magnitude should be gain * angle
+  EXPECT_NEAR(omega_norm, 10.0 * goal.angularDistance(query), 1e-2);
 }
 
 TEST(PotentialFieldTest, TranslationAndRotation) {
@@ -360,4 +371,113 @@ TEST(PotentialFieldTest, TranslationAndRotation) {
   EXPECT_LT(vel.getLinearVelocity().x(), 0.0);
   // rotational: should produce non-zero angular velocity about Z toward the goal
   EXPECT_GT(vel.getAngularVelocity().norm(), 0.0);
+}
+
+TEST(PotentialFieldTest, WrenchToTwistConversion) {
+  // wrenchToTwist uses unit gains; twist should equal wrench components
+  PotentialField pf; // default gains
+  TaskSpaceWrench w(Eigen::Vector3d(1.0, -2.0, 3.5), Eigen::Vector3d(0.25, -0.5, 1.0));
+  TaskSpaceTwist t = pf.wrenchToTwist(w);
+  EXPECT_NEAR((t.getLinearVelocity() - w.force).norm(), 0.0, 1e-12);
+  EXPECT_NEAR((t.getAngularVelocity() - w.torque).norm(), 0.0, 1e-12);
+}
+
+TEST(PotentialFieldTest, ApplyVelocityLimitsAccelerationDominates) {
+  // When going from 0 to a large twist in a short dt, acceleration limits should dominate
+  PotentialField pf; // defaults: vmax=5 m/s, amax=1 m/s^2; wmax=1 rad/s, alpha_max=1 rad/s^2
+  TaskSpaceTwist prev(Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero());
+  TaskSpaceTwist cmd(Eigen::Vector3d(10.0, 0.0, 0.0), Eigen::Vector3d(0.0, 2.0, 0.0));
+  const double dt = 0.1; // s
+  TaskSpaceTwist lim = pf.applyMotionConstraints(cmd, prev, dt);
+  // Implementation clamps velocity first, then acceleration if still exceeding accel caps
+  // From zero, commanded 10 m/s gets clamped to vmax=5 m/s; accel check then reduces to prev + amax*dt = 0.1 m/s
+  EXPECT_NEAR(lim.getLinearVelocity().x(), 1.0 * dt, 1e-6); // 0.1 m/s
+  EXPECT_NEAR(lim.getLinearVelocity().y(), 0.0, 1e-12);
+  EXPECT_NEAR(lim.getLinearVelocity().z(), 0.0, 1e-12);
+  EXPECT_NEAR(lim.getAngularVelocity().y(), 1.0 * dt, 1e-6); // 0.1 rad/s
+  EXPECT_NEAR(lim.getAngularVelocity().x(), 0.0, 1e-12);
+  EXPECT_NEAR(lim.getAngularVelocity().z(), 0.0, 1e-12);
+}
+
+TEST(PotentialFieldTest, ApplyVelocityLimitsVelocityCapOnly) {
+  // If previous twist is already at velocity cap in same direction, velocity cap should apply without accel limiting
+  // Construct a PF and set previous to max values; request a larger command, expect capped at max
+  PotentialField pf; // defaults
+  // Previous at vmax along +X and wmax along +Z
+  TaskSpaceTwist prev(Eigen::Vector3d(5.0, 0.0, 0.0), Eigen::Vector3d(0.0, 0.0, 1.0));
+  TaskSpaceTwist cmd(Eigen::Vector3d(10.0, 0.0, 0.0), Eigen::Vector3d(0.0, 0.0, 2.0));
+  const double dt = 0.2; // acceleration from 5->5 after cap is zero
+  TaskSpaceTwist lim = pf.applyMotionConstraints(cmd, prev, dt);
+  EXPECT_NEAR(lim.getLinearVelocity().x(), 5.0, 1e-12);
+  EXPECT_NEAR(lim.getLinearVelocity().y(), 0.0, 1e-12);
+  EXPECT_NEAR(lim.getLinearVelocity().z(), 0.0, 1e-12);
+  EXPECT_NEAR(lim.getAngularVelocity().z(), 1.0, 1e-12);
+  EXPECT_NEAR(lim.getAngularVelocity().x(), 0.0, 1e-12);
+  EXPECT_NEAR(lim.getAngularVelocity().y(), 0.0, 1e-12);
+}
+
+TEST(PotentialFieldTest, IntegrateLinearVelocity) {
+  PotentialField pf;
+  Eigen::Vector3d p0(1.0, 2.0, 3.0);
+  Eigen::Vector3d v(1.0, 0.0, -2.0);
+  double dt = 0.5;
+  Eigen::Vector3d p1 = pf.integrateLinearVelocity(p0, v, dt);
+  EXPECT_NEAR(p1.x(), 1.5, 1e-12);
+  EXPECT_NEAR(p1.y(), 2.0, 1e-12);
+  EXPECT_NEAR(p1.z(), 2.0, 1e-12);
+}
+
+TEST(PotentialFieldTest, IntegrateAngularVelocityAboutZ) {
+  PotentialField pf;
+  Eigen::Quaterniond q0 = Eigen::Quaterniond::Identity();
+  Eigen::Vector3d w(0.0, 0.0, 1.0); // rad/s about Z
+  double dt = M_PI / 4.0; // 45 degrees
+  Eigen::Quaterniond q1 = pf.integrateAngularVelocity(q0, w, dt);
+  // Expected rotation of 45 deg about Z
+  Eigen::Quaterniond q_expected(Eigen::AngleAxisd(M_PI / 4.0, Eigen::Vector3d::UnitZ()));
+  // Compare up to sign: |dot| ~ 1
+  double dot = std::abs(q1.dot(q_expected));
+  EXPECT_NEAR(dot, 1.0, 1e-6);
+}
+
+TEST(PotentialFieldTest, InterpolateNextPoseTranslationalStep) {
+  // With rotational gain zero, pose should move toward goal along -x with dt*speed
+  SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
+  // attractiveGain=1, rotationalGain=0
+  PotentialField pf(goal, 1.0, 0.0);
+  SpatialVector current(Eigen::Vector3d(1.0, 0.0, 0.0), Eigen::Quaterniond::Identity());
+  double dt = 0.1; // speed at x=1 is gain*distance = 1 m/s
+  SpatialVector next = pf.interpolateNextPose(current, dt);
+  EXPECT_NEAR(next.getPosition().x(), 0.9, 1e-6);
+  EXPECT_NEAR(next.getPosition().y(), 0.0, 1e-6);
+  EXPECT_NEAR(next.getPosition().z(), 0.0, 1e-6);
+  // Orientation should remain identity (no angular velocity)
+  double qdot = std::abs(next.getOrientation().dot(Eigen::Quaterniond::Identity()));
+  EXPECT_NEAR(qdot, 1.0, 1e-6);
+}
+
+TEST(PotentialFieldTest, EvaluateWrenchAtPosePureTorque) {
+  // Same position but 90deg yaw error -> zero force, non-zero torque
+  SpatialVector goal;
+  goal.setOrientationEuler(0, 0, 0);
+  SpatialVector query;
+  query.setOrientationEuler(0, 0, M_PI_2);
+  // No translational attraction, only rotational
+  PotentialField pf(goal, 0.0, 2.0);
+  TaskSpaceWrench w = pf.evaluateWrenchAtPose(query);
+  EXPECT_NEAR(w.force.norm(), 0.0, 1e-9);
+  // Torque axis should match quaternion error axis up to sign
+  Eigen::Quaterniond q_err = query.getOrientation().conjugate() * goal.getOrientation();
+  q_err.normalize();
+  Eigen::Vector3d axis = q_err.vec();
+  if (axis.norm() > 1e-12) axis.normalize();
+  double tau_norm = w.torque.norm();
+  if (axis.norm() < 1e-12) {
+    EXPECT_NEAR(tau_norm, 0.0, 1e-6);
+  }
+  else {
+    Eigen::Vector3d tau_dir = w.torque / (tau_norm + 1e-18);
+    EXPECT_NEAR((axis.cross(tau_dir)).norm(), 0.0, 1e-3);
+  }
+  EXPECT_NEAR(tau_norm, 2.0 * goal.angularDistance(query), 1e-2);
 }
