@@ -526,3 +526,80 @@ TEST(PotentialFieldTest, NoOvershootApproachGoalMonotonic) {
   EXPECT_NEAR(current.getPosition().y(), 0.0, 1e-6);
   EXPECT_NEAR(current.getPosition().z(), 0.0, 1e-6);
 }
+
+TEST(PotentialFieldTest, PlanPathSinglePointWhenAlreadyAtGoal) {
+  SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
+  // Construct PF with goal in constructor
+  PotentialField pf(goal, 1.0, 0.0);
+  const double dt = 0.05;
+  const double tol = 1e-3; // matches translationalTolerance
+  PlannedPath path = pf.planPath(goal, dt, tol); // startPose == goal
+  ASSERT_EQ(path.numPoints, 1u);
+  ASSERT_EQ(path.poses.size(), 1u);
+  ASSERT_EQ(path.twists.size(), 1u);
+  ASSERT_EQ(path.timeStamps.size(), 1u);
+  EXPECT_NEAR(path.timeStamps[0], 0.0, 1e-9);
+  EXPECT_NEAR(path.duration, 0.0, 1e-9);
+  // Velocity at goal should be zero (already tested separately, re-check here for path integrity)
+  EXPECT_NEAR(path.twists[0].getLinearVelocity().norm(), 0.0, 1e-9);
+  EXPECT_NEAR(path.twists[0].getAngularVelocity().norm(), 0.0, 1e-9);
+}
+
+TEST(PotentialFieldTest, PlanPathMonotonicConvergenceToGoal) {
+  SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
+  PotentialField pf(goal, 1.0, 0.0); // pure translation attraction
+  SpatialVector start(Eigen::Vector3d(2.0, 0.0, 0.0), Eigen::Quaterniond::Identity());
+  const double dt = 0.1;
+  const double tol = 1e-3;
+  PlannedPath path = pf.planPath(start, dt, tol, 500); // limit iterations
+  ASSERT_GT(path.numPoints, 1u); // should have progressed
+  // Distances should be non-increasing
+  double prevDist = (path.poses.front().getPosition() - goal.getPosition()).norm();
+  for (size_t i = 1; i < path.poses.size(); ++i) {
+    double dist = (path.poses[i].getPosition() - goal.getPosition()).norm();
+    EXPECT_LE(dist, prevDist + 1e-9) << "Distance increased at index " << i;
+    prevDist = dist;
+  }
+  // Final distance within tolerance
+  double finalDist = (path.poses.back().getPosition() - goal.getPosition()).norm();
+  EXPECT_LE(finalDist, tol + 1e-9);
+  // Duration should correspond to last timestamp (starts at 0.0)
+  if (!path.timeStamps.empty()) {
+    EXPECT_NEAR(path.duration, path.timeStamps.back(), 1e-9);
+  }
+}
+
+TEST(PotentialFieldTest, PlanPathTimeStampConsistency) {
+  SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
+  PotentialField pf(goal, 1.0, 0.0);
+  SpatialVector start(Eigen::Vector3d(1.0, 0.0, 0.0), Eigen::Quaterniond::Identity());
+  const double dt = 0.05;
+  const double tol = 1e-3;
+  PlannedPath path = pf.planPath(start, dt, tol, 400);
+  ASSERT_EQ(path.dt, dt); // stored dt
+  // timeStamps[i] should be approximately i*dt
+  for (size_t i = 0; i < path.timeStamps.size(); ++i) {
+    EXPECT_NEAR(path.timeStamps[i], static_cast<double>(i) * dt, 1e-9);
+  }
+  // duration should equal last timestamp
+  if (!path.timeStamps.empty()) {
+    EXPECT_NEAR(path.duration, path.timeStamps.back(), 1e-9);
+  }
+}
+
+TEST(PotentialFieldTest, PlanPathTwistMatchesEvaluateVelocityAtPose) {
+  // Since planPath logs evaluateVelocityAtPose for each step, verify consistency
+  SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
+  PotentialField pf(goal, 1.0, 0.0);
+  SpatialVector start(Eigen::Vector3d(1.5, 0.0, 0.0), Eigen::Quaterniond::Identity());
+  const double dt = 0.1;
+  const double tol = 1e-3;
+  PlannedPath path = pf.planPath(start, dt, tol, 200);
+  ASSERT_EQ(path.poses.size(), path.twists.size());
+  for (size_t i = 0; i < path.poses.size(); ++i) {
+    TaskSpaceTwist expectedTwist = pf.evaluateVelocityAtPose(path.poses[i]);
+    // compare components
+    EXPECT_NEAR((expectedTwist.getLinearVelocity() - path.twists[i].getLinearVelocity()).norm(), 0.0, 1e-9);
+    EXPECT_NEAR((expectedTwist.getAngularVelocity() - path.twists[i].getAngularVelocity()).norm(), 0.0, 1e-9);
+  }
+}

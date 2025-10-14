@@ -339,10 +339,11 @@ public:
    *
    * @param startPose The starting pose as a SpatialVector.
    * @param dt The time step for each iteration of the path planning [s].
-   * @param maxIterations The maximum number of iterations to perform for path planning, defaults to 30000.
+   * @param goalTolerance The tolerance for reaching the goal pose [m].
+   * @param maxIters The maximum number of iterations to perform for path planning, defaults to 30000.
    * @return PlannedPath The planned path containing poses, twists, joint angles, and timestamps.
    */
-  PlannedPath planPath(const SpatialVector& startPose, double dt, unsigned int maxIterations = 30000);
+  PlannedPath planPath(const SpatialVector& startPose, const double dt, const double goalTolerance, size_t maxIters = 30000);
 
 private:
   double attractiveGain; // Gain for attractive force

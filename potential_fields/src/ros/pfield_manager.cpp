@@ -204,8 +204,6 @@ void PotentialFieldManager::handleComputeAutonomyVector(
 }
 
 void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr request, PlanPath::Response::SharedPtr response) {
-  RCLCPP_INFO(this->get_logger(), "Received plan_path request");
-  // Log request summary (start/goal/delta/goal_tol)
   RCLCPP_INFO(this->get_logger(),
     "PlanPath request: start=(%.3f, %.3f, %.3f) goal=(%.3f, %.3f, %.3f) delta_time=%.4f goal_tolerance=%.6f",
     request->start.pose.position.x, request->start.pose.position.y, request->start.pose.position.z,

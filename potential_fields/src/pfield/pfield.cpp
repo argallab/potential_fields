@@ -180,3 +180,58 @@ Eigen::Vector3d PotentialField::computeRepulsiveForceLinear(const SpatialVector&
   }
   return F;
 }
+
+
+PlannedPath PotentialField::planPath(
+  const SpatialVector& startPose,
+  const double dt, const double goalTolerance, size_t maxIterations) {
+  PlannedPath path;
+  const double stepDt = (dt > 0.0) ? dt : 0.1;
+
+  // Already at goal? Single point path.
+  const Eigen::Vector3d startDiff = startPose.getPosition() - this->goalPose.getPosition();
+  if (startDiff.norm() <= goalTolerance) {
+    path.addPoint(startPose, TaskSpaceTwist(), std::vector<double>{ /* IK placeholder */ }, 0.0);
+    path.dt = stepDt;
+    path.duration = 0.0;
+    path.numPoints = 1;
+    return path;
+  }
+
+  SpatialVector current = startPose;
+  TaskSpaceTwist prevTwist; // previous applied twist (starts zero)
+  double timeStamp = 0.0;
+  size_t iter = 0;
+
+  while (iter < maxIterations) {
+    // Evaluate (velocity-limited) twist at current pose for logging
+    TaskSpaceTwist evalTwist = this->evaluateVelocityAtPose(current);
+    // Record current state
+    path.addPoint(current, evalTwist, std::vector<double>{ /* IK joint angles placeholder */ }, timeStamp);
+
+    // Check goal after recording
+    const double translationalError = (current.getPosition() - this->goalPose.getPosition()).norm();
+    const double rotationalError = current.angularDistance(this->goalPose);
+    if (translationalError <= goalTolerance && rotationalError <= this->rotationalThreshold) {
+      break;
+    }
+
+    // Advance pose using constrained interpolation (acceleration limits applied internally)
+    SpatialVector nextPose = this->interpolateNextPose(current, prevTwist, stepDt);
+    // Update loop variables
+    prevTwist = evalTwist; // supply velocity-limited twist as previous for next acceleration limiting
+    current = nextPose;
+    timeStamp += stepDt;
+    ++iter;
+  }
+
+  path.dt = stepDt;
+  path.numPoints = static_cast<unsigned int>(path.poses.size());
+  if (!path.timeStamps.empty()) {
+    path.duration = path.timeStamps.back();
+  }
+  else {
+    path.duration = 0.0;
+  }
+  return path;
+}
