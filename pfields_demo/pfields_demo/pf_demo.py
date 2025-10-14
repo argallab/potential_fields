@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 import csv
-import os
-from datetime import datetime
 import math
+import os
 
+from geometry_msgs.msg import PoseStamped
+from potential_fields_interfaces.srv import PlanPath
 import rclpy
 from rclpy.node import Node
-from potential_fields_interfaces.srv import PlanPath
-from geometry_msgs.msg import PoseStamped
 from std_srvs.srv import Empty
 
 
@@ -23,7 +22,9 @@ class PFDemo(Node):
         while not self.cli.wait_for_service(timeout_sec=1.0):
             if rclpy.ok() is False:
                 self.get_logger().error(
-                    'Interrupted while waiting for the service. Continuing without service (shutdown requested).')
+                    'Interrupted while waiting for the service. '
+                    'Continuing without service (shutdown requested).'
+                )
                 break
             self.get_logger().info('Waiting for the plan_path service to be available...')
         self.get_logger().info('Plan path service is available.')
@@ -78,7 +79,7 @@ class PFDemo(Node):
     def save_planned_path_response(self, plan_path_response):
         # Save a CSV file with the planned path details for offline plotting.
         # CSV columns:
-        # time, ee_px, ee_py, ee_pz, ee_qx, ee_qy, ee_qz, ee_qw, ee_vx, ee_vy, ee_vz, <joint_name_0>, <joint_name_1>, ...
+        # time, ee_px, ee_py, ee_pz, ee_qx, ee_qy, ee_qz, ee_qw, ee_vx, ee_vy, ee_vz, joint1, ...
 
         # Determine lengths
         path_poses = plan_path_response.end_effector_path.poses
@@ -182,7 +183,7 @@ class PFDemo(Node):
             rows.append(row)
 
         # Write CSV
-        filename = f'data/planned_path.csv'
+        filename = 'data/planned_path.csv'
         header = ['time_s', 'ee_px', 'ee_py', 'ee_pz', 'ee_qx',
                   'ee_qy', 'ee_qz', 'ee_qw', 'ee_vx', 'ee_vy', 'ee_vz']
         header += joint_names if joint_names else [
@@ -216,21 +217,21 @@ class PFDemo(Node):
         ee_path_len = len(res.end_effector_path.poses)
         ee_vels = len(res.end_effector_velocity_trajectory)
         self.get_logger().info(
-            f"Received plan_path response: success={res.success}, Path Length={ee_path_len}")
+            f'Received plan_path response: success={res.success}, Path Length={ee_path_len}')
         p = res.end_effector_path.poses[0].pose.position
         self.get_logger().info(
-            f"First EE pose: ({p.x:.4f}, {p.y:.4f}, {p.z:.4f})")
+            f'First EE pose: ({p.x:.4f}, {p.y:.4f}, {p.z:.4f})')
         if ee_vels > 0:
             v = res.end_effector_velocity_trajectory[0].twist.linear
             self.get_logger().info(
-                f"First EE linear velocity: ({v.x:.6f}, {v.y:.6f}, {v.z:.6f})")
+                f'First EE linear velocity: ({v.x:.6f}, {v.y:.6f}, {v.z:.6f})')
 
         # Save CSV for offline plotting
         try:
             self.save_planned_path_response(res)
         except Exception as e:
             self.get_logger().error(
-                f"Failed to save planned path response (async): {e}")
+                f'Failed to save planned path response (async): {e}')
 
 
 def main(args=None):
