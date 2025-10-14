@@ -106,7 +106,8 @@ private:
 
   // Service callbacks
   void handlePlanPath(const PlanPath::Request::SharedPtr request, PlanPath::Response::SharedPtr response);
-  void handleComputeAutonomyVector(const ComputeAutonomyVector::Request::SharedPtr request, ComputeAutonomyVector::Response::SharedPtr response);
+  void handleComputeAutonomyVector(
+    const ComputeAutonomyVector::Request::SharedPtr request, ComputeAutonomyVector::Response::SharedPtr response);
 
   /**
    * @brief Given a potential field, computes its spatial limits for visualization (bounding box)

@@ -136,7 +136,7 @@ PotentialFieldManager::PotentialFieldManager()
 
   // Setup planned end-effector path publisher
   this->plannedEndEffectorPathPub = this->create_publisher<Path>("pfield/planned_path", 10);
-  RCLCPP_INFO(this->get_logger(), "Planned end-effector path publishing on: %s", this->plannedEndEffectorPathPub->get_topic_name());
+  RCLCPP_INFO(this->get_logger(), "Planned EE path publishing on: %s", this->plannedEndEffectorPathPub->get_topic_name());
 
   // Create service to compute the autonomy vector at a given pose
   this->autonomyVectorService = this->create_service<ComputeAutonomyVector>(
@@ -165,7 +165,8 @@ PotentialFieldManager::PotentialFieldManager()
   );
 }
 
-void PotentialFieldManager::handleComputeAutonomyVector(const ComputeAutonomyVector::Request::SharedPtr request, ComputeAutonomyVector::Response::SharedPtr response) {
+void PotentialFieldManager::handleComputeAutonomyVector(
+  const ComputeAutonomyVector::Request::SharedPtr request, ComputeAutonomyVector::Response::SharedPtr response) {
   RCLCPP_INFO(this->get_logger(), "Received autonomy vector request");
   // Compute the autonomy vector at the given pose
   SpatialVector queryPose(
@@ -203,7 +204,8 @@ void PotentialFieldManager::handleComputeAutonomyVector(const ComputeAutonomyVec
 void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr request, PlanPath::Response::SharedPtr response) {
   RCLCPP_INFO(this->get_logger(), "Received plan_path request");
   // Log request summary (start/goal/delta/goal_tol)
-  RCLCPP_INFO(this->get_logger(), "PlanPath request: start=(%.3f, %.3f, %.3f) goal=(%.3f, %.3f, %.3f) delta_time=%.4f goal_tolerance=%.6f",
+  RCLCPP_INFO(this->get_logger(),
+    "PlanPath request: start=(%.3f, %.3f, %.3f) goal=(%.3f, %.3f, %.3f) delta_time=%.4f goal_tolerance=%.6f",
     request->start.pose.position.x, request->start.pose.position.y, request->start.pose.position.z,
     request->goal.pose.position.x, request->goal.pose.position.y, request->goal.pose.position.z,
     request->delta_time, request->goal_tolerance);
@@ -361,9 +363,10 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
       )
     ), request->delta_time);
     if (iter % 10000 == 0) {
-      RCLCPP_INFO(this->get_logger(), "Planning iter=%u: path_len=%zu, joint_points=%zu", iter, path.poses.size(), jointTrajectory.points.size());
-      RCLCPP_INFO(this->get_logger(), "iter=%u autonomy linear=(%.4f, %.4f, %.4f) next_pos=(%.4f, %.4f, %.4f)",
-        iter, autonomyVector.getLinearVelocity().x(), autonomyVector.getLinearVelocity().y(), autonomyVector.getLinearVelocity().z(),
+      RCLCPP_INFO(this->get_logger(),
+        "Planning iter=%u: path_len=%zu, joint_points=%zu", iter, path.poses.size(), jointTrajectory.points.size());
+      RCLCPP_INFO(this->get_logger(), "iter=%u autonomy linear=(%.4f, %.4f, %.4f) next_pos=(%.4f, %.4f, %.4f)", iter,
+        autonomyVector.getLinearVelocity().x(), autonomyVector.getLinearVelocity().y(), autonomyVector.getLinearVelocity().z(),
         nextPose.getPosition().x(), nextPose.getPosition().y(), nextPose.getPosition().z());
     }
     // Store the autonomy vector (end-effector velocity) with deterministic stamp
@@ -384,9 +387,11 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
   // Move accumulated EE velocity trajectory into the response
   response->end_effector_velocity_trajectory = eeVelocityTrajectory;
   response->success = reached;
-  RCLCPP_INFO(this->get_logger(), "Planning finished: success=%s, waypoints=%zu, joint_points=%zu, velocities=%zu, iterations=%u",
+  RCLCPP_INFO(this->get_logger(),
+    "Planning finished: success=%s, waypoints=%zu, joint_points=%zu, velocities=%zu, iterations=%u",
     response->success ? "true" : "false",
-    response->end_effector_path.poses.size(), response->joint_trajectory.points.size(), response->end_effector_velocity_trajectory.size(), iter);
+    response->end_effector_path.poses.size(),
+    response->joint_trajectory.points.size(), response->end_effector_velocity_trajectory.size(), iter);
   if (reached) RCLCPP_INFO(this->get_logger(), "Plan path succeeded in %u iterations", iter);
   else if (iter >= max_iters) RCLCPP_WARN(this->get_logger(), "Plan path reached iteration limit without reaching goal");
 }

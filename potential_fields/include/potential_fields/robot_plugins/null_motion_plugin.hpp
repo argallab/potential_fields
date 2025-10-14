@@ -3,6 +3,8 @@
 
 #include "motion_plugin.hpp"
 #include <vector>
+#include <string>
+#include <memory>
 
 // A minimal IK solver that returns the seed as the solution (useful for offline testing)
 class SimpleIKSolver : public IKSolver {
