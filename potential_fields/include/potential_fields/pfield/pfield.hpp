@@ -49,6 +49,35 @@ struct TaskSpaceTwist {
   Eigen::Vector3d getAngularVelocity() const { return this->angularVelocity; }
 };
 
+struct PlannedPath {
+  std::vector<SpatialVector> poses; // End-effector pose
+  std::vector<TaskSpaceTwist> twists; // End-effector velocity
+  std::vector<std::vector<double>> jointAngles; // Joint angles for each point in the path [rad]
+  std::vector<double> timeStamps; // Time stamps for each point in the path [s]
+  unsigned int numPoints; // The number of points in the planned path, should be equal across all vectors
+  double duration; // Total duration of the path [s]
+  double dt; // Time difference between consecutive points [s]
+
+  PlannedPath()
+    : numPoints(0), duration(0.0), dt(0.0) {}
+
+  void addPoint(const SpatialVector& pose, const TaskSpaceTwist& twist, std::vector<double> jointAngles, double timeStamp) {
+    this->poses.push_back(pose);
+    this->twists.push_back(twist);
+    this->jointAngles.push_back(jointAngles);
+    this->timeStamps.push_back(timeStamp);
+    this->numPoints = static_cast<unsigned int>(this->poses.size());
+    if (this->numPoints > 1) {
+      this->dt = this->timeStamps.back() - this->timeStamps[this->numPoints - 2];
+      this->duration = this->timeStamps.back() - this->timeStamps.front();
+    }
+    else {
+      this->dt = 0.0;
+      this->duration = 0.0;
+    }
+  }
+};
+
 // Default values
 constexpr double DEFAULT_ATTRACTIVE_GAIN = 1.0; // Gain for attractive force [Ns/m]
 constexpr double DEFAULT_ROTATIONAL_ATTRACTIVE_GAIN = 0.7; // Gain for rotational attractive force [Ns/m]
@@ -284,6 +313,21 @@ public:
     const Eigen::Quaterniond& currentOrientation,
     const Eigen::Vector3d& angularVelocity,
     double deltaTime);
+
+  // ============ Path Planning ============
+
+  /**
+   * @brief Plans a path from the start pose to the goal pose using the potential field.
+   *
+   * @note TODO: This function will need to use an IKSolver for computing joint angles,
+   *             which needs to be a member of this class
+   *
+   * @param startPose The starting pose as a SpatialVector.
+   * @param dt The time step for each iteration of the path planning [s].
+   * @param maxIterations The maximum number of iterations to perform for path planning.
+   * @return PlannedPath The planned path containing poses, twists, joint angles, and timestamps.
+   */
+  PlannedPath planPath(const SpatialVector& startPose, double dt, unsigned int maxIterations = 30000);
 
 private:
   double attractiveGain; // Gain for attractive force
