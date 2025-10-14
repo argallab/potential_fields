@@ -35,7 +35,7 @@ struct IKSolverSearchParameters {
 
 class FrankaIKSolver : public IKSolver {
 public:
-  explicit FrankaIKSolver(IKSolverSearchParameters params = IKSolverSearchParameters());
+  explicit FrankaIKSolver(IKSolverSearchParameters params);
   ~FrankaIKSolver() override = default;
 
   /**

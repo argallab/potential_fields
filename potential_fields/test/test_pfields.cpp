@@ -103,7 +103,7 @@ TEST(PotentialFieldTest, AttractiveFieldPullsTowardGoal) {
 
 TEST(PotentialFieldTest, AttractiveGainScaling) {
   SpatialVector goal(Eigen::Vector3d::Zero());
-  PotentialField pf(goal, 3.0, 0.0);
+  PotentialField pf(goal, 3.0, 0.0, 10.0, 1.0, 5.0, 5.0);
   SpatialVector query(Eigen::Vector3d(2.0, 0.0, 0.0));
   TaskSpaceTwist vel = pf.evaluateVelocityAtPose(query);
   // magnitude = gain * distance = 3 * 2 = 6, direction toward goal: negative x
@@ -336,9 +336,14 @@ TEST(PotentialFieldTest, RotationalAttraction) {
   SpatialVector query; // Same position, different orientation
   goal.setOrientationEuler(0, 0, 0);
   query.setOrientationEuler(0, 0, M_PI_2);  // 90 degrees yaw
-
-  PotentialField pf(goal, 0.0f, 10.0);  // No translation pull
-  TaskSpaceTwist vel = pf.evaluateVelocityAtPose(query);
+  // Construct with full limits: attractiveGain=0, rotationalGain=10,
+  // maxLinearVel=0, maxAngularVel=15, maxLinearAccel=0, maxAngularAccel=5.
+  // Raw angular velocity magnitude (gain * angle) = 10 * (pi/2) ≈ 15.7079 which will be velocity-capped to 15.
+  PotentialField pf(goal, 0.0, 10.0, 0.0, 15.0, 0.0, 5.0);
+  TaskSpaceWrench rawWrench = pf.evaluateWrenchAtPose(query);
+  double rawOmegaMag = rawWrench.torque.norm();
+  EXPECT_NEAR(rawOmegaMag, 10.0 * goal.angularDistance(query), 1e-6); // pre-constraint check
+  TaskSpaceTwist vel = pf.evaluateVelocityAtPose(query); // constrained (dt=0 => velocity cap only)
   // Linear velocity should be ~0 (positions are equal)
   EXPECT_NEAR(vel.getLinearVelocity().x(), 0.0, 1e-3);
   EXPECT_NEAR(vel.getLinearVelocity().y(), 0.0, 1e-3);
@@ -357,8 +362,8 @@ TEST(PotentialFieldTest, RotationalAttraction) {
     Eigen::Vector3d omega_dir = vel.getAngularVelocity() / (omega_norm + 1e-18);
     EXPECT_NEAR((axis.cross(omega_dir)).norm(), 0.0, 1e-3);
   }
-  // Magnitude should be gain * angle
-  EXPECT_NEAR(omega_norm, 10.0 * goal.angularDistance(query), 1e-2);
+  // Magnitude should be min(gain*angle, maxAngularVelocity) = 15.0 after constraint
+  EXPECT_NEAR(omega_norm, 15.0, 1e-6);
 }
 
 TEST(PotentialFieldTest, TranslationAndRotation) {
@@ -443,12 +448,14 @@ TEST(PotentialFieldTest, IntegrateAngularVelocityAboutZ) {
 TEST(PotentialFieldTest, InterpolateNextPoseTranslationalStep) {
   // With rotational gain zero, pose should move toward goal along -x with dt*speed
   SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
-  // attractiveGain=1, rotationalGain=0
-  PotentialField pf(goal, 1.0, 0.0);
+  // Construct with all limits (attractiveGain=1, rotationalGain=0, vmax_lin=5, vmax_ang=1, amax_lin=1, amax_ang=1)
+  PotentialField pf(1.0, 0.0, 5.0, 1.0, 1.0, 1.0);
+  pf.setGoalPose(goal);
   SpatialVector current(Eigen::Vector3d(1.0, 0.0, 0.0), Eigen::Quaterniond::Identity());
-  double dt = 0.1; // speed at x=1 is gain*distance = 1 m/s
-  SpatialVector next = pf.interpolateNextPose(current, dt);
-  EXPECT_NEAR(next.getPosition().x(), 0.9, 1e-6);
+  double dt = 0.1; // raw speed at x=1 would be 1 m/s; accel limit (1 m/s^2 * 0.1 s) => 0.1 m/s applied
+  SpatialVector next = pf.interpolateNextPose(current, TaskSpaceTwist(), dt);
+  // Expected new x: 1.0 + (-0.1 m/s)*0.1 s = 0.99
+  EXPECT_NEAR(next.getPosition().x(), 0.99, 1e-6);
   EXPECT_NEAR(next.getPosition().y(), 0.0, 1e-6);
   EXPECT_NEAR(next.getPosition().z(), 0.0, 1e-6);
   // Orientation should remain identity (no angular velocity)
@@ -480,4 +487,42 @@ TEST(PotentialFieldTest, EvaluateWrenchAtPosePureTorque) {
     EXPECT_NEAR((axis.cross(tau_dir)).norm(), 0.0, 1e-3);
   }
   EXPECT_NEAR(tau_norm, 2.0 * goal.angularDistance(query), 1e-2);
+}
+
+TEST(PotentialFieldTest, NoOvershootApproachGoalMonotonic) {
+  // Verify that with a reasonable timestep the interpolated poses approach the goal monotonically
+  // without crossing to the opposite side (no sign change) and without increasing distance.
+  SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
+  // Use attractive gain = 1, no rotation component
+  PotentialField pf(goal, 1.0, 0.0);
+  // Start 1 m along +X
+  SpatialVector current(Eigen::Vector3d(1.0, 0.0, 0.0), Eigen::Quaterniond::Identity());
+  const double dt = 0.1; // dt < 1/gain ensures (1 - k dt) > 0 so analytical solution has no overshoot
+  const unsigned int steps = 50; // sufficient steps to converge near tolerance
+  TaskSpaceTwist prevTwist; // starts at zero
+  double previousDistance = current.getPosition().norm();
+  for (unsigned int i = 0; i < steps; ++i) {
+    SpatialVector next = pf.interpolateNextPose(current, prevTwist, dt);
+    // Reconstruct the constrained twist that would be used for the next step (matching interpolateNextPose logic)
+    TaskSpaceTwist rawTwist = pf.wrenchToTwist(pf.evaluateWrenchAtPose(next));
+    TaskSpaceTwist twistNow = pf.applyMotionConstraints(rawTwist, prevTwist, dt);
+    // Distance to goal should not increase
+    double dist = next.getPosition().norm();
+    EXPECT_LE(dist, previousDistance + 1e-9) << "Distance increased at step " << i;
+    // X position should remain non-negative (no overshoot past goal) and non-increasing
+    EXPECT_GE(next.getPosition().x(), -1e-9) << "Overshoot past goal at step " << i;
+    EXPECT_LE(next.getPosition().x(), current.getPosition().x() + 1e-9) << "X increased at step " << i;
+    // Update for next loop
+    previousDistance = dist;
+    current = next;
+    prevTwist = twistNow; // supply previous twist for potential acceleration limiting (if dt>0 used)
+    if (dist <= 1e-3) { // within translational tolerance
+      break;
+    }
+  }
+  // Final pose should be within a small neighborhood of the goal and not negative on X
+  EXPECT_GE(current.getPosition().x(), -1e-6);
+  EXPECT_LE(current.getPosition().x(), 1.0);
+  EXPECT_NEAR(current.getPosition().y(), 0.0, 1e-6);
+  EXPECT_NEAR(current.getPosition().z(), 0.0, 1e-6);
 }

@@ -65,7 +65,12 @@ TaskSpaceWrench PotentialField::evaluateWrenchAtPose(const SpatialVector& queryP
 }
 
 TaskSpaceTwist PotentialField::evaluateVelocityAtPose(const SpatialVector& queryPose) const {
-  return this->wrenchToTwist(this->evaluateWrenchAtPose(queryPose));
+  // Apply Velocity Limits by passing in dt=0.0
+  return this->applyMotionConstraints(
+    this->wrenchToTwist(this->evaluateWrenchAtPose(queryPose)),
+    TaskSpaceTwist(Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero()),
+    0.0
+  );
 }
 
 TaskSpaceTwist PotentialField::wrenchToTwist(const TaskSpaceWrench& wrench) const {
@@ -117,12 +122,16 @@ TaskSpaceTwist PotentialField::applyMotionConstraints(
   );
 }
 
-SpatialVector PotentialField::interpolateNextPose(const SpatialVector& currentPose, const double dt) {
+SpatialVector PotentialField::interpolateNextPose(
+  const SpatialVector& currentPose, const TaskSpaceTwist& prevTwist, const double dt) {
   // Compute the TaskSpaceTwist at the current pose
   TaskSpaceTwist vel = this->wrenchToTwist(this->evaluateWrenchAtPose(currentPose));
+  TaskSpaceTwist velLimited = this->applyMotionConstraints(vel, prevTwist, dt);
   // Integrate linear and angular velocities to get next pose
-  Eigen::Vector3d nextPosition = this->integrateLinearVelocity(currentPose.getPosition(), vel.linearVelocity, dt);
-  Eigen::Quaterniond nextOrientation = this->integrateAngularVelocity(currentPose.getOrientation(), vel.angularVelocity, dt);
+  Eigen::Vector3d nextPosition = this->integrateLinearVelocity(currentPose.getPosition(), velLimited.linearVelocity, dt);
+  Eigen::Quaterniond nextOrientation = this->integrateAngularVelocity(
+    currentPose.getOrientation(), velLimited.angularVelocity, dt
+  );
   return SpatialVector(nextPosition, nextOrientation);
 }
 

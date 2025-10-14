@@ -42,6 +42,7 @@ struct TaskSpaceTwist {
   Eigen::Vector3d linearVelocity{Eigen::Vector3d::Zero()}; // Linear Velocity [m/s]
   Eigen::Vector3d angularVelocity{Eigen::Vector3d::Zero()}; // Angular Velocity [rad/s]
 
+  TaskSpaceTwist() = default;
   TaskSpaceTwist(Eigen::Vector3d linearVelocity, Eigen::Vector3d angularVelocity)
     : linearVelocity(linearVelocity), angularVelocity(angularVelocity) {}
 
@@ -155,6 +156,19 @@ public:
     maxLinearAcceleration(maxLinearAcceleration),
     maxAngularAcceleration(maxAngularAcceleration),
     goalPose(SpatialVector(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity())) {}
+
+  PotentialField(
+    SpatialVector goalPose,
+    double attractiveGain, double rotationalAttractiveGain,
+    double maxLinearVelocity, double maxAngularVelocity,
+    double maxLinearAcceleration, double maxAngularAcceleration) :
+    attractiveGain(attractiveGain),
+    rotationalAttractiveGain(rotationalAttractiveGain),
+    maxLinearVelocity(maxLinearVelocity),
+    maxAngularVelocity(maxAngularVelocity),
+    maxLinearAcceleration(maxLinearAcceleration),
+    maxAngularAcceleration(maxAngularAcceleration),
+    goalPose(goalPose) {}
 
 
   PotentialField& operator=(const PotentialField& other) {
@@ -283,10 +297,11 @@ public:
    *       combines their results to compute the next pose.
    *
    * @param currentPose The starting pose as a SpatialVector.
+   * @param prevTwist The previous task-space twist for acceleration limiting.
    * @param dt The time step over which to compute the next pose [s].
    * @return SpatialVector The resulting pose after applying the velocity field for the time step.
    */
-  SpatialVector interpolateNextPose(const SpatialVector& currentPose, const double dt);
+  SpatialVector interpolateNextPose(const SpatialVector& currentPose, const TaskSpaceTwist& prevTwist, const double dt);
 
   /**
    * @brief Given a current position, an instantaneous linear velocity vector, and a delta time,
