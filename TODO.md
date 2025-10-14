@@ -10,8 +10,8 @@
 
 # Immediate TODOs
 - Finish PlanPath Service Implementation with FrankaIKPlugin
-- Create a demo where PlanPath service sends JointTrajectory into MoveIt JointTrajectory Action Server
-- Use Pinnochio/KDL library on the given URDF to compute FK and update robot obstacles instead of TF
+- Create a demo where PlanPath service sends JointTrajectory into MoveIt JointTrajectory Action Server (Franka moveit demo)
+- Use Pinnochio/KDL library on the given URDF to compute FK and update robot obstacles instead of listening to TF frames
   - Previous data-flow for URDF to PF Obstacles: URDF -> RSP (updates from JSP) -> TF -> PF Obstacles
   - New data-flow for URDF to PF Obstacles: URDF -> Pinnochio/KDL -> FK Definition -> Joint Angles -> PF Obstacles
 - Condense ROS Nodes into a single node and condense PF library code together.
@@ -21,11 +21,10 @@
 
 # Future TODOs and Refactors
 - Think about smoothness while still enforcing velocity and acceleration limits
+  - Improve interpolation and numerical integration methods
   - User should define motion constraints (velocity, acceleration, jerk) and planned path should respect those constraints
   - Somehow derive PF parameters from motion constraints (Repulsive Gain, Attractive Gain, Influence Zone Size, etc)
 - Refactor pfield_lib with better naming and clearer definitions for maintaining a potential field
-  - Create conversion functions for force to velocity
-  - Create limiter functions for velocity and acceleration
   - Update the wording/naming for gain parameters, influence zones, and function/variables
   - Update the README and in-code documentation to reflect these changes
   - Update plots and visualizations to reflect the correct units/etc.

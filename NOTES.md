@@ -166,12 +166,10 @@ No need for MotionInterface, PFieldManager should be the only node.
 ## Progress Notes
 Paths are able to be planned from the service and the demo node shows how to call the service and visualize it.
 A couple of notes:
-- Need velocity/acceleration limits defined in the PF to prevent excessive EE velocities
 - Need to clean up RSP/JSP confusion with a simple Pinnochio-powered RobotParser to convert Joint Positions to Obstacle Positions
-- Need to use a single ROS node (PFM) that wraps around the PField class
+- The new `RobotParser` should simply just call the c++ library functions to add obstacles after using Pinnochio to compute FK
+- Need to use a single ROS node (PFM) that wraps around the PField class, absorb `RobotParser` into PFM
 - pfield c++ library needs to contain `MotionPlugin`. and support a planPath function that the ros service just calls
-- pfield c++ library maybe needs a `update` function that the ROS node should call on a timer
-- The new `RobotParser` should simply just call the c++ library functions to add obstacles
 
 # Franka Emika Panda Notes
 - [Kris' Joystick Repo](https://github.com/wengmister/franka_joystick_teleop/blob/main/README.md)
