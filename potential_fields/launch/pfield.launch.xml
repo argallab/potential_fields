@@ -33,32 +33,4 @@
     <param name="robot_description" value="$(command 'xacro $(var robot_urdf_xacro)')" type="str"/>
     <param name="use_jsp" value="$(var use_jsp)"/>
   </node>
-
-  <!-- Planning Robot State Publisher -->
-  <node pkg="robot_state_publisher" exec="robot_state_publisher" name="planning_robot_state_publisher" output="screen" if="$(var use_xacro)" >
-    <param name="publish_frequency" value="$(var robot_state_publisher_frequency)"/>
-    <param name="robot_description" value="$(command 'xacro $(var robot_urdf_xacro)')" type="str"/>
-    <!-- ROS 2 uses 'frame_prefix' to namespace all published TF frames -->
-    <param name="frame_prefix" value="$(var planning_tf_prefix)"/>
-    <remap from="joint_states" to="planning_joint_states"/>
-  </node>
-  <node pkg="robot_state_publisher" exec="robot_state_publisher" name="planning_robot_state_publisher" output="screen" if="$(eval \'$(var use_xacro)\'==\'false\')" >
-    <param name="publish_frequency" value="$(var robot_state_publisher_frequency)"/>
-    <param name="robot_description" value="$(command 'cat $(var robot_urdf)')" type="str"/>
-    <!-- ROS 2 uses 'frame_prefix' to namespace all published TF frames -->
-    <param name="frame_prefix" value="$(var planning_tf_prefix)"/>
-    <remap from="joint_states" to="planning_joint_states"/>
-  </node>
-
-  <!-- Planning Joint State Publisher -->
-  <node pkg="joint_state_publisher_gui" exec="joint_state_publisher_gui" name="planning_joint_state_publisher_gui" if="$(eval \'$(var use_jsp)\'==\'gui\')">
-    <param name="rate" value="$(var joint_state_publisher_frequency)"/>
-    <param name="robot_description" value="" type="str"/>
-    <remap from="joint_states" to="planning_joint_states"/>
-  </node>
-  <node pkg="joint_state_publisher" exec="joint_state_publisher" name="planning_joint_state_publisher" if="$(eval \'$(var use_jsp)\'==\'jsp\')">
-    <param name="rate" value="$(var joint_state_publisher_frequency)"/>
-    <param name="robot_description" value="" type="str"/>
-    <remap from="joint_states" to="planning_joint_states"/>
-  </node>
 </launch>
