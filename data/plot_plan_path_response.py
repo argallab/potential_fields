@@ -62,8 +62,9 @@ def create_plot(df):
     ee_vx = df['ee_vx']
     ee_vy = df['ee_vy']
     ee_vz = df['ee_vz']
-    joint_columns = [col for col in df.columns if col.startswith('joint_')]
+    joint_columns = [col for col in df.columns if 'joint' in col]
     num_joints = len(joint_columns)
+    print(f"Found {num_joints} joint columns: {joint_columns}")
     fig, axs = plt.subplots(2, 2, figsize=(14, 14))
     # 1. EE Position vs Time
     axs[0, 0].plot(time_s, df['ee_px'], label='EE X', color='blue')
