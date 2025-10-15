@@ -136,16 +136,6 @@ void RobotParser::timerCallback() {
     obstacleArray.obstacles.push_back(obstacle);
   }
   this->obstaclePub->publish(obstacleArray);
-
-  // // Publish Obstacles for Planning (with "planning::" prefix in the id)
-  // std::vector<Obstacle> planningObstacles = this->extractObstaclesFromCatalog(this->planningCollisionCatalog);
-  // ObstacleArray planningObstacleArray;
-  // planningObstacleArray.header.frame_id = this->fixedFrame;
-  // planningObstacleArray.header.stamp = this->get_clock()->now();
-  // for (const auto& obstacle : planningObstacles) {
-  //   planningObstacleArray.obstacles.push_back(obstacle);
-  // }
-  // this->obstaclePub->publish(planningObstacleArray);
 }
 
 std::vector<Obstacle> RobotParser::extractObstaclesFromCatalog(const std::vector<CollisionCatalogEntry>& catalog) {
