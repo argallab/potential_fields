@@ -14,14 +14,11 @@
     - No Obstacles and easy reachable goal (forwards or single motion)
     - With Obstacles surrounding a easily reachable goal
     - With obstacles obstructing the path to the goal
-- Implement sending the JointTrajectory to the MoveIt JointTrajectory Action Server (Franka moveit demo)
+- Debug FollowJointTrajectory Action client in pf_demo.py
+  - When calling the action using the response from PlanPath, the action runs into PATH_TOLERANCE_VIOLATED error
 - Use Pinnochio/KDL library on the given URDF to compute FK and update robot obstacles instead of listening to TF frames
   - Previous data-flow for URDF to PF Obstacles: URDF -> RSP (updates from JSP) -> TF -> PF Obstacles
   - New data-flow for URDF to PF Obstacles: URDF -> Pinnochio/KDL -> FK Definition -> Joint Angles -> PF Obstacles
-- Condense ROS Nodes into a single node and condense PF library code together.
-  - The `pfield` library should contain its own path planning function
-  - `pfield` should also contain its own IKSolver and MotionPlugin instances with a factory method to create them
-  - ROS Wrapper node should just handle ROS communication and call the `pfield` library functions
 
 # Future TODOs and Refactors
 - Think about smoothness while still enforcing velocity and acceleration limits
@@ -30,6 +27,10 @@
   - Somehow derive PF parameters from motion constraints (Repulsive Gain, Attractive Gain, Influence Zone Size, etc)
 - Refactor pfield_lib with better naming and clearer definitions for maintaining a potential field
   - Update the wording/naming for gain parameters, influence zones, and function/variables
-  - Update the README and in-code documentation to reflect these changes
+  - Update the README and in-code documentation to reflect PF wrench and twist definitions
   - Update plots and visualizations to reflect the correct units/etc.
 - Include installation instructions for fcl, pinnochio, libfranka and other external dependencies
+- Condense ROS Nodes into a single node and condense PF library code together.
+  - The `pfield` library should contain its own path planning function
+  - `pfield` should also contain its own IKSolver and MotionPlugin instances with a factory method to create them
+  - ROS Wrapper node should just handle ROS communication and call the `pfield` library functions

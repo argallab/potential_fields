@@ -170,6 +170,8 @@ A couple of notes:
 - The new `RobotParser` should simply just call the c++ library functions to add obstacles after using Pinnochio to compute FK
 - Need to use a single ROS node (PFM) that wraps around the PField class, absorb `RobotParser` into PFM
 - pfield c++ library needs to contain `MotionPlugin`. and support a planPath function that the ros service just calls
+- FollowJointTrajectory action client needs debugging since it is returning a PATH_TOLERANCE_VIOLATED error
+- Path smoothing of some sort needs to be implemented
 
 # Franka Emika Panda Notes
 - [Kris' Joystick Repo](https://github.com/wengmister/franka_joystick_teleop/blob/main/README.md)
