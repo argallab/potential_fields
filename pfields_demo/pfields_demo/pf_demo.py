@@ -7,7 +7,11 @@ from geometry_msgs.msg import PoseStamped
 from potential_fields_interfaces.srv import PlanPath
 import rclpy
 from rclpy.node import Node
+from rclpy.action import ActionClient
 from std_srvs.srv import Empty
+from trajectory_msgs.msg import JointTrajectory
+from control_msgs.msg import JointTolerance
+from control_msgs.action import FollowJointTrajectory
 
 
 class PFDemo(Node):
@@ -33,6 +37,18 @@ class PFDemo(Node):
         self.create_service(
             Empty, '/pfield_demo/run_plan_path_demo', self.run_demo_callback)
         self.get_logger().info('Ready to run plan path demo via service call.')
+
+        # Action client for executing joint trajectories
+        self.traj_action_client = ActionClient(
+            self, FollowJointTrajectory, '/fer_arm_controller/follow_joint_trajectory')
+        # Wait for action server until available
+        while not self.traj_action_client.wait_for_server(timeout_sec=2.0):
+            self.get_logger().info('Waiting for FollowJointTrajectory action server...')
+        self.get_logger().info('FollowJointTrajectory action server is available.')
+
+        # Buffers for action execution logging
+        self._traj_feedback_log = []  # list of samples captured from feedback
+        self._current_joint_names = []
 
     def run_demo_callback(self, request, response):
         self.get_logger().info('Running plan path demo...')
@@ -75,6 +91,172 @@ class PFDemo(Node):
         future.add_done_callback(self._on_plan_path_response)
         # return immediately from the demo service; the response will be processed asynchronously
         return response
+
+    def send_joint_trajectory(self, joint_trajectory: JointTrajectory):
+        # Send a JointTrajectory as a FollowJointTrajectory action goal and log feedback/result
+        if not self.traj_action_client.wait_for_server(timeout_sec=5.0):
+            self.get_logger().error('FollowJointTrajectory action server not available.')
+            return
+
+        goal_msg = self.create_action_request(joint_trajectory)
+
+        # Prepare logging buffers
+        self._traj_feedback_log = []
+        self._current_joint_names = list(
+            joint_trajectory.joint_names) if joint_trajectory.joint_names else []
+
+        def _on_goal_response(fut):
+            goal_handle = fut.result()
+            if not goal_handle.accepted:
+                self.get_logger().error('FollowJointTrajectory goal was rejected by the action server.')
+                return
+            self.get_logger().info('FollowJointTrajectory goal accepted; waiting for result...')
+
+            result_future = goal_handle.get_result_async()
+            result_future.add_done_callback(self._on_traj_result)
+
+        self.get_logger().info('Sending FollowJointTrajectory goal...')
+        send_goal_future = self.traj_action_client.send_goal_async(
+            goal_msg, feedback_callback=self._on_traj_feedback)
+        send_goal_future.add_done_callback(_on_goal_response)
+
+    def _on_traj_feedback(self, feedback_msg):
+        # Feedback may be wrapped or bare; handle both
+        feedback = feedback_msg.feedback if hasattr(
+            feedback_msg, 'feedback') else feedback_msg
+        try:
+            t = 0.0
+            if feedback.desired and feedback.desired.time_from_start:
+                t = feedback.desired.time_from_start.sec + \
+                    feedback.desired.time_from_start.nanosec * 1e-9
+            # Compute a simple position error norm if available
+            pos_err = None
+            if feedback.error and feedback.error.positions:
+                pos_err = math.sqrt(
+                    sum([e * e for e in feedback.error.positions]))
+            # Log desired vs actual first joint as a quick glance
+            d0 = feedback.desired.positions[0] if (
+                feedback.desired and feedback.desired.positions) else float('nan')
+            a0 = feedback.actual.positions[0] if (
+                feedback.actual and feedback.actual.positions) else float('nan')
+            if pos_err is not None:
+                self.get_logger().info(
+                    f'[FJT feedback] t={t:.3f}s, first_joint d={d0:.4f} a={a0:.4f}, |pos_err|={pos_err:.4f}')
+            else:
+                self.get_logger().info(
+                    f'[FJT feedback] t={t:.3f}s, first_joint d={d0:.4f} a={a0:.4f}')
+
+            # Store sample for CSV export
+            sample = {
+                't': t,
+                'd_pos': list(feedback.desired.positions) if feedback.desired and feedback.desired.positions else [],
+                'a_pos': list(feedback.actual.positions) if feedback.actual and feedback.actual.positions else [],
+                'e_pos': list(feedback.error.positions) if feedback.error and feedback.error.positions else [],
+                'd_vel': list(feedback.desired.velocities) if feedback.desired and feedback.desired.velocities else [],
+                'a_vel': list(feedback.actual.velocities) if feedback.actual and feedback.actual.velocities else [],
+                'e_vel': list(feedback.error.velocities) if feedback.error and feedback.error.velocities else [],
+            }
+            self._traj_feedback_log.append(sample)
+        except Exception as e:
+            self.get_logger().warn(
+                f'Failed to parse FollowJointTrajectory feedback: {e}')
+
+    def _on_traj_result(self, fut):
+        try:
+            wrapped_result = fut.result()
+            status = getattr(wrapped_result, 'status', None)
+            result = getattr(wrapped_result, 'result', None)
+            if result is not None:
+                error_code = getattr(result, 'error_code', None)
+                error_string = getattr(result, 'error_string', '')
+                self.get_logger().info(
+                    f'FollowJointTrajectory result: status={status}, error_code={error_code}, msg="{error_string}"')
+                # Save execution log to CSV
+                try:
+                    self.save_executed_trajectory_response(
+                        self._current_joint_names, self._traj_feedback_log, result)
+                except Exception as ex:
+                    self.get_logger().error(
+                        f'Failed to save executed trajectory CSV: {ex}')
+            else:
+                self.get_logger().info(
+                    f'FollowJointTrajectory finished: status={status}')
+        except Exception as e:
+            self.get_logger().error(
+                f'Failed to get FollowJointTrajectory result: {e}')
+
+    def save_executed_trajectory_response(self, joint_names, feedback_samples, result, filename: str = 'data/executed_trajectory.csv'):
+        """
+        Save the executed trajectory feedback/time series to CSV.
+        Columns:
+          time_s, then for each joint: d_<name>, a_<name>, e_<name>, dvel_<name>, avel_<name>, evel_<name>
+
+        joint_names: list of joint names
+        feedback_samples: list of samples {t, d_pos, a_pos, e_pos, d_vel, a_vel, e_vel}
+        result: FollowJointTrajectory result message (for logging)
+        filename: output CSV path
+        """
+        # Determine joint count
+        n_joints = len(joint_names)
+        # Build header
+        header = ['time_s']
+        for name in joint_names:
+            header += [f'd_{name}', f'a_{name}', f'e_{name}',
+                       f'dvel_{name}', f'avel_{name}', f'evel_{name}']
+
+        # Prepare rows
+        rows = []
+        last = {
+            'd_pos': [math.nan] * n_joints,
+            'a_pos': [math.nan] * n_joints,
+            'e_pos': [math.nan] * n_joints,
+            'd_vel': [math.nan] * n_joints,
+            'a_vel': [math.nan] * n_joints,
+            'e_vel': [math.nan] * n_joints,
+        }
+        for s in feedback_samples:
+            t = s.get('t', 0.0)
+            row = [t]
+            # helper to pad/retain last
+
+            def vec_or_last(key):
+                v = s.get(key) or []
+                out = []
+                for j in range(n_joints):
+                    if j < len(v):
+                        last[key][j] = v[j]
+                        out.append(v[j])
+                    else:
+                        out.append(last[key][j])
+                return out
+            d_pos = vec_or_last('d_pos')
+            a_pos = vec_or_last('a_pos')
+            e_pos = vec_or_last('e_pos')
+            d_vel = vec_or_last('d_vel')
+            a_vel = vec_or_last('a_vel')
+            e_vel = vec_or_last('e_vel')
+            # append in the header order per joint
+            for j in range(n_joints):
+                row += [d_pos[j], a_pos[j], e_pos[j],
+                        d_vel[j], a_vel[j], e_vel[j]]
+            rows.append(row)
+
+        # Write CSV
+        os.makedirs(os.path.dirname(filename), exist_ok=True)
+        with open(filename, 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(header)
+            for r in rows:
+                # replace math.nan with empty string for readability
+                out = [('' if (isinstance(x, float) and math.isnan(x)) else x)
+                       for x in r]
+                writer.writerow(out)
+
+        abs_path = os.path.abspath(filename)
+        err_code = getattr(result, 'error_code', None)
+        err_str = getattr(result, 'error_string', '')
+        self.get_logger().info(
+            f'Saved executed trajectory CSV to {abs_path} (error_code={err_code}, msg="{err_str}")')
 
     def save_planned_path_response(self, plan_path_response):
         # Save a CSV file with the planned path details for offline plotting.
@@ -201,6 +383,27 @@ class PFDemo(Node):
         abs_path = os.path.abspath(filename)
         self.get_logger().info(f'Saved planned path CSV to {abs_path}')
 
+    def create_action_request(self, joint_trajectory: JointTrajectory):
+        # Create a FollowJointTrajectory action goal from a JointTrajectory message
+        goal_msg = FollowJointTrajectory.Goal()
+        goal_msg.trajectory = joint_trajectory
+
+        # Set default tolerances (can be customized as needed)
+        goal_msg.path_tolerance = [
+            JointTolerance(name=jn, position=0.05,
+                           velocity=0.1, acceleration=0.1)
+            for jn in joint_trajectory.joint_names
+        ]
+        goal_msg.goal_tolerance = [
+            JointTolerance(name=jn, position=0.02,
+                           velocity=0.05, acceleration=0.05)
+            for jn in joint_trajectory.joint_names
+        ]
+        goal_msg.goal_time_tolerance = rclpy.duration.Duration(
+            seconds=0.5).to_msg()
+
+        return goal_msg
+
     def _on_plan_path_response(self, future):
         # Called when the async plan_path future is ready
         try:
@@ -232,6 +435,13 @@ class PFDemo(Node):
         except Exception as e:
             self.get_logger().error(
                 f'Failed to save planned path response (async): {e}')
+
+        # If a trajectory was returned, send it to the controller via action
+        if res.success and res.joint_trajectory and res.joint_trajectory.points:
+            self.get_logger().info('Sending returned JointTrajectory to action server...')
+            self.send_joint_trajectory(res.joint_trajectory)
+        else:
+            self.get_logger().warn('No JointTrajectory points returned; skipping action execution.')
 
 
 def main(args=None):

@@ -25,12 +25,34 @@ find_package(tf2_eigen REQUIRED)
 find_package(urdf REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(std_srvs REQUIRED)
+find_package(std_msgs REQUIRED)
 find_package(trajectory_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
+find_package(control_msgs REQUIRED)
 
 include_directories(
   include/pfields_demo
   ${potential_fields_interfaces_INCLUDE_DIRS}
+)
+
+# Create an executable for the C++ demo node
+add_executable(pfield_demo_node src/pfield_demo.cpp)
+ament_target_dependencies(pfield_demo_node
+  rclcpp
+  potential_fields
+  potential_fields_interfaces
+  geometry_msgs
+  visualization_msgs
+  nav_msgs
+  tf2_ros
+  tf2_eigen
+  urdf
+  Eigen3
+  std_srvs
+  std_msgs
+  trajectory_msgs
+  sensor_msgs
+  control_msgs
 )
 
 # Install the Python demo node
