@@ -12,6 +12,7 @@ from std_srvs.srv import Empty
 from trajectory_msgs.msg import JointTrajectory
 from control_msgs.msg import JointTolerance
 from control_msgs.action import FollowJointTrajectory
+import tf2_ros
 
 
 class PFDemo(Node):
@@ -42,9 +43,16 @@ class PFDemo(Node):
         self.traj_action_client = ActionClient(
             self, FollowJointTrajectory, '/fer_arm_controller/follow_joint_trajectory')
         # Wait for action server until available
-        while not self.traj_action_client.wait_for_server(timeout_sec=2.0):
+        if not self.traj_action_client.wait_for_server(timeout_sec=1.0):
             self.get_logger().info('Waiting for FollowJointTrajectory action server...')
-        self.get_logger().info('FollowJointTrajectory action server is available.')
+        if self.traj_action_client.server_is_ready():
+            self.get_logger().info('FollowJointTrajectory action server is available.')
+        else:
+            self.get_logger().warn('FollowJointTrajectory action server is not available.')
+
+        # Initialize transform listener
+        self.tf_buffer = tf2_ros.Buffer()
+        self.tf_listener = tf2_ros.TransformListener(self.tf_buffer, self)
 
         # Buffers for action execution logging
         self._traj_feedback_log = []  # list of samples captured from feedback
@@ -54,16 +62,32 @@ class PFDemo(Node):
         self.get_logger().info('Running plan path demo...')
         req = PlanPath.Request()
 
+        # Get the transform from world -> fer_hand_tcp and use that tf
+        # pose as the start pose
         start = PoseStamped()
-        start.header.frame_id = self.fixed_frame
-        start.header.stamp = self.get_clock().now().to_msg()
-        start.pose.position.x = 0.466
-        start.pose.position.y = 0.0
-        start.pose.position.z = 0.644
-        start.pose.orientation.x = 0.0
-        start.pose.orientation.y = 0.0
-        start.pose.orientation.z = 0.0
-        start.pose.orientation.w = 1.0
+        try:
+            transform = self.tf_buffer.lookup_transform(
+                self.fixed_frame, 'fer_hand_tcp', rclpy.time.Time()
+            )
+            start.header.frame_id = transform.header.frame_id
+            start.header.stamp = self.get_clock().now().to_msg()
+            start.pose.position.x = transform.transform.translation.x
+            start.pose.position.y = transform.transform.translation.y
+            start.pose.position.z = transform.transform.translation.z
+            start.pose.orientation = transform.transform.rotation
+        except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException) as e:
+            self.get_logger().error(
+                f"Failed to get fer_hand_tcp transform: {e}"
+            )
+            start.header.frame_id = self.fixed_frame
+            start.header.stamp = self.get_clock().now().to_msg()
+            start.pose.position.x = 0.466
+            start.pose.position.y = 0.0
+            start.pose.position.z = 0.644
+            start.pose.orientation.x = 0.0
+            start.pose.orientation.y = 0.0
+            start.pose.orientation.z = 0.0
+            start.pose.orientation.w = 1.0
 
         goal = PoseStamped()
         goal.header.frame_id = self.fixed_frame
