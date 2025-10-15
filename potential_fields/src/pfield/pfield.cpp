@@ -2,14 +2,6 @@
 #include "pfield/pf_obstacle.hpp"
 #include "pfield/spatial_vector.hpp"
 
-void PotentialField::updateGoalPosition(SpatialVector newGoalPose) {
-  this->goalPose = newGoalPose;
-}
-
-void PotentialField::updateAttractiveGain(double newAttractiveGain) {
-  this->attractiveGain = newAttractiveGain;
-}
-
 void PotentialField::addObstacle(PotentialFieldObstacle obstacle) {
   const std::string frameID = obstacle.getFrameID();
   auto itIndex = this->obstacleIndex.find(frameID);
@@ -50,52 +42,6 @@ PotentialFieldObstacle PotentialField::getObstacleByID(const std::string& obstac
   return this->obstacles[itIndex->second];
 }
 
-SpatialVector PotentialField::evaluateVelocityAtPose(SpatialVector queryPose) {
-  SpatialVector attractiveForce = this->computeAttractiveForces(queryPose);
-  SpatialVector repulsiveForce = this->computeRepulsiveForces(queryPose);
-  Eigen::Vector3d totalForce = attractiveForce.getPosition() + repulsiveForce.getPosition();
-  Eigen::Quaterniond totalOrientation = attractiveForce.getOrientation() * repulsiveForce.getOrientation();
-  totalOrientation.normalize();
-  return SpatialVector(totalForce, totalOrientation);
-}
-
-Eigen::Vector3d PotentialField::angularVelocityFromQuaternion(const Eigen::Quaterniond& q, double deltaTime) {
-  Eigen::Vector3d axis;
-  double angle;
-  if (q.w() > 1.0) {
-    // Normalize the quaternion
-    Eigen::Quaterniond normalizedQ = q.normalized();
-    axis = normalizedQ.vec();
-    angle = 2.0 * std::acos(normalizedQ.w());
-  }
-  else {
-    axis = q.vec();
-    angle = 2.0 * std::acos(q.w());
-  }
-  // Angular velocity is the axis of rotation scaled by the angle over time
-  return axis.normalized() * (angle / deltaTime);
-}
-
-Eigen::Quaterniond PotentialField::integrateAngularVelocity(const Eigen::Quaterniond& currentOrientation, double deltaTime) {
-  Eigen::Vector3d angularVelocity = angularVelocityFromQuaternion(currentOrientation, deltaTime);
-  const double epsilon = 1e-6; // Small value to avoid division by zero
-  if (angularVelocity.norm() < epsilon) {
-    // If angular velocity is near zero, return the current orientation
-    return currentOrientation;
-  }
-  Eigen::Quaterniond deltaOrientation;
-  deltaOrientation = Eigen::AngleAxisd(angularVelocity.norm() * deltaTime, angularVelocity.normalized());
-  return (currentOrientation * deltaOrientation).normalized();
-}
-
-Eigen::Vector3d PotentialField::integrateLinearVelocity(const Eigen::Vector3d& currentPosition,
-  const Eigen::Vector3d& linearVelocity, double deltaTime) {
-  return currentPosition + (linearVelocity * deltaTime);
-}
-
-SpatialVector PotentialField::getGoalPose() const { return this->goalPose; }
-std::vector<PotentialFieldObstacle> PotentialField::getObstacles() const { return this->obstacles; }
-
 bool PotentialField::isPointInsideObstacle(Eigen::Vector3d point) const {
   for (const auto& obst : this->obstacles) {
     if (obst.withinObstacle(point)) { return true; }
@@ -110,65 +56,182 @@ bool PotentialField::isPointWithinInfluenceZone(Eigen::Vector3d point) const {
   return false;
 }
 
-SpatialVector PotentialField::computeAttractiveForces(SpatialVector queryPose) {
-  SpatialVector attractiveForce;
-  // Attractive force towards the goal position (pos - goal)
-  Eigen::Vector3d direction = queryPose.getPosition() - this->goalPose.getPosition();
-  double distance = direction.norm();
-  // If distance is (near) zero, the translational force is zero
-  if (distance > this->translationalTolerance) {
-    direction.normalize();
-    // Attractive force is negative
-    double magnitude = -this->attractiveGain * distance;
-    Eigen::Vector3d forceVector = direction * magnitude;
-    attractiveForce.setPosition(forceVector);
-  }
-  // Determine the orientation attraction to "rotate" the position towards the goal orientation
-  // We want to rotate the position towards the goal orientation
-  // So we can apply a rotational force proportional to the geodesic distance
-  Eigen::Quaterniond orientationDiff = queryPose.getOrientation().inverse() * this->goalPose.getOrientation();
-  double angularDistance = queryPose.angularDistance(this->goalPose);
-  // If geodesic distance is (near) zero, don't apply rotational force
-  if (angularDistance < this->rotationalThreshold) {
-    return attractiveForce;
-  }
-  else {
-    // Apply a rotational force proportional to the geodesic distance and the gain
-    double rotationalMagnitude = -this->rotationalAttractiveGain * angularDistance;
-    // Apply the rotational force
-    orientationDiff.x() *= rotationalMagnitude;
-    orientationDiff.y() *= rotationalMagnitude;
-    orientationDiff.z() *= rotationalMagnitude;
-    orientationDiff.w() *= rotationalMagnitude;
-    orientationDiff.normalize();
-    attractiveForce.setOrientation(orientationDiff);
-  }
-  return attractiveForce;
+TaskSpaceWrench PotentialField::evaluateWrenchAtPose(const SpatialVector& queryPose) const {
+  Eigen::Vector3d attractionForceVector = this->computeAttractiveForceLinear(queryPose);
+  Eigen::Vector3d attractionMomentVector = this->computeAttractiveMoment(queryPose);
+  Eigen::Vector3d repulsionForceVector = this->computeRepulsiveForceLinear(queryPose);
+  Eigen::Vector3d forceVector = attractionForceVector + repulsionForceVector;
+  return TaskSpaceWrench(forceVector, attractionMomentVector);
 }
 
-SpatialVector PotentialField::computeRepulsiveForces(SpatialVector queryPose) {
-  SpatialVector repulsiveForce;
-  // Copy the orientation from the query
-  repulsiveForce.setOrientation(queryPose.getOrientation());
-  Eigen::Vector3d repulsiveForceVector = Eigen::Vector3d::Zero();
-  for (const auto& obst : this->obstacles) {
-    // Each obstacle is a sphere
-    // Only calculate repulsive force if within influence radius
-    if (obst.withinInfluenceZone(queryPose.getPosition())) {
-      Eigen::Vector3d obstPosition = obst.getPosition();
-      Eigen::Vector3d direction = queryPose.getPosition() - obstPosition;
-      // Normalize the direction vector
-      double distance = direction.norm();
-      // If distance is (near) zero, don't apply force
-      if (distance < this->translationalTolerance) { continue; }
-      direction.normalize();
-      // Calculate the repulsive force magnitude
-      double magnitude = obst.getRepulsiveGain() *
-        ((1 / distance) - (1 / obst.getInfluenceZoneScale())) * (1.0f / (distance * distance));
-      // Add the repulsive forces together
-      repulsiveForceVector += (direction * magnitude);
-    }
+TaskSpaceTwist PotentialField::evaluateVelocityAtPose(const SpatialVector& queryPose) const {
+  // Apply Velocity Limits by passing in dt=0.0
+  return this->applyMotionConstraints(
+    this->wrenchToTwist(this->evaluateWrenchAtPose(queryPose)),
+    TaskSpaceTwist(Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero()),
+    0.0
+  );
+}
+
+TaskSpaceTwist PotentialField::wrenchToTwist(const TaskSpaceWrench& wrench) const {
+  // If a mass/inertia model is available, it can be used here to convert force/torque to velocity
+  const double linearGain = 1.0;  // (m/s) per N
+  const double angularGain = 1.0; // (rad/s) per Nm
+  return TaskSpaceTwist(wrench.force * linearGain, wrench.torque * angularGain);
+}
+
+TaskSpaceTwist PotentialField::applyMotionConstraints(
+  const TaskSpaceTwist& twist, const TaskSpaceTwist& prevTwist, const double dt) const {
+  auto isPositiveFinite = [](const double val) -> bool { return std::isfinite(val) && val > 1e-12; };
+  auto clampNorm = [isPositiveFinite](const Eigen::Vector3d& vec, double maxNorm)-> Eigen::Vector3d {
+    if (maxNorm <= 0.0) return vec;
+    const double norm = vec.norm();
+    return norm > maxNorm && isPositiveFinite(norm) ? (vec / norm) * maxNorm : vec;
+  };
+  if (!isPositiveFinite(dt)) {
+    // If dt is too small, negative, or zero, only apply velocity limits
+    return TaskSpaceTwist(
+      clampNorm(twist.linearVelocity, this->maxLinearVelocity),
+      clampNorm(twist.angularVelocity, this->maxAngularVelocity));
   }
-  repulsiveForce.setPosition(repulsiveForceVector);
-  return repulsiveForce;
+  // Apply velocity limits first
+  Eigen::Vector3d limitedLinear = clampNorm(twist.linearVelocity, this->maxLinearVelocity);
+  Eigen::Vector3d limitedAngular = clampNorm(twist.angularVelocity, this->maxAngularVelocity);
+
+  // Approximate acceleration using previous twist and dt
+  const double dVMaxLinear = this->maxLinearAcceleration * dt; // m/s^2 * s = m/s
+  const double dVMaxAngular = this->maxAngularAcceleration * dt; // rad/s^2 * s = rad/s
+
+  auto limitStep = [isPositiveFinite](const Eigen::Vector3d& prev, const Eigen::Vector3d& curr, double dVMax) -> Eigen::Vector3d {
+    if (dVMax <= 0.0) return curr; // No acceleration limit
+    Eigen::Vector3d deltaV = curr - prev;
+    const double deltaVNorm = deltaV.norm();
+    if (deltaVNorm > dVMax && isPositiveFinite(deltaVNorm)) {
+      return prev + deltaV * (dVMax / deltaVNorm);
+    }
+    return curr;
+  };
+
+  Eigen::Vector3d accelLimitedLinear = limitStep(prevTwist.linearVelocity, limitedLinear, dVMaxLinear);
+  Eigen::Vector3d accelLimitedAngular = limitStep(prevTwist.angularVelocity, limitedAngular, dVMaxAngular);
+
+  // Re-apply velocity limits after acceleration limiting to prevent overshoot and return
+  return TaskSpaceTwist(
+    clampNorm(accelLimitedLinear, this->maxLinearVelocity),
+    clampNorm(accelLimitedAngular, this->maxAngularVelocity)
+  );
+}
+
+SpatialVector PotentialField::interpolateNextPose(
+  const SpatialVector& currentPose, const TaskSpaceTwist& prevTwist, const double dt) {
+  // Compute the TaskSpaceTwist at the current pose
+  TaskSpaceTwist vel = this->wrenchToTwist(this->evaluateWrenchAtPose(currentPose));
+  TaskSpaceTwist velLimited = this->applyMotionConstraints(vel, prevTwist, dt);
+  // Integrate linear and angular velocities to get next pose
+  Eigen::Vector3d nextPosition = this->integrateLinearVelocity(currentPose.getPosition(), velLimited.linearVelocity, dt);
+  Eigen::Quaterniond nextOrientation = this->integrateAngularVelocity(
+    currentPose.getOrientation(), velLimited.angularVelocity, dt
+  );
+  return SpatialVector(nextPosition, nextOrientation);
+}
+
+Eigen::Vector3d PotentialField::integrateLinearVelocity(const Eigen::Vector3d& currentPosition,
+  const Eigen::Vector3d& linearVelocity, double deltaTime) {
+  return currentPosition + (linearVelocity * deltaTime);
+}
+
+Eigen::Quaterniond PotentialField::integrateAngularVelocity(const Eigen::Quaterniond& currentOrientation,
+  const Eigen::Vector3d& angularVelocity,
+  double deltaTime) {
+  const double wnorm = angularVelocity.norm();
+  if (wnorm < 1e-6 || deltaTime <= 0.0) return currentOrientation;
+  // Exponential map: dq = exp( [w]^ * dt ) ≈ AngleAxis( |w|*dt, w/|w| )
+  Eigen::Quaterniond dq(Eigen::AngleAxisd(wnorm * deltaTime, angularVelocity / wnorm));
+  return (currentOrientation * dq).normalized();
+}
+
+Eigen::Vector3d PotentialField::computeAttractiveForceLinear(const SpatialVector& queryPose) const {
+  const Eigen::Vector3d direction = queryPose.getPosition() - this->goalPose.getPosition();
+  const double euclideanDistance = direction.norm();
+  if (euclideanDistance <= this->translationalTolerance) return Eigen::Vector3d::Zero();
+  else return direction.normalized() * (-this->attractiveGain * euclideanDistance);
+}
+
+Eigen::Vector3d PotentialField::computeAttractiveMoment(const SpatialVector& queryPose) const {
+  Eigen::Quaterniond orientationDiff = queryPose.getOrientation().conjugate() * this->goalPose.getOrientation();
+  orientationDiff.normalize();
+  const double angularDistance = queryPose.angularDistance(this->goalPose);
+  if (angularDistance <= this->rotationalThreshold) return Eigen::Vector3d::Zero();
+  Eigen::Vector3d u = orientationDiff.vec() / orientationDiff.vec().norm();
+  return -this->rotationalAttractiveGain * (angularDistance * u);
+}
+
+Eigen::Vector3d PotentialField::computeRepulsiveForceLinear(const SpatialVector& queryPose) const {
+  Eigen::Vector3d F = Eigen::Vector3d::Zero();
+  for (const auto& obst : this->obstacles) {
+    if (!obst.withinInfluenceZone(queryPose.getPosition())) continue;
+    Eigen::Vector3d direction = queryPose.getPosition() - obst.getPosition();
+    const double distance = direction.norm();
+    const double distanceReciprocal = 1.0 / distance;
+    const double distanceReciprocalSquared = 1.0 / (distance * distance);
+    const double influenceReciprocal = 1.0 / obst.getInfluenceZoneScale();
+    const double magnitude = obst.getRepulsiveGain() * (distanceReciprocal - influenceReciprocal) * distanceReciprocalSquared;
+    if (magnitude > 0.0) F += direction.normalized() * magnitude;
+  }
+  return F;
+}
+
+
+PlannedPath PotentialField::planPath(
+  const SpatialVector& startPose,
+  const double dt, const double goalTolerance, size_t maxIterations) {
+  PlannedPath path;
+  const double stepDt = (dt > 0.0) ? dt : 0.1;
+
+  // Already at goal? Single point path.
+  const Eigen::Vector3d startDiff = startPose.getPosition() - this->goalPose.getPosition();
+  if (startDiff.norm() <= goalTolerance) {
+    path.addPoint(startPose, TaskSpaceTwist(), std::vector<double>{ /* IK placeholder */ }, 0.0);
+    path.dt = stepDt;
+    path.duration = 0.0;
+    path.numPoints = 1;
+    return path;
+  }
+
+  SpatialVector current = startPose;
+  TaskSpaceTwist prevTwist; // previous applied twist (starts zero)
+  double timeStamp = 0.0;
+  size_t iter = 0;
+
+  while (iter < maxIterations) {
+    // Evaluate (velocity-limited) twist at current pose for logging
+    TaskSpaceTwist evalTwist = this->evaluateVelocityAtPose(current);
+    // Record current state
+    path.addPoint(current, evalTwist, std::vector<double>{ /* IK joint angles placeholder */ }, timeStamp);
+
+    // Check goal after recording
+    const double translationalError = (current.getPosition() - this->goalPose.getPosition()).norm();
+    const double rotationalError = current.angularDistance(this->goalPose);
+    if (translationalError <= goalTolerance && rotationalError <= this->rotationalThreshold) {
+      break;
+    }
+
+    // Advance pose using constrained interpolation (acceleration limits applied internally)
+    SpatialVector nextPose = this->interpolateNextPose(current, prevTwist, stepDt);
+    // Update loop variables
+    prevTwist = evalTwist; // supply velocity-limited twist as previous for next acceleration limiting
+    current = nextPose;
+    timeStamp += stepDt;
+    ++iter;
+  }
+
+  path.dt = stepDt;
+  path.numPoints = static_cast<unsigned int>(path.poses.size());
+  if (!path.timeStamps.empty()) {
+    path.duration = path.timeStamps.back();
+  }
+  else {
+    path.duration = 0.0;
+  }
+  return path;
 }

@@ -1,24 +1,22 @@
 pfield_manager:
   ros__parameters:
     visualize_pf_frequency: 60.0 # [Hz]
-    attractive_gain: 1.0 # [Ns/m]
-    rotational_attractive_gain: 0.7 # [Ns/m]
-    repulsive_gain: 20.0 # [Ns/m]
-    max_force: 10.0 # [N]
-    influence_zone_scale: 2.0 # Influence zone scaling factor
+    attractive_gain: 1.0 # [Nm]
+    rotational_attractive_gain: 0.7 # [Nm/rad]
+    repulsive_gain: 20.0 # [Nm]
+    max_linear_velocity: 1.0 # [m/s]
+    max_angular_velocity: 0.5 # [rad/s]
+    max_linear_acceleration: 1.0 # [m/s^2]
+    max_angular_acceleration: 0.25 # [rad/s^2]
+    influence_zone_scale: 1.25 # Influence zone scaling factor
     visualizer_buffer_area: 0.5 # Extra area around obstacles and goal to visualize the PF [m]
     field_resolution: 0.5 # Resolution to show PF velocity arrows in RViz [m]
 robot_parser:
   ros__parameters:
     robot_geometry_update_frequency: 100.0 # [Hz]
     planning_tf_prefix: "planning" # Prefix for planning frames
-motion_interface:
-  ros__parameters:
     robot_plugin: "franka"
     robot_hostname: "192.168.18.1"
-    base_frame: "panda_link0"
-    end_effector_frame: "panda_hand"
-    control_loop_frequency: 10.0 # [Hz]
     fusion_alpha: 1.0 # Weight for fusing human (0) and PF (1) velocities [0, 1]
     limits:
       v_lin_max: 0.20 # [m/s]

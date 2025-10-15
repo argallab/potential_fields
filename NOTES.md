@@ -130,7 +130,30 @@ Generic programming (Policy based design) for different IK solvers.
     - Service internally requires a `MotionPlugin` for the robot (includes `IKSolver`)
     - Receive planned path as `trajectory_msgs/JointTrajectory` message
 
-# Notes for 10/08
+# Path Planning Notes
+```cpp
+// interpolatePath will need to account for robot motion influencing the PF
+// during the motion so the function will need to be re-written.
+// Start is not guaranteed to be at the robot's current EE position since
+// planning should be supported for any arbitrary starting Pose
+// 1. Given the current EE Pose (starting at Start), compute the robot's joint angles with an IKSolver attached to PFM
+//    - For picking one of many IK solutions, use solution most similar to current robot state OR neutral/home robot state
+//    - Also initialize/reset our planning PField if not initialized already.
+// 2. Now that we have joint angles from the IK solver, publish these joint angles to the planning-copy of the JointStates
+//    - Once planning JS are published, the planning copy of the robot's TF frames will update and RobotParser
+//      will handle them and publish planning obstacles.
+// 3. Take a look at the planning obstacles that were published by RobotParser and update the planning PField with them
+//    - The planning PField should now have new obstacles but the same goal as the normal PField
+// 4. Compute a new velocity from the planning PField
+// 5. Project the new velocity onto the current EE pose using the deltaTime to obtain a new EE Pose
+// 6. The new EE Pose is used for the loop and we repeat steps 1-5 until the EE Pose and the goal Pose are within the tolerance
+// 7. Return the EE Path (nav_msgs/Path) and the Robot's joint positions (trajectory_msgs/JointTrajectory)
+// 8. Compute the joint velocities and put the joint velocity path into the msg (trajectory_msgs/JointTrajectory)
+//    - In order to do this, the IKSolver must offer the Jacobian to convert EE Velocites into Joint Velocities
+```
+
+
+# Notes for 10/08 Meeting
 KDL and Pinnochio: input a URDF and get FK from that
 Use IK -> Obstacles more directly
 Push to get it working.
@@ -140,6 +163,24 @@ No need for MotionInterface, PFieldManager should be the only node.
 2. Start designing out diagram (ROS interaction, PF)
 3. Lower dimensional interface with Franka
 
+## Progress Notes
+Paths are able to be planned from the service and the demo node shows how to call the service and visualize it.
+A couple of notes:
+- Need to clean up RSP/JSP confusion with a simple Pinnochio-powered RobotParser to convert Joint Positions to Obstacle Positions
+- The new `RobotParser` should simply just call the c++ library functions to add obstacles after using Pinnochio to compute FK
+- Need to use a single ROS node (PFM) that wraps around the PField class, absorb `RobotParser` into PFM
+- pfield c++ library needs to contain `MotionPlugin`. and support a planPath function that the ros service just calls
+- FollowJointTrajectory action client needs debugging since it is returning a PATH_TOLERANCE_VIOLATED error
+- Path smoothing of some sort needs to be implemented
+
 # Franka Emika Panda Notes
 - [Kris' Joystick Repo](https://github.com/wengmister/franka_joystick_teleop/blob/main/README.md)
 - [Franka User Setup (Matt Elwin's Notes)](https://nu-msr.github.io/ros_notes/ros2/franka.html)
+
+# Notes from 10/15 Meeting
+- Revisit clamping and enforcing velocity/acceleration limits
+  - Can smooth out entire trajectory after integrating a path
+  - Think about how to adjust PF parameters so forces always give valid EE wrenches
+- Refactor /goal_pose since it will get confused with navigation goal pose topic
+- Keep MotionPlugin separate but as a member of PotentialField
+- Implement the Pinocchio FK for obstacles and remove JSP/RSP

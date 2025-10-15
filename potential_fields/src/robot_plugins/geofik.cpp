@@ -271,7 +271,7 @@ array<double, 7> J_to_q(const array<array<double, 6>, 7>& J, const array<array<d
     s7 = {J[6][0] , J[6][1] , J[6][2]};
     Cross_(s6, s7, i7);
     ie = {R[0][0], R[1][0], R[2][0]};
-    q[6] = signed_angle(i7, ie, s7) + (ee == 'E' ? -PI / 4 : 0);
+    q[6] = signed_angle(i7, ie, s7) + (ee == 'E' ? -M_PI / 4 : 0);
     J_old = J0_S; // [3,dof]
     for (int i = 0; i < dof - 1; i++) {
         s = Jrot.col(i);
@@ -325,14 +325,14 @@ Eigen::Matrix<double, 6, 6> Adj_trans(const double x, const double y, const doub
 void get_frame_transforms(array<Eigen::Matrix4d, 9>& Ti, const array<double, 7>& q) {
     // gets all the transformation matrices of adjascent frames for joint angles q
     Ti[0] = T_rpy(0, 0, 0, 0, 0, 0.333) * T_rot_z(q[0]); // T01
-    Ti[1] = T_rpy(-PI / 2, 0, 0, 0, 0, 0) * T_rot_z(q[1]); // T12
-    Ti[2] = T_rpy(PI / 2, 0, 0, 0, -0.316, 0) * T_rot_z(q[2]); // T23
-    Ti[3] = T_rpy(PI / 2, 0, 0, 0.0825, 0, 0) * T_rot_z(q[3]); // T34
-    Ti[4] = T_rpy(-PI / 2, 0, 0, -0.0825, 0.384, 0) * T_rot_z(q[4]); // T45
-    Ti[5] = T_rpy(PI / 2, 0, 0, 0, 0, 0) * T_rot_z(q[5]); // T56
-    Ti[6] = T_rpy(PI / 2, 0, 0, 0.088, 0, 0) * T_rot_z(q[6]); // T67
+    Ti[1] = T_rpy(-M_PI / 2, 0, 0, 0, 0, 0) * T_rot_z(q[1]); // T12
+    Ti[2] = T_rpy(M_PI / 2, 0, 0, 0, -0.316, 0) * T_rot_z(q[2]); // T23
+    Ti[3] = T_rpy(M_PI / 2, 0, 0, 0.0825, 0, 0) * T_rot_z(q[3]); // T34
+    Ti[4] = T_rpy(-M_PI / 2, 0, 0, -0.0825, 0.384, 0) * T_rot_z(q[4]); // T45
+    Ti[5] = T_rpy(M_PI / 2, 0, 0, 0, 0, 0) * T_rot_z(q[5]); // T56
+    Ti[6] = T_rpy(M_PI / 2, 0, 0, 0.088, 0, 0) * T_rot_z(q[6]); // T67
     Ti[7] = T_rpy(0, 0, 0, 0, 0, 0.107); // T78
-    Ti[8] = T_rot_z(-PI / 4, 0, 0, 0.1034); // T8E
+    Ti[8] = T_rot_z(-M_PI / 4, 0, 0, 0.1034); // T8E
 }
 
 unsigned int ee_number(const char ee) {
@@ -358,7 +358,7 @@ array<array<double, 6>, 7> J_from_q(const array<double, 7>& q, const char ee) {
     get_frame_transforms(Ti, q);
     Eigen::Matrix4d T = Ti[0]; // T01
     J6d.col(0) << 0, 0, 1, 0, 0, 0;
-    for (int i = 1; i < een; i++) {
+    for (unsigned int i = 1; i < een; i++) {
         T = T * Ti[i]; // T0{i+1} = T0{i}*T{i}{i+1}
         if (i < 7) {
             s = T.block<3, 1>(0, 2);
@@ -369,9 +369,9 @@ array<array<double, 6>, 7> J_from_q(const array<double, 7>& q, const char ee) {
     }
     J6d = Adj_trans(-T(0, 3), -T(1, 3), -T(2, 3)) * J6d;
     array<array<double, 6>, 7> Jarr;
-    for (int i = 0; i < cols; i++)
+    for (unsigned int i = 0; i < cols; i++)
         Jarr[i] = {J6d(0,i), J6d(1,i), J6d(2,i), J6d(3,i), J6d(4,i), J6d(5,i)};
-    for (int i = cols; i < 7; i++)
+    for (unsigned int i = cols; i < 7; i++)
         Jarr[i] = {0, 0, 0, 0, 0, 0};
     return Jarr;
 }
@@ -384,7 +384,7 @@ Eigen::Matrix4d franka_fk(const array<double, 7>& q, const char ee) {
     array<Eigen::Matrix4d, 9> Ti;
     get_frame_transforms(Ti, q);
     Eigen::Matrix4d TOee = Ti[0];
-    for (int i = 1; i < een; i++)
+    for (unsigned int i = 1; i < een; i++)
         TOee = TOee * Ti[i];
     return TOee;
 }
@@ -415,7 +415,7 @@ unsigned int franka_ik_q7(const array<double, 3>& r,
     // si = s_i_O
     Eigen::Vector3d i_E_O(ROE[0], ROE[3], ROE[6]);
     array<double, 3> k_E_O = {ROE[2], ROE[5], ROE[8]};
-    R_axis_angle(k_E_O, -(q7 - PI / 4));
+    R_axis_angle(k_E_O, -(q7 - M_PI / 4));
     Eigen::Vector3d i_6_O = tmp_R * i_E_O;
     array<double, 3> s6;
     Cross_(k_E_O, i_6_O, s6);
@@ -479,7 +479,7 @@ unsigned int franka_ik_q7(const array<double, 3>& r,
     array<double, 6> sol1;
     array<double, 3> sol2;
     array<double, 3> s4, r4, s3, s2, s5;
-    for (int i = 0; i < n_sols; i++) {
+    for (unsigned int i = 0; i < n_sols; i++) {
         s5 = s5s[i];
         Cross_(s5, r6, s4);
         tmp = Norm(s4);
@@ -540,7 +540,7 @@ unsigned int franka_ik_q4(const array<double, 3>& r,
     array<double, 3> r_O7S_E = {ROE[0] * r_O7S_O[0] + ROE[3] * r_O7S_O[1] + ROE[6] * r_O7S_O[2],
                                  ROE[1] * r_O7S_O[0] + ROE[4] * r_O7S_O[1] + ROE[7] * r_O7S_O[2],
                                  ROE[2] * r_O7S_O[0] + ROE[5] * r_O7S_O[1] + ROE[8] * r_O7S_O[2]};
-    double alpha = q4 + beta1 + beta2 - PI;
+    double alpha = q4 + beta1 + beta2 - M_PI;
     double lo2 = b1 * b1 + b2 * b2 - 2 * b1 * b2 * cos(alpha);
     double lp2 = lo2 - r_O7S_E[2] * r_O7S_E[2];
     // fixed triangle condition
@@ -582,16 +582,16 @@ unsigned int franka_ik_q4(const array<double, 3>& r,
     }
     */
     double psi = acos(tmp), ry, rz;
-    double q7s[2] = {-phi - psi - 3 * PI / 4, -phi + psi - 3 * PI / 4};
+    double q7s[2] = {-phi - psi - 3 * M_PI / 4, -phi + psi - 3 * M_PI / 4};
     double gammas[2] = {0,0};
     unsigned int ind = 0;
     array<double, 3> s2, s3, s4, s5, s6, r4, r6, i_C_O, j_C_O, k_C_O;
     array<double, 6> sol1;
     array<double, 3> sol2;
     for (auto q7 : q7s) {
-        tmp_v = {cos(-q7 + 3 * PI / 4), sin(-q7 + 3 * PI / 4), 0};
+        tmp_v = {cos(-q7 + 3 * M_PI / 4), sin(-q7 + 3 * M_PI / 4), 0};
         s6 = {ROE[0] * tmp_v[0] + ROE[1] * tmp_v[1], ROE[3] * tmp_v[0] + ROE[4] * tmp_v[1], ROE[6] * tmp_v[0] + ROE[7] * tmp_v[1]};
-        tmp_v = {-a7 * cos(-q7 + PI / 4), -a7 * sin(-q7 + PI / 4), 0};
+        tmp_v = {-a7 * cos(-q7 + M_PI / 4), -a7 * sin(-q7 + M_PI / 4), 0};
         r6 = {ROE[0] * tmp_v[0] + ROE[1] * tmp_v[1], ROE[3] * tmp_v[0] + ROE[4] * tmp_v[1], ROE[6] * tmp_v[0] + ROE[7] * tmp_v[1]};
         r6 = {r6[0] + r_O7S_O[0], r6[1] + r_O7S_O[1], r6[2] + r_O7S_O[2]};
         tmp = Norm(r6);
@@ -606,7 +606,7 @@ unsigned int franka_ik_q4(const array<double, 3>& r,
         if (tmp * tmp > 1) continue;
         tmp = asin(tmp);
         gammas[0] = tmp;
-        gammas[1] = PI - tmp;
+        gammas[1] = M_PI - tmp;
         for (auto gamma : gammas) {
             tmp_v = {-sg2 * cos(gamma), -sg2 * sin(gamma), -cg2};
             s5 = {i_C_O[0] * tmp_v[0] + j_C_O[0] * tmp_v[1] + k_C_O[0] * tmp_v[2],
@@ -724,7 +724,7 @@ unsigned int franka_ik_q6_parallel(const array<double, 3>& r_ES_O,
             s4 = {partial_J_O(0,1), partial_J_O(1,1), partial_J_O(2,1)};
             s5 = {partial_J_O(0,2), partial_J_O(1,2), partial_J_O(2,2)};
             s6 = {partial_J_O(0,3), partial_J_O(1,3), partial_J_O(2,3)};
-            q7 = atan2(r_O6pQ_Q[1], -r_O6pQ_Q[0]) + PI / 4;
+            q7 = atan2(r_O6pQ_Q[1], -r_O6pQ_Q[0]) + M_PI / 4;
             tmp = s3[1] * s3[1] + s3[0] * s3[0];
             if (tmp > SING_TOL * SING_TOL)
                 s2 = {-s3[1] / sqrt(tmp), s3[0] / sqrt(tmp), 0};
@@ -775,7 +775,7 @@ unsigned int franka_ik_q6(const array<double, 3>& r,
 
     // NON-PARALLEL CASE:
     array<double, 3> s7 = {ROE[2],ROE[5],ROE[8]};
-    double gamma1 = PI - q6;
+    double gamma1 = M_PI - q6;
     double cg1 = cos(gamma1);
     double sg1 = sin(gamma1);
     array<double, 3> r_O7S_O = {r_ES_O[0] - dE * ROE[2], r_ES_O[1] - dE * ROE[5], r_ES_O[2] - dE * ROE[8]};
@@ -804,7 +804,7 @@ unsigned int franka_ik_q6(const array<double, 3>& r,
     if ((d3 + d5 + lC < lP) && (lP < b1 + c)) n_gamma_sols = 2;
     double gamma2s[2];
     if (d5 < -lC)
-        gamma2s[0] = tau + atan(a5 / (d5 + lC)) + PI;
+        gamma2s[0] = tau + atan(a5 / (d5 + lC)) + M_PI;
     else
         gamma2s[0] = tau + atan(a5 / (d5 + lC));
     if (n_gamma_sols > 1)
@@ -814,7 +814,7 @@ unsigned int franka_ik_q6(const array<double, 3>& r,
     double q7s[4];
     double d, u1, u2;
     unsigned int n_sols = 0;
-    for (int i = 0; i < n_gamma_sols; i++) {
+    for (unsigned int i = 0; i < n_gamma_sols; i++) {
         d = lP * cos(gamma2s[i]);
         tmp = (d + Cz * cg1) / (sqrt(Cx * Cx * sg1 * sg1 + Cy * Cy * sg1 * sg1));
         //cout << "tmp at cone: " << tmp;
@@ -834,12 +834,12 @@ unsigned int franka_ik_q6(const array<double, 3>& r,
         u2 = atan2(Cx * sg1, Cy * sg1);
         //cout << "u1 = " << u1 << endl;
         //cout << "u2 = " << u2 << endl;
-        q7s[n_sols] = 5 * PI / 4 - u1 + u2;
+        q7s[n_sols] = 5 * M_PI / 4 - u1 + u2;
         tmp_v = {-sg1 * cos(u1 - u2), -sg1 * sin(u1 - u2), cg1};
         column_1s_times_vec(ROE, tmp_v, s5s[n_sols]);
         n_sols++;
-        q7s[n_sols] = PI / 4 + u1 + u2;
-        tmp_v = {-sg1 * cos(PI - u1 - u2), -sg1 * sin(PI - u1 - u2), cg1};
+        q7s[n_sols] = M_PI / 4 + u1 + u2;
+        tmp_v = {-sg1 * cos(M_PI - u1 - u2), -sg1 * sin(M_PI - u1 - u2), cg1};
         column_1s_times_vec(ROE, tmp_v, s5s[n_sols]);
         n_sols++;
     }
@@ -847,7 +847,7 @@ unsigned int franka_ik_q6(const array<double, 3>& r,
     array<double, 3> s2, s3, s4, s6, r4, r6;
     array<double, 6> sol1;
     array<double, 3> sol2;
-    for (int i = 0; i < n_sols; i++) {
+    for (unsigned int i = 0; i < n_sols; i++) {
         r6 = {r_PS_O[0] - lC * s5s[i][0], r_PS_O[1] - lC * s5s[i][1], r_PS_O[2] - lC * s5s[i][2]};
         tmp_v = {r_O7S_O[0] - r6[0], r_O7S_O[1] - r6[1], r_O7S_O[2] - r6[2]};
         Cross_(s7, tmp_v, s6);
@@ -903,7 +903,7 @@ array<double, 2> theta_err_from_q7_explore_around_sing(double& q7m,
     double q7up = q7m + q7step / 2;
     double q7j = q7m - q7step / 2;
     while (q7j < q7up) {
-        R_axis_angle(k_E_O, -(q7j - PI / 4));
+        R_axis_angle(k_E_O, -(q7j - M_PI / 4));
         i_6_O = tmp_R * i_E_O;
         Cross_(k_E_O, i_6_O, s6);
         r6 = {r_O7S_O[0] - a7 * i_6_O[0], r_O7S_O[1] - a7 * i_6_O[1], r_O7S_O[2] - a7 * i_6_O[2]};
@@ -982,7 +982,7 @@ array<double, 2> theta_err_from_q7(double& q7,
     // Calculates the error in swivel angle given the necessary geometry, q7, and the desired swivel angle theta
     // NOTATION: u_O7S_O = r_O7S_O/norm(r_O7S_O), precalculated to improve speed
     array<double, 2> errs;
-    R_axis_angle(k_E_O, -(q7 - PI / 4));
+    R_axis_angle(k_E_O, -(q7 - M_PI / 4));
     i_6_O = tmp_R * i_E_O;
     array<double, 3> s6;
     Cross_(k_E_O, i_6_O, s6);
@@ -1019,7 +1019,7 @@ array<double, 2> theta_err_from_q7(double& q7,
         if (tmp * tmp < 1.2 && n_fine > 0) {
             //cout << "\texploring around current value of q7" << endl;
             // errs = theta_err_from_q7_explore_around_sing(q7, theta, i_E_O, k_E_O, i_6_O, n1_O, r_O7S_O, u_O7S_O, q7step, n_fine);
-            //cout << "\tbest q7 found: " << q7 * 180 / PI << " with errs: " << errs[0] << ", " << errs[1] << endl;
+            //cout << "\tbest q7 found: " << q7 * 180 / M_PI << " with errs: " << errs[0] << ", " << errs[1] << endl;
             // return errs;
             return theta_err_from_q7_explore_around_sing(q7, theta, i_E_O, k_E_O, i_6_O, n1_O, r_O7S_O, u_O7S_O, q7step, n_fine);
         }
@@ -1029,7 +1029,7 @@ array<double, 2> theta_err_from_q7(double& q7,
     if (tmp * tmp > 0.8 && n_fine > 0) {
         //cout << "\texploring around current value of q7" << endl;
         // errs = theta_err_from_q7_explore_around_sing(q7, theta, i_E_O, k_E_O, i_6_O, n1_O, r_O7S_O, u_O7S_O, q7step, n_fine);
-        //cout << "\tbest q7 found: " << q7 * 180 / PI << " with errs: " << errs[0] << ", " << errs[1] <<endl;
+        //cout << "\tbest q7 found: " << q7 * 180 / M_PI << " with errs: " << errs[0] << ", " << errs[1] <<endl;
         // return errs;
         return theta_err_from_q7_explore_around_sing(q7, theta, i_E_O, k_E_O, i_6_O, n1_O, r_O7S_O, u_O7S_O, q7step, n_fine);
     }
@@ -1072,7 +1072,7 @@ void franka_ik_q7_one_sol(const double q7,
     unsigned int ind,
     const double q1_sing) {
     // returns the two solution related to one single branch of the IK with q7 as free variable. The results are stored in qsols[s*ind] and qsols[2*ind+1]
-    R_axis_angle(k_E_O, -(q7 - PI / 4));
+    R_axis_angle(k_E_O, -(q7 - M_PI / 4));
     i_6_O = tmp_R * i_E_O;
     array<double, 3> s6 = Cross(k_E_O, i_6_O);
     array<double, 3> r6 = {r_O7S_O[0] - a7 * i_6_O[0], r_O7S_O[1] - a7 * i_6_O[1], r_O7S_O[2] - a7 * i_6_O[2]};
@@ -1090,7 +1090,7 @@ void franka_ik_q7_one_sol(const double q7,
     array<double, 3> j_C_O = Cross(k_C_O, i_C_O);
     double ry = s6[0] * j_C_O[0] + s6[1] * j_C_O[1] + s6[2] * j_C_O[2];
     double rz = s6[0] * k_C_O[0] + s6[1] * k_C_O[1] + s6[2] * k_C_O[2];
-    array<array<double, 3>, 4> s5s;
+    // array<array<double, 3>, 4> s5s; // -Wunused-variable
     double sa2, ca2;
     sa2 = sin(alpha2);
     ca2 = cos(alpha2);
@@ -1174,7 +1174,7 @@ unsigned int franka_ik_swivel(const array<double, 3>& r,
     tmp = Norm(r_O7S_O);
     array<double, 3> u_O7S_O = {r_O7S_O[0] / tmp, r_O7S_O[1] / tmp, r_O7S_O[2] / tmp};
     double q7_step = (q_up[6] - q_low[6]) / (n_points - 1);
-    double q7;
+    // double q7; // -Wunused-variable
     array<array<double, 2>, MAX_N_POINTS> Errs;
     array<unsigned int, MAX_N_POINTS> close_cases_b0;
     array<unsigned int, MAX_N_POINTS> close_cases_b1;
@@ -1184,20 +1184,20 @@ unsigned int franka_ik_swivel(const array<double, 3>& r,
 
     unsigned int n_close_cases_b0 = 0;
     unsigned int n_close_cases_b1 = 0;
-    for (int i = 0; i < n_points; i++) {
+    for (unsigned int i = 0; i < n_points; i++) {
         q7s[i] = q_low[6] + i * q7_step;
-        //cout << "\nq7 = " << q7s[i]*180/PI << endl;
+        //cout << "\nq7 = " << q7s[i]*180/M_PI << endl;
         Errs[i] = theta_err_from_q7(q7s[i], theta, i_E_O, k_E_O, i_6_O, n1_O, r_O7S_O, u_O7S_O, q7_step, n_fine_search);
-        //cout << "errors at q7 = " << q7s[i]*180/PI << " are " << Errs[i][0] << ", " << Errs[i][1] << endl;
+        //cout << "errors at q7 = " << q7s[i]*180/M_PI << " are " << Errs[i][0] << ", " << Errs[i][1] << endl;
         if (Errs[i][0] < ERR_THRESH) {
             close_cases_b0[n_close_cases_b0] = i;
             n_close_cases_b0 += 1;
-            //cout << "saved q7 (b0) = " << q7s[i]*180/PI << endl;
+            //cout << "saved q7 (b0) = " << q7s[i]*180/M_PI << endl;
         }
         if (Errs[i][1] < ERR_THRESH) {
             close_cases_b1[n_close_cases_b1] = i;
             n_close_cases_b1 += 1;
-            //cout << "saved q7 (b1) = " << q7s[i] * 180 / PI << endl;
+            //cout << "saved q7 (b1) = " << q7s[i] * 180 / M_PI << endl;
         }
     }
 
@@ -1212,7 +1212,7 @@ unsigned int franka_ik_swivel(const array<double, 3>& r,
     vector<array<unsigned int, 2>> best(0);
     if (n_close_cases_b0 > 0) {
         min = close_cases_b0[0];
-        for (int i = 1; i < n_close_cases_b0; i++) {
+        for (unsigned int i = 1; i < n_close_cases_b0; i++) {
             if (close_cases_b0[i] == close_cases_b0[i - 1] + 1) {
                 if (Errs[close_cases_b0[i]][0] < Errs[min][0]) {
                     min = close_cases_b0[i];
@@ -1227,7 +1227,7 @@ unsigned int franka_ik_swivel(const array<double, 3>& r,
     }
     if (n_close_cases_b1 > 0) {
         min = close_cases_b1[0];
-        for (int i = 1; i < n_close_cases_b1; i++) {
+        for (unsigned int i = 1; i < n_close_cases_b1; i++) {
             if (close_cases_b1[i] == close_cases_b1[i - 1] + 1) {
                 if (Errs[close_cases_b1[i]][1] < Errs[min][1]) {
                     min = close_cases_b1[i];
@@ -1250,7 +1250,7 @@ unsigned int franka_ik_swivel(const array<double, 3>& r,
     // interpolation
     double e0, e1, e2, e3, q71, q72, q7_opt;
     array<unsigned int, 2> m;
-    for (int i = 0; i < n_sols; i++) {
+    for (unsigned int i = 0; i < n_sols; i++) {
         m = best[i];
         q7_opt = q7s[m[0]];
         if (m[0] > 1 && m[0] < n_points - 2) {
@@ -1360,7 +1360,7 @@ unsigned int franka_J_ik_q7(const array<double, 3>& r,
     // si - s_i_O,
     Eigen::Vector3d i_E_O(ROE[0], ROE[3], ROE[6]);
     array<double, 3> k_E_O = {ROE[2], ROE[5], ROE[8]};
-    R_axis_angle(k_E_O, -(q7 - PI / 4));
+    R_axis_angle(k_E_O, -(q7 - M_PI / 4));
     Eigen::Vector3d i_6_O = tmp_R * i_E_O;
     array<double, 3> s6;
     Cross_(k_E_O, i_6_O, s6);
@@ -1422,7 +1422,7 @@ unsigned int franka_J_ik_q7(const array<double, 3>& r,
     array<double, 6> sol1;
     array<double, 3> sol2;
     array<double, 3> s4, r4, s3, s2, s5;
-    for (int i = 0; i < n_sols; i++) {
+    for (unsigned int i = 0; i < n_sols; i++) {
         s5 = s5s[i];
         Cross_(s5, r6, s4);
         tmp = Norm(s4);
@@ -1498,7 +1498,7 @@ unsigned int franka_J_ik_q4(const array<double, 3>& r,
     array<double, 3> r_O7S_E = {ROE[0] * r_O7S_O[0] + ROE[3] * r_O7S_O[1] + ROE[6] * r_O7S_O[2],
                                  ROE[1] * r_O7S_O[0] + ROE[4] * r_O7S_O[1] + ROE[7] * r_O7S_O[2],
                                  ROE[2] * r_O7S_O[0] + ROE[5] * r_O7S_O[1] + ROE[8] * r_O7S_O[2]};
-    double alpha = q4 + beta1 + beta2 - PI;
+    double alpha = q4 + beta1 + beta2 - M_PI;
     double lo2 = b1 * b1 + b2 * b2 - 2 * b1 * b2 * cos(alpha);
     double lp2 = lo2 - r_O7S_E[2] * r_O7S_E[2];
     if (lp2 < 0) {
@@ -1527,7 +1527,7 @@ unsigned int franka_J_ik_q4(const array<double, 3>& r,
         }
     }
     double psi = acos(tmp), ry, rz;
-    double q7s[2] = {-phi - psi - 3 * PI / 4, -phi + psi - 3 * PI / 4};
+    double q7s[2] = {-phi - psi - 3 * M_PI / 4, -phi + psi - 3 * M_PI / 4};
     double gammas[2] = {0,0};
     size_t ind = 0;
     array<double, 3> s2, s3, s4, s5, s6, r4, r6, i_C_O, j_C_O, k_C_O;
@@ -1535,9 +1535,9 @@ unsigned int franka_J_ik_q4(const array<double, 3>& r,
     array<double, 6> sol1;
     array<double, 3> sol2;
     for (auto q7 : q7s) {
-        tmp_v = {cos(-q7 + 3 * PI / 4), sin(-q7 + 3 * PI / 4), 0};
+        tmp_v = {cos(-q7 + 3 * M_PI / 4), sin(-q7 + 3 * M_PI / 4), 0};
         s6 = {ROE[0] * tmp_v[0] + ROE[1] * tmp_v[1], ROE[3] * tmp_v[0] + ROE[4] * tmp_v[1], ROE[6] * tmp_v[0] + ROE[7] * tmp_v[1]};
-        tmp_v = {-a7 * cos(-q7 + PI / 4), -a7 * sin(-q7 + PI / 4), 0};
+        tmp_v = {-a7 * cos(-q7 + M_PI / 4), -a7 * sin(-q7 + M_PI / 4), 0};
         r6 = {ROE[0] * tmp_v[0] + ROE[1] * tmp_v[1], ROE[3] * tmp_v[0] + ROE[4] * tmp_v[1], ROE[6] * tmp_v[0] + ROE[7] * tmp_v[1]};
         r6 = {r6[0] + r_O7S_O[0], r6[1] + r_O7S_O[1], r6[2] + r_O7S_O[2]};
         tmp = Norm(r6);
@@ -1552,7 +1552,7 @@ unsigned int franka_J_ik_q4(const array<double, 3>& r,
         if (tmp * tmp > 1) continue;
         tmp = asin(tmp);
         gammas[0] = tmp;
-        gammas[1] = PI - tmp;
+        gammas[1] = M_PI - tmp;
         for (auto gamma : gammas) {
             tmp_v = {-sg2 * cos(gamma), -sg2 * sin(gamma), -cg2};
             s5 = {i_C_O[0] * tmp_v[0] + j_C_O[0] * tmp_v[1] + k_C_O[0] * tmp_v[2],
@@ -1689,7 +1689,7 @@ unsigned int franka_J_ik_q6_parallel(const array<double, 3>& r,
             s4 = {partial_J_O(0,1), partial_J_O(1,1), partial_J_O(2,1)};
             s5 = {partial_J_O(0,2), partial_J_O(1,2), partial_J_O(2,2)};
             s6 = {partial_J_O(0,3), partial_J_O(1,3), partial_J_O(2,3)};
-            q7 = atan2(r_O6pQ_Q[1], -r_O6pQ_Q[0]) + PI / 4;
+            q7 = atan2(r_O6pQ_Q[1], -r_O6pQ_Q[0]) + M_PI / 4;
             tmp = s3[1] * s3[1] + s3[0] * s3[0];
             if (tmp > SING_TOL * SING_TOL)
                 s2 = {-s3[1] / sqrt(tmp), s3[0] / sqrt(tmp), 0};
@@ -1752,7 +1752,7 @@ unsigned int franka_J_ik_q6(const array<double, 3>& r,
         return franka_J_ik_q6_parallel(r, r_ES_O, ROE, cos(q6) >= 0 ? 1 : -1, Jsols, qsols, joint_angles, Jacobian_ee, q1_sing);
     // NON-PARALLEL CASE:
     array<double, 3> s7 = {ROE[2],ROE[5],ROE[8]};
-    double gamma1 = PI - q6;
+    double gamma1 = M_PI - q6;
     double cg1 = cos(gamma1);
     double sg1 = sin(gamma1);
     array<double, 3> r_O7S_O = {r_ES_O[0] - dE * ROE[2], r_ES_O[1] - dE * ROE[5], r_ES_O[2] - dE * ROE[8]};
@@ -1782,7 +1782,7 @@ unsigned int franka_J_ik_q6(const array<double, 3>& r,
     if ((d3 + d5 + lC < lP) && (lP < b1 + c)) n_gamma_sols = 2;
     double gamma2s[2];
     if (d5 < -lC)
-        gamma2s[0] = tau + atan(a5 / (d5 + lC)) + PI;
+        gamma2s[0] = tau + atan(a5 / (d5 + lC)) + M_PI;
     else
         gamma2s[0] = tau + atan(a5 / (d5 + lC));
     if (n_gamma_sols > 1)
@@ -1791,7 +1791,7 @@ unsigned int franka_J_ik_q6(const array<double, 3>& r,
     double q7s[4];
     double d, u1, u2;
     unsigned int n_sols = 0;
-    for (int i = 0; i < n_gamma_sols; i++) {
+    for (unsigned int i = 0; i < n_gamma_sols; i++) {
         d = lP * cos(gamma2s[i]);
         tmp = (d + Cz * cg1) / (sqrt(Cx * Cx * sg1 * sg1 + Cy * Cy * sg1 * sg1));
         if (tmp > 1) {
@@ -1808,19 +1808,19 @@ unsigned int franka_J_ik_q6(const array<double, 3>& r,
         }
         u1 = asin(tmp);
         u2 = atan2(Cx * sg1, Cy * sg1);
-        q7s[n_sols] = 5 * PI / 4 - u1 + u2;
+        q7s[n_sols] = 5 * M_PI / 4 - u1 + u2;
         tmp_v = {-sg1 * cos(u1 - u2), -sg1 * sin(u1 - u2), cg1};
         column_1s_times_vec(ROE, tmp_v, s5s[n_sols]);
         n_sols++;
-        q7s[n_sols] = PI / 4 + u1 + u2;
-        tmp_v = {-sg1 * cos(PI - u1 - u2), -sg1 * sin(PI - u1 - u2), cg1};
+        q7s[n_sols] = M_PI / 4 + u1 + u2;
+        tmp_v = {-sg1 * cos(M_PI - u1 - u2), -sg1 * sin(M_PI - u1 - u2), cg1};
         column_1s_times_vec(ROE, tmp_v, s5s[n_sols]);
         n_sols++;
     }
     array<double, 3> s2, s3, s4, s6, r4, r6;
     array<double, 6> sol1;
     array<double, 3> sol2;
-    for (int i = 0; i < n_sols; i++) {
+    for (unsigned int i = 0; i < n_sols; i++) {
         r6 = {r_PS_O[0] - lC * s5s[i][0], r_PS_O[1] - lC * s5s[i][1], r_PS_O[2] - lC * s5s[i][2]};
         tmp_v = {r_O7S_O[0] - r6[0], r_O7S_O[1] - r6[1], r_O7S_O[2] - r6[2]};
         Cross_(s7, tmp_v, s6);
@@ -1877,7 +1877,7 @@ void franka_J_ik_q7_one_sol(const double q7,
     const unsigned int branch,
     const double q1_sing) {
     // returns the two solution related to one single branch of the IK with q7 as free variable. The results are stored in Jsols[2*ind] and Jsols[2*ind+1]
-    R_axis_angle(k_E_O, -(q7 - PI / 4));
+    R_axis_angle(k_E_O, -(q7 - M_PI / 4));
     i_6_O = tmp_R * i_E_O;
     array<double, 3> s6 = Cross(k_E_O, i_6_O);
     array<double, 3> r6 = {r_O7S_O[0] - a7 * i_6_O[0], r_O7S_O[1] - a7 * i_6_O[1], r_O7S_O[2] - a7 * i_6_O[2]};
@@ -1894,7 +1894,7 @@ void franka_J_ik_q7_one_sol(const double q7,
     array<double, 3> j_C_O = Cross(k_C_O, i_C_O);
     double ry = s6[0] * j_C_O[0] + s6[1] * j_C_O[1] + s6[2] * j_C_O[2];
     double rz = s6[0] * k_C_O[0] + s6[1] * k_C_O[1] + s6[2] * k_C_O[2];
-    array<array<double, 3>, 4> s5s;
+    // array<array<double, 3>, 4> s5s; // -Wunused-variable
     double sa2, ca2;
     sa2 = sin(alpha2);
     ca2 = cos(alpha2);
@@ -1989,14 +1989,14 @@ unsigned int franka_J_ik_swivel(const array<double, 3>& r,
     tmp = Norm(r_O7S_O);
     array<double, 3> u_O7S_O = {r_O7S_O[0] / tmp, r_O7S_O[1] / tmp, r_O7S_O[2] / tmp};
     double q7_step = (q_up[6] - q_low[6]) / (n_points - 1);
-    double q7;
+    // double q7; // -Wunused-variable
     array<array<double, 2>, MAX_N_POINTS> Errs;
     array<unsigned int, MAX_N_POINTS> close_cases_b0;
     array<unsigned int, MAX_N_POINTS> close_cases_b1;
     array<double, MAX_N_POINTS> q7s;
     unsigned int n_close_cases_b0 = 0;
     unsigned int n_close_cases_b1 = 0;
-    for (int i = 0; i < n_points; i++) {
+    for (unsigned int i = 0; i < n_points; i++) {
         q7s[i] = q_low[6] + i * q7_step;
         Errs[i] = theta_err_from_q7(q7s[i], theta, i_E_O, k_E_O, i_6_O, n1_O, r_O7S_O, u_O7S_O, q7_step, n_fine_search);
         if (Errs[i][0] < ERR_THRESH) {
@@ -2023,7 +2023,7 @@ unsigned int franka_J_ik_swivel(const array<double, 3>& r,
     vector<array<unsigned int, 2>> best(0);
     if (n_close_cases_b0 > 0) {
         min = close_cases_b0[0];
-        for (int i = 1; i < n_close_cases_b0; i++) {
+        for (unsigned int i = 1; i < n_close_cases_b0; i++) {
             if (close_cases_b0[i] == close_cases_b0[i - 1] + 1) {
                 if (Errs[close_cases_b0[i]][0] < Errs[min][0]) {
                     min = close_cases_b0[i];
@@ -2038,7 +2038,7 @@ unsigned int franka_J_ik_swivel(const array<double, 3>& r,
     }
     if (n_close_cases_b1 > 0) {
         min = close_cases_b1[0];
-        for (int i = 1; i < n_close_cases_b1; i++) {
+        for (unsigned int i = 1; i < n_close_cases_b1; i++) {
             if (close_cases_b1[i] == close_cases_b1[i - 1] + 1) {
                 if (Errs[close_cases_b1[i]][1] < Errs[min][1]) {
                     min = close_cases_b1[i];
@@ -2061,7 +2061,7 @@ unsigned int franka_J_ik_swivel(const array<double, 3>& r,
     // interpolation
     double e0, e1, e2, e3, q71, q72, q7_opt;
     array<unsigned int, 2> m;
-    for (int i = 0; i < n_sols; i++) {
+    for (unsigned int i = 0; i < n_sols; i++) {
         m = best[i];
         q7_opt = q7s[m[0]];
         if (m[0] > 1 && m[0] < n_points - 2) {

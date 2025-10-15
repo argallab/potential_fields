@@ -21,6 +21,8 @@
   <depend>Eigen3</depend>
   <depend>geometric_shapes</depend>
   <depend>fcl</depend>
+  <depend>pinocchio</depend>
+  <depend>Franka</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>

@@ -13,6 +13,7 @@
 #include <franka/robot.h>
 
 #include "examples_common.h"
+#include "weighted_ik.h"
 #include "motion_plugin.hpp"
 
 /**
@@ -34,7 +35,7 @@ struct IKSolverSearchParameters {
 
 class FrankaIKSolver : public IKSolver {
 public:
-  explicit FrankaIKSolver(IKSolverSearchParameters params = IKSolverSearchParameters());
+  explicit FrankaIKSolver(IKSolverSearchParameters params);
   ~FrankaIKSolver() override = default;
 
   /**
@@ -49,6 +50,23 @@ public:
    */
   bool solve(const Eigen::Isometry3d& targetPose, const std::vector<double>& seed,
     std::vector<double>& solution, Eigen::Matrix<double, 6, Eigen::Dynamic>& J) override;
+
+  // Jacobian-only computation to satisfy IKSolver interface,
+  // but Franka Jacobian needs targetPose so this function is not implemented
+  bool computeJacobian(
+    [[maybe_unused]] const std::vector<double>& jointPositions,
+    [[maybe_unused]] Eigen::Matrix<double, 6, Eigen::Dynamic>& J) override {
+    return false;
+  }
+
+  std::vector<std::string> getJointNames() const override {
+    return {"fer_joint1", "fer_joint2", "fer_joint3", "fer_joint4",
+            "fer_joint5", "fer_joint6", "fer_joint7"};
+  }
+
+  std::vector<double> getHomeConfiguration() const override {
+    return std::vector<double>(this->homeJointAngles.cbegin(), this->homeJointAngles.cend());
+  }
 
 private:
   // The joint angles of the franka in the "home" position [rad]

@@ -3,12 +3,16 @@ project(potential_fields)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
+set(CMAKE_CXX_EXTENSIONS OFF)
 
 if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_compile_options(-Wall -Wextra -Wpedantic)
 endif()
 
 enable_testing()
+
+set(FRANKA_INSTALL_PATH "$ENV{HOME}/ws/franka/install" CACHE PATH "Path to libfranka installation directory")
+set(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH};${FRANKA_INSTALL_PATH}")
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
@@ -26,6 +30,8 @@ find_package(urdf REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(geometric_shapes REQUIRED)
 find_package(fcl REQUIRED)
+find_package(pinocchio REQUIRED)
+find_package(Franka REQUIRED)
 
 
 # Setup pfield_lib library
@@ -34,21 +40,62 @@ add_library(pfield_lib SHARED
   src/pfield/pf_obstacle.cpp
   src/pfield/pfield.cpp
   src/pfield/spatial_vector.cpp
+  src/pfield/pf_kinematics.cpp
 )
-target_link_libraries(pfield_lib
-  fcl
-)
+
 ament_target_dependencies(pfield_lib
   Eigen3
   geometric_shapes
 )
 target_include_directories(pfield_lib PUBLIC
-  include/potential_fields
+  include/potential_fields/pfield
+  ${EIGEN3_INCLUDE_DIR}
+  PRIVATE ${pinocchio_INCLUDE_DIRS}
+)
+target_link_libraries(pfield_lib
+  fcl
+  pinocchio::pinocchio
+  ${EIGEN3_LIBRARIES}
 )
 
 # Use precompiled headers to speed up builds (CMake >= 3.16)
 if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.16)
   target_precompile_headers(pfield_lib PRIVATE
+    <Eigen/Dense>
+    <Eigen/Core>
+    <Eigen/Geometry>
+    <vector>
+    <string>
+    <cmath>
+    <memory>
+  )
+endif()
+
+# Setup robot_plugins library
+add_library(robot_plugins SHARED
+  src/robot_plugins/examples_common.cpp
+  src/robot_plugins/geofik.cpp
+  src/robot_plugins/weighted_ik.cpp
+  src/robot_plugins/franka_plugin.cpp
+)
+ament_target_dependencies(robot_plugins
+  Eigen3
+  rclcpp
+  geometry_msgs
+  sensor_msgs
+  Franka
+)
+target_include_directories(robot_plugins PUBLIC
+  include/potential_fields/robot_plugins
+)
+target_link_libraries(robot_plugins
+  Franka::Franka
+)
+
+# Use precompiled headers to speed up builds (CMake >= 3.16)
+if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.16)
+  target_precompile_headers(robot_plugins PRIVATE
+    <Eigen/Dense>
     <Eigen/Core>
     <Eigen/Geometry>
     <vector>
@@ -107,6 +154,7 @@ ament_target_dependencies(robot_parser
 target_link_libraries(pfield_manager
   ${potential_fields_interfaces_LIBRARIES}
   pfield_lib
+  robot_plugins
 )
 
 target_link_libraries(robot_parser
@@ -116,6 +164,14 @@ target_link_libraries(robot_parser
 # Install the shared library so runtime linker can find it
 install(
   TARGETS pfield_lib
+  ARCHIVE DESTINATION lib
+  LIBRARY DESTINATION lib
+  RUNTIME DESTINATION bin
+)
+
+# Install the robot_plugins shared library so it is available at runtime
+install(
+  TARGETS robot_plugins
   ARCHIVE DESTINATION lib
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin

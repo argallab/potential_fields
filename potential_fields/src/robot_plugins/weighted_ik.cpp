@@ -97,7 +97,7 @@ WeightedIKResult WeightedIKSolver::solve_q7(
         result.total_solutions_found += nsols;
 
         // Check each solution for this q7 value
-        for (int i = 0; i < nsols; i++) {
+        for (unsigned int i = 0; i < nsols; i++) {
             // Check if solution is valid (all joints within limits)
             bool valid_solution = true;
             for (int j = 0; j < 7; j++) {
@@ -176,7 +176,7 @@ double WeightedIKSolver::evaluate_q7_cost(
     double best_score = -std::numeric_limits<double>::infinity();
 
     // Evaluate each solution
-    for (int i = 0; i < nsols; i++) {
+    for (unsigned int i = 0; i < nsols; i++) {
         // Check if solution is valid (all joints within limits)
         bool valid_solution = true;
         for (int j = 0; j < 7; j++) {
@@ -351,10 +351,10 @@ WeightedIKResult WeightedIKSolver::solve_q7_optimized(
 
     if (nsols > 0) {
         // Find the best solution for the optimal q7
-        for (int i = 0; i < nsols; i++) {
+        for (unsigned int i = 0; i < nsols; i++) {
             // Check if solution is valid
             bool valid_solution = true;
-            for (int j = 0; j < 7; j++) {
+            for (unsigned int j = 0; j < 7; j++) {
                 if (isnan(qsols[i][j])) {
                     valid_solution = false;
                     break;
@@ -420,7 +420,7 @@ WeightedIKResult WeightedIKSolver::solve_q7_optimized(
 
             cout << "Joint angles (degrees):" << endl;
             for (int j = 0; j < 7; j++) {
-                cout << "q_" << j + 1 << " = " << std::setprecision(6) << result.joint_angles[j] * 180 / PI << endl;
+                cout << "q_" << j + 1 << " = " << std::setprecision(6) << result.joint_angles[j] * 180 / M_PI << endl;
             }
             cout << endl;
 
@@ -482,7 +482,7 @@ void print_weighted_ik_results(const WeightedIKResult& result) {
 
         cout << "Joint angles (degrees):" << endl;
         for (int j = 0; j < 7; j++) {
-            cout << "q_" << j + 1 << " = " << std::setprecision(6) << result.joint_angles[j] * 180 / PI << endl;
+            cout << "q_" << j + 1 << " = " << std::setprecision(6) << result.joint_angles[j] * 180 / M_PI << endl;
         }
         cout << endl;
 

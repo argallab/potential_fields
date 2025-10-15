@@ -10,8 +10,10 @@ endif()
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
+find_package(ament_cmake_python REQUIRED)
 find_package(ament_cmake_gtest REQUIRED)
 find_package(rclcpp REQUIRED)
+find_package(rclpy REQUIRED)
 find_package(potential_fields REQUIRED)
 find_package(potential_fields_interfaces REQUIRED)
 find_package(Doxygen)
@@ -22,15 +24,21 @@ find_package(tf2_ros REQUIRED)
 find_package(tf2_eigen REQUIRED)
 find_package(urdf REQUIRED)
 find_package(Eigen3 REQUIRED)
+find_package(std_srvs REQUIRED)
+find_package(std_msgs REQUIRED)
+find_package(trajectory_msgs REQUIRED)
+find_package(sensor_msgs REQUIRED)
+find_package(control_msgs REQUIRED)
 
 include_directories(
   include/pfields_demo
   ${potential_fields_interfaces_INCLUDE_DIRS}
 )
-add_executable(pf_demo src/pfield_demo.cpp)
-ament_target_dependencies(pf_demo
+
+# Create an executable for the C++ demo node
+add_executable(pfield_demo_node src/pfield_demo.cpp)
+ament_target_dependencies(pfield_demo_node
   rclcpp
-  Eigen3
   potential_fields
   potential_fields_interfaces
   geometry_msgs
@@ -39,13 +47,18 @@ ament_target_dependencies(pf_demo
   tf2_ros
   tf2_eigen
   urdf
-)
-target_link_libraries(pf_demo
-  ${potential_fields_interfaces_LIBRARIES}
+  Eigen3
+  std_srvs
+  std_msgs
+  trajectory_msgs
+  sensor_msgs
+  control_msgs
 )
 
+# Install the Python demo node
 install(
-  TARGETS pf_demo
+  PROGRAMS
+  pfields_demo/pf_demo.py
   DESTINATION lib/${PROJECT_NAME}
 )
 install(
@@ -79,4 +92,5 @@ if(BUILD_TESTING)
   ament_lint_auto_find_test_dependencies()
 endif()
 
+ament_python_install_package(${PROJECT_NAME})
 ament_package()

@@ -94,6 +94,10 @@ struct ObstacleGeometry {
   double width = 0.0; // Width for box, unused for sphere and cylinder
   double height = 0.0; // Height for cylinder and box, unused for sphere
 
+  ObstacleGeometry() = default;
+  ObstacleGeometry(double radius, double length, double width, double height)
+    : radius(radius), length(length), width(width), height(height) {}
+
   bool operator==(const ObstacleGeometry& other) const {
     return radius == other.radius && length == other.length &&
       width == other.width && height == other.height;

@@ -48,7 +48,6 @@ RobotParser::RobotParser() : Node("robot_parser") {
     .best_effort()
     .durability_volatile();
   this->obstaclePub = this->create_publisher<ObstacleArray>("pfield/obstacles", qos);
-  this->planningObstaclePub = this->create_publisher<ObstacleArray>("pfield/planning_obstacles", qos);
   this->planningRobotDescriptionPub = this->create_publisher<std_msgs::msg::String>("pfield/planning_robot_description", 1);
 
   // Setup TF2 broadcaster, buffer, and listener
@@ -138,15 +137,15 @@ void RobotParser::timerCallback() {
   }
   this->obstaclePub->publish(obstacleArray);
 
-  // Publish Obstacles for Planning (with "planning::" prefix in the id)
-  std::vector<Obstacle> planningObstacles = this->extractObstaclesFromCatalog(this->planningCollisionCatalog);
-  ObstacleArray planningObstacleArray;
-  planningObstacleArray.header.frame_id = this->fixedFrame;
-  planningObstacleArray.header.stamp = this->get_clock()->now();
-  for (const auto& obstacle : planningObstacles) {
-    planningObstacleArray.obstacles.push_back(obstacle);
-  }
-  this->planningObstaclePub->publish(planningObstacleArray);
+  // // Publish Obstacles for Planning (with "planning::" prefix in the id)
+  // std::vector<Obstacle> planningObstacles = this->extractObstaclesFromCatalog(this->planningCollisionCatalog);
+  // ObstacleArray planningObstacleArray;
+  // planningObstacleArray.header.frame_id = this->fixedFrame;
+  // planningObstacleArray.header.stamp = this->get_clock()->now();
+  // for (const auto& obstacle : planningObstacles) {
+  //   planningObstacleArray.obstacles.push_back(obstacle);
+  // }
+  // this->obstaclePub->publish(planningObstacleArray);
 }
 
 std::vector<Obstacle> RobotParser::extractObstaclesFromCatalog(const std::vector<CollisionCatalogEntry>& catalog) {

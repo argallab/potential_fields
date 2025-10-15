@@ -14,6 +14,7 @@
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/quaternion.hpp"
 #include "geometry_msgs/msg/transform_stamped.hpp"
+#include "geometry_msgs/msg/twist.hpp"
 #include "nav_msgs/msg/path.hpp"
 #include "visualization_msgs/msg/marker.hpp"
 #include "visualization_msgs/msg/marker_array.hpp"
@@ -24,10 +25,10 @@
 #include "potential_fields_interfaces/msg/obstacle_array.hpp"
 #include "potential_fields_interfaces/srv/plan_path.hpp"
 #include "potential_fields_interfaces/srv/compute_autonomy_vector.hpp"
-#include "potential_fields_interfaces/srv/p_field_step.hpp"
 
 #include "pfield/pfield.hpp"
 #include "robot_plugins/ik_solver.hpp"
+#include "robot_plugins/motion_plugin.hpp"
 
 #include "rclcpp/rclcpp.hpp"
 #include "tf2_eigen/tf2_eigen.hpp"
@@ -47,7 +48,7 @@ using Obstacle = potential_fields_interfaces::msg::Obstacle;
 using ObstacleArray = potential_fields_interfaces::msg::ObstacleArray;
 using PlanPath = potential_fields_interfaces::srv::PlanPath;
 using ComputeAutonomyVector = potential_fields_interfaces::srv::ComputeAutonomyVector;
-using PFieldStep = potential_fields_interfaces::srv::PFieldStep;
+using JointState = sensor_msgs::msg::JointState;
 
 struct PFLimits {
   double minX; // Minimum X coordinate of the bounding box [m]
@@ -77,31 +78,36 @@ private:
   double attractiveGain; // Attractive gain [Ns/m]
   double rotationalAttractiveGain; // Rotational attractive gain [Ns/m]
   double repulsiveGain; // Repulsive gain [Ns/m]
-  double maxForce; // Maximum force [N]
+  double maxLinearVelocity; // Maximum Linear Velocity [m/s]
+  double maxAngularVelocity; // Maximum Angular Velocity [rad/s]
+  double maxLinearAcceleration; // Maximum Linear Acceleration [m/s^2]
+  double maxAngularAcceleration; // Maximum Angular Acceleration [rad/s^2]
   double influenceZoneScale; // Influence zone scaling factor
   std::string fixedFrame; // RViz fixed frame for visualization and PF computation
   // Potential field instances (shared_ptr to avoid inadvertent copying when passing to visualization helpers)
   std::shared_ptr<PotentialField> pField; // Primary Potential Field
-  std::shared_ptr<PotentialField> planningPField; // Planning Potential Field
   double visualizerBufferArea; // Extra area around obstacles and goal to visualize the PF [m]
   double fieldResolution; // Resolution of the potential field grid [m]
+
+  // The MotionPlugin containing robot-specific functions (Kinematics, Motion Planning, etc.)
+  std::unique_ptr<MotionPlugin> motionPlugin;
 
   rclcpp::TimerBase::SharedPtr timer; // Timer to periodically update the potential field
   std::shared_ptr<tf2_ros::TransformBroadcaster> dynamicTfBroadcaster; // Dynamic transform broadcaster
   std::shared_ptr<tf2_ros::Buffer> tfBuffer; // TF buffer for transform lookups
   std::shared_ptr<tf2_ros::TransformListener> tfListener; // TF Listener for populating the TF buffer
   rclcpp::Publisher<MarkerArray>::SharedPtr pFieldMarkerPub; // Publisher for PF Markers
-  rclcpp::Publisher<MarkerArray>::SharedPtr planningPFieldMarkerPub; // Publisher for Planning PF Markers
+  rclcpp::Publisher<JointState>::SharedPtr planningJointStatePub; // Publisher for planning joint states
+  rclcpp::Publisher<Path>::SharedPtr plannedEndEffectorPathPub; // Publisher for planned end-effector path
   rclcpp::Subscription<PoseStamped>::SharedPtr goalPoseSub; // Subscriber for the goal pose
   rclcpp::Subscription<ObstacleArray>::SharedPtr obstacleSub; // Subscriber for obstacles
-  rclcpp::Subscription<ObstacleArray>::SharedPtr planningObstacleSub; // Subscriber for planning obstacles
-  // Path planning service was moved to MotionInterface; PFieldManager now offers a single-step PF evaluation
-  rclcpp::Service<PFieldStep>::SharedPtr pfieldStepService; // Service to perform one planning step (evaluate PF and return next pose)
+  rclcpp::Service<PlanPath>::SharedPtr pathPlanningService; // Now hosted here
   rclcpp::Service<ComputeAutonomyVector>::SharedPtr autonomyVectorService; // Service to compute velocity vector at a given pose
 
   // Service callbacks
-  void handlePFieldStep(const PFieldStep::Request::SharedPtr request, PFieldStep::Response::SharedPtr response);
-  void handleComputeAutonomyVector(const ComputeAutonomyVector::Request::SharedPtr request, ComputeAutonomyVector::Response::SharedPtr response);
+  void handlePlanPath(const PlanPath::Request::SharedPtr request, PlanPath::Response::SharedPtr response);
+  void handleComputeAutonomyVector(
+    const ComputeAutonomyVector::Request::SharedPtr request, ComputeAutonomyVector::Response::SharedPtr response);
 
   /**
    * @brief Given a potential field, computes its spatial limits for visualization (bounding box)
@@ -148,6 +154,30 @@ private:
    * @return MarkerArray The marker array containing all velocity vector markers
    */
   MarkerArray createPotentialVectorMarkers(std::shared_ptr<PotentialField> pf);
+
+  /**
+   * @brief Fuses the two twists using a weighted alpha parameter
+   *
+   * @note alpha = 0.0 -> only twist1, alpha = 1.0 -> only twist2
+   *
+   * @param twist1 The first twist to fuse
+   * @param twist2 The second twist to fuse
+   * @param alpha The weight for the second twist [0.0, 1.0]
+   * @return geometry_msgs::msg::Twist The fused twist
+   */
+  geometry_msgs::msg::Twist fuseTwists(
+    const geometry_msgs::msg::Twist::SharedPtr twist1,
+    const geometry_msgs::msg::Twist::SharedPtr twist2,
+    const double alpha);
+
+  /**
+   * @brief Clamps the twist to the specified limits.
+   *
+   * @param twist The twist to clamp
+   * @param limits A twist message where linear and angular components represent the maximum allowed values
+   * @return geometry_msgs::msg::Twist The clamped twist as a new message
+   */
+  geometry_msgs::msg::Twist clampTwist(const geometry_msgs::msg::Twist& twist, const geometry_msgs::msg::Twist& limits);
 
   /**
    * @brief Exports the potential field data to a CSV file for external analysis or visualization.

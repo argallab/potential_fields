@@ -86,29 +86,29 @@ TEST(PotentialFieldTest, ClearObstacles) {
 TEST(PotentialFieldTest, VelocityAtGoalIsZero) {
   SpatialVector goal(Eigen::Vector3d(1.0f, 1.0f, 1.0f));
   PotentialField pf(goal, 1.0f, 0.0f);
-  SpatialVector v = pf.evaluateVelocityAtPose(goal);
-  EXPECT_EQ(v.getPosition(), Eigen::Vector3d::Zero());
-  EXPECT_EQ(v.getOrientation(), Eigen::Quaterniond::Identity());
+  TaskSpaceTwist v = pf.evaluateVelocityAtPose(goal);
+  EXPECT_EQ(v.getLinearVelocity(), Eigen::Vector3d::Zero());
+  EXPECT_EQ(v.getAngularVelocity(), Eigen::Vector3d::Zero());
 }
 
 TEST(PotentialFieldTest, AttractiveFieldPullsTowardGoal) {
   SpatialVector goal;
   PotentialField pf(goal, 1.0f, 0.0f);
   SpatialVector query(Eigen::Vector3d(1.0f, 0.0f, 0.0f));
-  SpatialVector vel = pf.evaluateVelocityAtPose(query);
-  EXPECT_LT(vel.getPosition().x(), 0);  // should pull toward origin
-  EXPECT_NEAR(vel.getPosition().y(), 0.0f, 1e-5);
-  EXPECT_NEAR(vel.getPosition().z(), 0.0f, 1e-5);
+  TaskSpaceTwist vel = pf.evaluateVelocityAtPose(query);
+  EXPECT_LT(vel.getLinearVelocity().x(), 0);  // should pull toward origin
+  EXPECT_NEAR(vel.getLinearVelocity().y(), 0.0f, 1e-5);
+  EXPECT_NEAR(vel.getLinearVelocity().z(), 0.0f, 1e-5);
 }
 
 TEST(PotentialFieldTest, AttractiveGainScaling) {
   SpatialVector goal(Eigen::Vector3d::Zero());
-  PotentialField pf(goal, 3.0, 0.0);
+  PotentialField pf(goal, 3.0, 0.0, 10.0, 1.0, 5.0, 5.0);
   SpatialVector query(Eigen::Vector3d(2.0, 0.0, 0.0));
-  SpatialVector vel = pf.evaluateVelocityAtPose(query);
+  TaskSpaceTwist vel = pf.evaluateVelocityAtPose(query);
   // magnitude = gain * distance = 3 * 2 = 6, direction toward goal: negative x
-  EXPECT_NEAR(vel.getPosition().x(), -6.0, 1e-6);
-  EXPECT_NEAR(vel.getPosition().y(), 0.0, 1e-6);
+  EXPECT_NEAR(vel.getLinearVelocity().x(), -6.0, 1e-6);
+  EXPECT_NEAR(vel.getLinearVelocity().y(), 0.0, 1e-6);
 }
 
 TEST(PotentialFieldTest, RepulsiveFieldPushesAwayFromObstacle) {
@@ -146,22 +146,22 @@ TEST(PotentialFieldTest, RepulsiveFieldPushesAwayFromObstacle) {
   );
   pf.addObstacle(sphereObst);
   SpatialVector query(Eigen::Vector3d(1.0, 0.0, 0.0));
-  SpatialVector vel = pf.evaluateVelocityAtPose(query);
-  EXPECT_GT(vel.getPosition().x(), 0);  // push away from origin
-  EXPECT_NEAR(vel.getPosition().y(), 0.0f, 1e-5);
-  EXPECT_NEAR(vel.getPosition().z(), 0.0f, 1e-5);
+  TaskSpaceTwist vel = pf.evaluateVelocityAtPose(query);
+  EXPECT_GT(vel.getLinearVelocity().x(), 0);  // push away from origin
+  EXPECT_NEAR(vel.getLinearVelocity().y(), 0.0f, 1e-5);
+  EXPECT_NEAR(vel.getLinearVelocity().z(), 0.0f, 1e-5);
   pf.addObstacle(boxObst);
   SpatialVector query2(Eigen::Vector3d(0.0, 1.0, 0.0));
-  SpatialVector vel2 = pf.evaluateVelocityAtPose(query2);
-  EXPECT_GT(vel2.getPosition().y(), 0);  // push away from origin
-  EXPECT_NEAR(vel2.getPosition().x(), 0.0f, 1e-5);
-  EXPECT_NEAR(vel2.getPosition().z(), 0.0f, 1e-5);
+  TaskSpaceTwist vel2 = pf.evaluateVelocityAtPose(query2);
+  EXPECT_GT(vel2.getLinearVelocity().y(), 0);  // push away from origin
+  EXPECT_NEAR(vel2.getLinearVelocity().x(), 0.0f, 1e-5);
+  EXPECT_NEAR(vel2.getLinearVelocity().z(), 0.0f, 1e-5);
   pf.addObstacle(cylinderObst);
   SpatialVector query3(Eigen::Vector3d(0.0, 0.0, 1.0));
-  SpatialVector vel3 = pf.evaluateVelocityAtPose(query3);
-  EXPECT_GT(vel3.getPosition().z(), 0);  // push away from origin
-  EXPECT_NEAR(vel3.getPosition().x(), 0.0f, 1e-5);
-  EXPECT_NEAR(vel3.getPosition().y(), 0.0f, 1e-5);
+  TaskSpaceTwist vel3 = pf.evaluateVelocityAtPose(query3);
+  EXPECT_GT(vel3.getLinearVelocity().z(), 0);  // push away from origin
+  EXPECT_NEAR(vel3.getLinearVelocity().x(), 0.0f, 1e-5);
+  EXPECT_NEAR(vel3.getLinearVelocity().y(), 0.0f, 1e-5);
 }
 
 TEST(PotentialFieldTest, BoxWithinObstacleAxisAligned) {
@@ -246,11 +246,12 @@ TEST(PotentialFieldTest, CylinderWithinObstacleRotated) {
 
 TEST(PotentialFieldTest, NearZeroDistanceAttraction) {
   PotentialField pf(SpatialVector(Eigen::Vector3d(1.0f, 1.0f, 1.0f)), 1.0f, 0.0f);
-  SpatialVector nearGoal(Eigen::Vector3d(1 + 1e-3f, 1.0f, 1.0f));
-  SpatialVector vel = pf.evaluateVelocityAtPose(nearGoal);
-  EXPECT_GT(std::abs(vel.getPosition().x()), 1e-3f);  // Should be small but not zero
-  EXPECT_NEAR(vel.getPosition().y(), 0.0f, 1e-6f);
-  EXPECT_NEAR(vel.getPosition().z(), 0.0f, 1e-6f);
+  // Use an offset slightly larger than translationalTolerance to avoid zeroing
+  SpatialVector nearGoal(Eigen::Vector3d(1 + 2e-3f, 1.0f, 1.0f));
+  TaskSpaceTwist vel = pf.evaluateVelocityAtPose(nearGoal);
+  EXPECT_GT(std::abs(vel.getLinearVelocity().x()), 1e-3f);  // Should be small but not zero
+  EXPECT_NEAR(vel.getLinearVelocity().y(), 0.0f, 1e-6f);
+  EXPECT_NEAR(vel.getLinearVelocity().z(), 0.0f, 1e-6f);
 }
 
 TEST(PotentialFieldTest, RepulsionAtSurfaceBoundary) {
@@ -267,14 +268,14 @@ TEST(PotentialFieldTest, RepulsionAtSurfaceBoundary) {
   );
   pf.addObstacle(obs);
   SpatialVector query(Eigen::Vector3d(2.0f, 0.0f, 0.0f));  // At influence radius
-  SpatialVector v = pf.evaluateVelocityAtPose(query);
-  EXPECT_NEAR(v.getPosition().x(), 0.0f, 1e-6f);  // At boundary, repulsive force should approach 0
+  TaskSpaceTwist v = pf.evaluateVelocityAtPose(query);
+  EXPECT_NEAR(v.getLinearVelocity().x(), 0.0f, 1e-6f);  // At boundary, repulsive force should approach 0
   SpatialVector query2(Eigen::Vector3d(2.1f, 0.0f, 0.0f));  // Outside influence radius
-  SpatialVector v2 = pf.evaluateVelocityAtPose(query2);
-  EXPECT_NEAR(v2.getPosition().x(), 0.0f, 1e-6f);
+  TaskSpaceTwist v2 = pf.evaluateVelocityAtPose(query2);
+  EXPECT_NEAR(v2.getLinearVelocity().x(), 0.0f, 1e-6f);
   SpatialVector query3(Eigen::Vector3d(1.9f, 0.0f, 0.0f));  // Inside influence radius
-  SpatialVector v3 = pf.evaluateVelocityAtPose(query3);
-  EXPECT_GT(v3.getPosition().x(), 0.0f);  // Should be pushing away from obstacle
+  TaskSpaceTwist v3 = pf.evaluateVelocityAtPose(query3);
+  EXPECT_GT(v3.getLinearVelocity().x(), 0.0f);  // Should be pushing away from obstacle
 }
 
 TEST(PotentialFieldTest, RepulsionMonotonicity) {
@@ -296,7 +297,7 @@ TEST(PotentialFieldTest, RepulsionMonotonicity) {
   auto v1 = pf.evaluateVelocityAtPose(q1);
   auto v2 = pf.evaluateVelocityAtPose(q2);
   // both push along +x; closer point should see stronger force
-  EXPECT_GT(v1.getPosition().x(), v2.getPosition().x());
+  EXPECT_GT(v1.getLinearVelocity().x(), v2.getLinearVelocity().x());
 }
 
 TEST(PotentialFieldTest, SymmetricObstaclesCancelAxes) {
@@ -325,8 +326,8 @@ TEST(PotentialFieldTest, SymmetricObstaclesCancelAxes) {
   SpatialVector q(Eigen::Vector3d(0, 2.0, 0));  // directly above both
   auto vel = pf.evaluateVelocityAtPose(q);
   // x‐components should cancel, only y‐component remains
-  EXPECT_NEAR(vel.getPosition().x(), 0.0, 1e-5);
-  EXPECT_GT(vel.getPosition().y(), 0.0);
+  EXPECT_NEAR(vel.getLinearVelocity().x(), 0.0, 1e-5);
+  EXPECT_GT(vel.getLinearVelocity().y(), 0.0);
 }
 
 
@@ -335,16 +336,34 @@ TEST(PotentialFieldTest, RotationalAttraction) {
   SpatialVector query; // Same position, different orientation
   goal.setOrientationEuler(0, 0, 0);
   query.setOrientationEuler(0, 0, M_PI_2);  // 90 degrees yaw
-
-  PotentialField pf(goal, 0.0f, 10.0f);  // No translation pull
-  SpatialVector vel = pf.evaluateVelocityAtPose(query);
-  EXPECT_NEAR(vel.getPosition().x(), 0.0f, 1e-3);
-  EXPECT_NEAR(vel.getPosition().y(), 0.0f, 1e-3);
-  EXPECT_NEAR(vel.getPosition().z(), 0.0f, 1e-3);
-  EXPECT_NEAR(vel.getOrientation().x(), 0.0f, 1e-3);
-  EXPECT_NEAR(vel.getOrientation().y(), 0.0f, 1e-3);
-  EXPECT_NEAR(vel.getOrientation().z(), 0.0f, 1e-3);
-  EXPECT_NEAR(vel.getOrientation().w(), -1.0f, 1e-3);  // Should be rotating towards goal
+  // Construct with full limits: attractiveGain=0, rotationalGain=10,
+  // maxLinearVel=0, maxAngularVel=15, maxLinearAccel=0, maxAngularAccel=5.
+  // Raw angular velocity magnitude (gain * angle) = 10 * (pi/2) ≈ 15.7079 which will be velocity-capped to 15.
+  PotentialField pf(goal, 0.0, 10.0, 0.0, 15.0, 0.0, 5.0);
+  TaskSpaceWrench rawWrench = pf.evaluateWrenchAtPose(query);
+  double rawOmegaMag = rawWrench.torque.norm();
+  EXPECT_NEAR(rawOmegaMag, 10.0 * goal.angularDistance(query), 1e-6); // pre-constraint check
+  TaskSpaceTwist vel = pf.evaluateVelocityAtPose(query); // constrained (dt=0 => velocity cap only)
+  // Linear velocity should be ~0 (positions are equal)
+  EXPECT_NEAR(vel.getLinearVelocity().x(), 0.0, 1e-3);
+  EXPECT_NEAR(vel.getLinearVelocity().y(), 0.0, 1e-3);
+  EXPECT_NEAR(vel.getLinearVelocity().z(), 0.0, 1e-3);
+  // Angular velocity axis should align with the quaternion error axis (up to sign)
+  Eigen::Quaterniond q_err = query.getOrientation().conjugate() * goal.getOrientation();
+  q_err.normalize();
+  Eigen::Vector3d axis = q_err.vec();
+  if (axis.norm() > 1e-12) axis.normalize();
+  const double omega_norm = vel.getAngularVelocity().norm();
+  // Check colinearity: |axis x omega| ~ 0 (when axis ~ 0 for zero angle, omega_norm should also be ~0)
+  if (axis.norm() < 1e-12) {
+    EXPECT_NEAR(omega_norm, 0.0, 1e-6);
+  }
+  else {
+    Eigen::Vector3d omega_dir = vel.getAngularVelocity() / (omega_norm + 1e-18);
+    EXPECT_NEAR((axis.cross(omega_dir)).norm(), 0.0, 1e-3);
+  }
+  // Magnitude should be min(gain*angle, maxAngularVelocity) = 15.0 after constraint
+  EXPECT_NEAR(omega_norm, 15.0, 1e-6);
 }
 
 TEST(PotentialFieldTest, TranslationAndRotation) {
@@ -354,7 +373,233 @@ TEST(PotentialFieldTest, TranslationAndRotation) {
   PotentialField pf(goal, 1.0, 10.0);
   auto vel = pf.evaluateVelocityAtPose(query);
   // translational: pulls toward origin (x < 0)
-  EXPECT_LT(vel.getPosition().x(), 0.0);
-  // rotational: orients toward identity, so quaternion should have a negative w‐component after multiplication
-  EXPECT_LT(vel.getOrientation().w(), 0.0);
+  EXPECT_LT(vel.getLinearVelocity().x(), 0.0);
+  // rotational: should produce non-zero angular velocity about Z toward the goal
+  EXPECT_GT(vel.getAngularVelocity().norm(), 0.0);
+}
+
+TEST(PotentialFieldTest, WrenchToTwistConversion) {
+  // wrenchToTwist uses unit gains; twist should equal wrench components
+  PotentialField pf; // default gains
+  TaskSpaceWrench w(Eigen::Vector3d(1.0, -2.0, 3.5), Eigen::Vector3d(0.25, -0.5, 1.0));
+  TaskSpaceTwist t = pf.wrenchToTwist(w);
+  EXPECT_NEAR((t.getLinearVelocity() - w.force).norm(), 0.0, 1e-12);
+  EXPECT_NEAR((t.getAngularVelocity() - w.torque).norm(), 0.0, 1e-12);
+}
+
+TEST(PotentialFieldTest, ApplyVelocityLimitsAccelerationDominates) {
+  // When going from 0 to a large twist in a short dt, acceleration limits should dominate
+  PotentialField pf; // defaults: vmax=5 m/s, amax=1 m/s^2; wmax=1 rad/s, alpha_max=1 rad/s^2
+  TaskSpaceTwist prev(Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero());
+  TaskSpaceTwist cmd(Eigen::Vector3d(10.0, 0.0, 0.0), Eigen::Vector3d(0.0, 2.0, 0.0));
+  const double dt = 0.1; // s
+  TaskSpaceTwist lim = pf.applyMotionConstraints(cmd, prev, dt);
+  // Implementation clamps velocity first, then acceleration if still exceeding accel caps
+  // From zero, commanded 10 m/s gets clamped to vmax=5 m/s; accel check then reduces to prev + amax*dt = 0.1 m/s
+  EXPECT_NEAR(lim.getLinearVelocity().x(), 1.0 * dt, 1e-6); // 0.1 m/s
+  EXPECT_NEAR(lim.getLinearVelocity().y(), 0.0, 1e-12);
+  EXPECT_NEAR(lim.getLinearVelocity().z(), 0.0, 1e-12);
+  EXPECT_NEAR(lim.getAngularVelocity().y(), 1.0 * dt, 1e-6); // 0.1 rad/s
+  EXPECT_NEAR(lim.getAngularVelocity().x(), 0.0, 1e-12);
+  EXPECT_NEAR(lim.getAngularVelocity().z(), 0.0, 1e-12);
+}
+
+TEST(PotentialFieldTest, ApplyVelocityLimitsVelocityCapOnly) {
+  // If previous twist is already at velocity cap in same direction, velocity cap should apply without accel limiting
+  // Construct a PF and set previous to max values; request a larger command, expect capped at max
+  PotentialField pf; // defaults
+  // Previous at vmax along +X and wmax along +Z
+  TaskSpaceTwist prev(Eigen::Vector3d(5.0, 0.0, 0.0), Eigen::Vector3d(0.0, 0.0, 1.0));
+  TaskSpaceTwist cmd(Eigen::Vector3d(10.0, 0.0, 0.0), Eigen::Vector3d(0.0, 0.0, 2.0));
+  const double dt = 0.2; // acceleration from 5->5 after cap is zero
+  TaskSpaceTwist lim = pf.applyMotionConstraints(cmd, prev, dt);
+  EXPECT_NEAR(lim.getLinearVelocity().x(), 5.0, 1e-12);
+  EXPECT_NEAR(lim.getLinearVelocity().y(), 0.0, 1e-12);
+  EXPECT_NEAR(lim.getLinearVelocity().z(), 0.0, 1e-12);
+  EXPECT_NEAR(lim.getAngularVelocity().z(), 1.0, 1e-12);
+  EXPECT_NEAR(lim.getAngularVelocity().x(), 0.0, 1e-12);
+  EXPECT_NEAR(lim.getAngularVelocity().y(), 0.0, 1e-12);
+}
+
+TEST(PotentialFieldTest, IntegrateLinearVelocity) {
+  PotentialField pf;
+  Eigen::Vector3d p0(1.0, 2.0, 3.0);
+  Eigen::Vector3d v(1.0, 0.0, -2.0);
+  double dt = 0.5;
+  Eigen::Vector3d p1 = pf.integrateLinearVelocity(p0, v, dt);
+  EXPECT_NEAR(p1.x(), 1.5, 1e-12);
+  EXPECT_NEAR(p1.y(), 2.0, 1e-12);
+  EXPECT_NEAR(p1.z(), 2.0, 1e-12);
+}
+
+TEST(PotentialFieldTest, IntegrateAngularVelocityAboutZ) {
+  PotentialField pf;
+  Eigen::Quaterniond q0 = Eigen::Quaterniond::Identity();
+  Eigen::Vector3d w(0.0, 0.0, 1.0); // rad/s about Z
+  double dt = M_PI / 4.0; // 45 degrees
+  Eigen::Quaterniond q1 = pf.integrateAngularVelocity(q0, w, dt);
+  // Expected rotation of 45 deg about Z
+  Eigen::Quaterniond q_expected(Eigen::AngleAxisd(M_PI / 4.0, Eigen::Vector3d::UnitZ()));
+  // Compare up to sign: |dot| ~ 1
+  double dot = std::abs(q1.dot(q_expected));
+  EXPECT_NEAR(dot, 1.0, 1e-6);
+}
+
+TEST(PotentialFieldTest, InterpolateNextPoseTranslationalStep) {
+  // With rotational gain zero, pose should move toward goal along -x with dt*speed
+  SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
+  // Construct with all limits (attractiveGain=1, rotationalGain=0, vmax_lin=5, vmax_ang=1, amax_lin=1, amax_ang=1)
+  PotentialField pf(1.0, 0.0, 5.0, 1.0, 1.0, 1.0);
+  pf.setGoalPose(goal);
+  SpatialVector current(Eigen::Vector3d(1.0, 0.0, 0.0), Eigen::Quaterniond::Identity());
+  double dt = 0.1; // raw speed at x=1 would be 1 m/s; accel limit (1 m/s^2 * 0.1 s) => 0.1 m/s applied
+  SpatialVector next = pf.interpolateNextPose(current, TaskSpaceTwist(), dt);
+  // Expected new x: 1.0 + (-0.1 m/s)*0.1 s = 0.99
+  EXPECT_NEAR(next.getPosition().x(), 0.99, 1e-6);
+  EXPECT_NEAR(next.getPosition().y(), 0.0, 1e-6);
+  EXPECT_NEAR(next.getPosition().z(), 0.0, 1e-6);
+  // Orientation should remain identity (no angular velocity)
+  double qdot = std::abs(next.getOrientation().dot(Eigen::Quaterniond::Identity()));
+  EXPECT_NEAR(qdot, 1.0, 1e-6);
+}
+
+TEST(PotentialFieldTest, EvaluateWrenchAtPosePureTorque) {
+  // Same position but 90deg yaw error -> zero force, non-zero torque
+  SpatialVector goal;
+  goal.setOrientationEuler(0, 0, 0);
+  SpatialVector query;
+  query.setOrientationEuler(0, 0, M_PI_2);
+  // No translational attraction, only rotational
+  PotentialField pf(goal, 0.0, 2.0);
+  TaskSpaceWrench w = pf.evaluateWrenchAtPose(query);
+  EXPECT_NEAR(w.force.norm(), 0.0, 1e-9);
+  // Torque axis should match quaternion error axis up to sign
+  Eigen::Quaterniond q_err = query.getOrientation().conjugate() * goal.getOrientation();
+  q_err.normalize();
+  Eigen::Vector3d axis = q_err.vec();
+  if (axis.norm() > 1e-12) axis.normalize();
+  double tau_norm = w.torque.norm();
+  if (axis.norm() < 1e-12) {
+    EXPECT_NEAR(tau_norm, 0.0, 1e-6);
+  }
+  else {
+    Eigen::Vector3d tau_dir = w.torque / (tau_norm + 1e-18);
+    EXPECT_NEAR((axis.cross(tau_dir)).norm(), 0.0, 1e-3);
+  }
+  EXPECT_NEAR(tau_norm, 2.0 * goal.angularDistance(query), 1e-2);
+}
+
+TEST(PotentialFieldTest, NoOvershootApproachGoalMonotonic) {
+  // Verify that with a reasonable timestep the interpolated poses approach the goal monotonically
+  // without crossing to the opposite side (no sign change) and without increasing distance.
+  SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
+  // Use attractive gain = 1, no rotation component
+  PotentialField pf(goal, 1.0, 0.0);
+  // Start 1 m along +X
+  SpatialVector current(Eigen::Vector3d(1.0, 0.0, 0.0), Eigen::Quaterniond::Identity());
+  const double dt = 0.1; // dt < 1/gain ensures (1 - k dt) > 0 so analytical solution has no overshoot
+  const unsigned int steps = 50; // sufficient steps to converge near tolerance
+  TaskSpaceTwist prevTwist; // starts at zero
+  double previousDistance = current.getPosition().norm();
+  for (unsigned int i = 0; i < steps; ++i) {
+    SpatialVector next = pf.interpolateNextPose(current, prevTwist, dt);
+    // Reconstruct the constrained twist that would be used for the next step (matching interpolateNextPose logic)
+    TaskSpaceTwist rawTwist = pf.wrenchToTwist(pf.evaluateWrenchAtPose(next));
+    TaskSpaceTwist twistNow = pf.applyMotionConstraints(rawTwist, prevTwist, dt);
+    // Distance to goal should not increase
+    double dist = next.getPosition().norm();
+    EXPECT_LE(dist, previousDistance + 1e-9) << "Distance increased at step " << i;
+    // X position should remain non-negative (no overshoot past goal) and non-increasing
+    EXPECT_GE(next.getPosition().x(), -1e-9) << "Overshoot past goal at step " << i;
+    EXPECT_LE(next.getPosition().x(), current.getPosition().x() + 1e-9) << "X increased at step " << i;
+    // Update for next loop
+    previousDistance = dist;
+    current = next;
+    prevTwist = twistNow; // supply previous twist for potential acceleration limiting (if dt>0 used)
+    if (dist <= 1e-3) { // within translational tolerance
+      break;
+    }
+  }
+  // Final pose should be within a small neighborhood of the goal and not negative on X
+  EXPECT_GE(current.getPosition().x(), -1e-6);
+  EXPECT_LE(current.getPosition().x(), 1.0);
+  EXPECT_NEAR(current.getPosition().y(), 0.0, 1e-6);
+  EXPECT_NEAR(current.getPosition().z(), 0.0, 1e-6);
+}
+
+TEST(PotentialFieldTest, PlanPathSinglePointWhenAlreadyAtGoal) {
+  SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
+  // Construct PF with goal in constructor
+  PotentialField pf(goal, 1.0, 0.0);
+  const double dt = 0.05;
+  const double tol = 1e-3; // matches translationalTolerance
+  PlannedPath path = pf.planPath(goal, dt, tol); // startPose == goal
+  ASSERT_EQ(path.numPoints, 1u);
+  ASSERT_EQ(path.poses.size(), 1u);
+  ASSERT_EQ(path.twists.size(), 1u);
+  ASSERT_EQ(path.timeStamps.size(), 1u);
+  EXPECT_NEAR(path.timeStamps[0], 0.0, 1e-9);
+  EXPECT_NEAR(path.duration, 0.0, 1e-9);
+  // Velocity at goal should be zero (already tested separately, re-check here for path integrity)
+  EXPECT_NEAR(path.twists[0].getLinearVelocity().norm(), 0.0, 1e-9);
+  EXPECT_NEAR(path.twists[0].getAngularVelocity().norm(), 0.0, 1e-9);
+}
+
+TEST(PotentialFieldTest, PlanPathMonotonicConvergenceToGoal) {
+  SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
+  PotentialField pf(goal, 1.0, 0.0); // pure translation attraction
+  SpatialVector start(Eigen::Vector3d(2.0, 0.0, 0.0), Eigen::Quaterniond::Identity());
+  const double dt = 0.1;
+  const double tol = 1e-3;
+  PlannedPath path = pf.planPath(start, dt, tol, 500); // limit iterations
+  ASSERT_GT(path.numPoints, 1u); // should have progressed
+  // Distances should be non-increasing
+  double prevDist = (path.poses.front().getPosition() - goal.getPosition()).norm();
+  for (size_t i = 1; i < path.poses.size(); ++i) {
+    double dist = (path.poses[i].getPosition() - goal.getPosition()).norm();
+    EXPECT_LE(dist, prevDist + 1e-9) << "Distance increased at index " << i;
+    prevDist = dist;
+  }
+  // Final distance within tolerance
+  double finalDist = (path.poses.back().getPosition() - goal.getPosition()).norm();
+  EXPECT_LE(finalDist, tol + 1e-9);
+  // Duration should correspond to last timestamp (starts at 0.0)
+  if (!path.timeStamps.empty()) {
+    EXPECT_NEAR(path.duration, path.timeStamps.back(), 1e-9);
+  }
+}
+
+TEST(PotentialFieldTest, PlanPathTimeStampConsistency) {
+  SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
+  PotentialField pf(goal, 1.0, 0.0);
+  SpatialVector start(Eigen::Vector3d(1.0, 0.0, 0.0), Eigen::Quaterniond::Identity());
+  const double dt = 0.05;
+  const double tol = 1e-3;
+  PlannedPath path = pf.planPath(start, dt, tol, 400);
+  ASSERT_EQ(path.dt, dt); // stored dt
+  // timeStamps[i] should be approximately i*dt
+  for (size_t i = 0; i < path.timeStamps.size(); ++i) {
+    EXPECT_NEAR(path.timeStamps[i], static_cast<double>(i) * dt, 1e-9);
+  }
+  // duration should equal last timestamp
+  if (!path.timeStamps.empty()) {
+    EXPECT_NEAR(path.duration, path.timeStamps.back(), 1e-9);
+  }
+}
+
+TEST(PotentialFieldTest, PlanPathTwistMatchesEvaluateVelocityAtPose) {
+  // Since planPath logs evaluateVelocityAtPose for each step, verify consistency
+  SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
+  PotentialField pf(goal, 1.0, 0.0);
+  SpatialVector start(Eigen::Vector3d(1.5, 0.0, 0.0), Eigen::Quaterniond::Identity());
+  const double dt = 0.1;
+  const double tol = 1e-3;
+  PlannedPath path = pf.planPath(start, dt, tol, 200);
+  ASSERT_EQ(path.poses.size(), path.twists.size());
+  for (size_t i = 0; i < path.poses.size(); ++i) {
+    TaskSpaceTwist expectedTwist = pf.evaluateVelocityAtPose(path.poses[i]);
+    // compare components
+    EXPECT_NEAR((expectedTwist.getLinearVelocity() - path.twists[i].getLinearVelocity()).norm(), 0.0, 1e-9);
+    EXPECT_NEAR((expectedTwist.getAngularVelocity() - path.twists[i].getAngularVelocity()).norm(), 0.0, 1e-9);
+  }
 }
