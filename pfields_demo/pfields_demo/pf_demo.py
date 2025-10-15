@@ -102,8 +102,8 @@ class PFDemo(Node):
 
         req.start = start
         req.goal = goal
-        req.delta_time = 0.1
-        req.goal_tolerance = 0.1
+        req.delta_time = 0.001  # 1 ms
+        req.goal_tolerance = 0.1  # 10 cm
 
         # publish goal for visualization
         self.goal_pub.publish(goal)
