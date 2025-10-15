@@ -176,3 +176,11 @@ A couple of notes:
 # Franka Emika Panda Notes
 - [Kris' Joystick Repo](https://github.com/wengmister/franka_joystick_teleop/blob/main/README.md)
 - [Franka User Setup (Matt Elwin's Notes)](https://nu-msr.github.io/ros_notes/ros2/franka.html)
+
+# Notes from 10/15 Meeting
+- Revisit clamping and enforcing velocity/acceleration limits
+  - Can smooth out entire trajectory after integrating a path
+  - Think about how to adjust PF parameters so forces always give valid EE wrenches
+- Refactor /goal_pose since it will get confused with navigation goal pose topic
+- Keep MotionPlugin separate but as a member of PotentialField
+- Implement the Pinocchio FK for obstacles and remove JSP/RSP
