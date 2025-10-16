@@ -132,8 +132,15 @@ PotentialFieldManager::PotentialFieldManager()
   );
 
   // Setup planning joint state publisher
-  this->planningJointStatePub = this->create_publisher<JointState>("joint_states", 10);
+  this->planningJointStatePub = this->create_publisher<JointState>("/pfield/joint_states", 10);
   RCLCPP_INFO(this->get_logger(), "Planning joint states publishing on: %s", this->planningJointStatePub->get_topic_name());
+  // Publish the initial joint states (home position)
+  JointState initialJointState;
+  initialJointState.header.stamp = this->now();
+  initialJointState.header.frame_id = this->fixedFrame;
+  initialJointState.name = this->motionPlugin->getIKSolver()->getJointNames();
+  initialJointState.position = this->motionPlugin->getIKSolver()->getHomeConfiguration();
+  this->planningJointStatePub->publish(initialJointState);
 
   // Setup planned end-effector path publisher
   this->plannedEndEffectorPathPub = this->create_publisher<Path>("pfield/planned_path", 10);
@@ -144,7 +151,6 @@ PotentialFieldManager::PotentialFieldManager()
     "pfield/compute_autonomy_vector",
     std::bind(&PotentialFieldManager::handleComputeAutonomyVector, this, std::placeholders::_1, std::placeholders::_2)
   );
-
 
   // Create the PlanPath service
   this->pathPlanningService = this->create_service<PlanPath>(

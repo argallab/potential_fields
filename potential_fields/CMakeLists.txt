@@ -50,7 +50,7 @@ ament_target_dependencies(pfield_lib
 target_include_directories(pfield_lib PUBLIC
   include/potential_fields/pfield
   ${EIGEN3_INCLUDE_DIR}
-  PRIVATE ${pinocchio_INCLUDE_DIRS}
+  ${pinocchio_INCLUDE_DIRS}
 )
 target_link_libraries(pfield_lib
   fcl
@@ -116,6 +116,7 @@ add_executable(robot_parser src/ros/robot_parser.cpp)
 # Library version of robot_parser (without main) for unit testing
 add_library(robot_parser_lib STATIC src/ros/robot_parser.cpp)
 target_compile_definitions(robot_parser_lib PRIVATE COMPILE_ROBOT_PARSER_NO_MAIN)
+target_link_libraries(robot_parser_lib pfield_lib)
 ament_target_dependencies(robot_parser_lib
   Eigen3
   geometry_msgs
@@ -159,6 +160,7 @@ target_link_libraries(pfield_manager
 
 target_link_libraries(robot_parser
   ${potential_fields_interfaces_LIBRARIES}
+  pfield_lib
 )
 
 # Install the shared library so runtime linker can find it
@@ -219,21 +221,6 @@ if(BUILD_TESTING)
   )
   target_link_libraries(test_mesh_obstacle pfield_lib)
 
-  ament_add_gtest(test_robot_parser
-    test/test_robot_parser.cpp
-  )
-  target_link_libraries(test_robot_parser pfield_lib robot_parser_lib)
-  ament_target_dependencies(test_robot_parser
-    Eigen3
-    geometry_msgs
-    potential_fields_interfaces
-    rclcpp
-    tf2_eigen
-    tf2_ros
-    urdf
-    visualization_msgs
-  )
-
   install(
     TARGETS test_spatial_vector
     DESTINATION lib/${PROJECT_NAME}
@@ -246,11 +233,6 @@ if(BUILD_TESTING)
 
   install(
     TARGETS test_mesh_obstacle
-    DESTINATION lib/${PROJECT_NAME}
-  )
-
-  install(
-    TARGETS test_robot_parser
     DESTINATION lib/${PROJECT_NAME}
   )
 

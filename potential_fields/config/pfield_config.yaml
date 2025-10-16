@@ -14,12 +14,3 @@ pfield_manager:
 robot_parser:
   ros__parameters:
     robot_geometry_update_frequency: 100.0 # [Hz]
-    planning_tf_prefix: "planning" # Prefix for planning frames
-    robot_plugin: "franka"
-    robot_hostname: "192.168.18.1"
-    fusion_alpha: 1.0 # Weight for fusing human (0) and PF (1) velocities [0, 1]
-    limits:
-      v_lin_max: 0.20 # [m/s]
-      v_ang_max: 0.80 # [rad/s]
-      a_lin_max: 0.40 # [m/s^2]
-      a_ang_max: 1.60 # [rad/s^2]
