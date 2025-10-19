@@ -48,15 +48,42 @@ private:
   urdf::Model robotModel; // URDF model
   std::vector<CollisionCatalogEntry> collisionCatalog; // Catalog of collision objects from URDF
   std::vector<std::string> collisionLinkNames; // Names of links with collision geometry
+  // Cached obstacle geometry templates aligned to collisionCatalog/collisionLinkNames
+  std::vector<Obstacle> obstacleGeometryTemplates; // pose will be updated per callback
+  bool kinematicsCachesInitialized = false;
 
   rclcpp::Subscription<JointState>::SharedPtr jointStateSub; // Subscriber for live JointStates
   rclcpp::Publisher<ObstacleArray>::SharedPtr obstaclePub; // Publisher for Obstacles from Robot Collision Geometry
 
   void jointStateCallback(const JointState::SharedPtr msg);
 
-  ObstacleArray extractObstaclesFromCatalog(const std::vector<CollisionCatalogEntry>& catalog,
-    const std::unordered_map<std::string, Eigen::Affine3d>& linkToTransformMap);
+  /**
+   * @brief Using cached transforms vector aligned to collisionLinkNames,
+   *        build obstacles using updated poses
+   *
+   * @param transforms The new poses of collision links, aligned to collisionLinkNames
+   * @return ObstacleArray Obstacle array message with updated poses
+   */
+  ObstacleArray buildObstaclesFromTransforms(const std::vector<Eigen::Affine3d>& transforms);
+
+  /**
+   * @brief Builds the collision catalog from the URDF model, holding info about
+   *        each collision object's link, name, and Collision pointer.
+   *
+   * @param model The URDF model
+   * @return std::vector<CollisionCatalogEntry> The built collision catalog
+   */
   std::vector<CollisionCatalogEntry> buildCollisionCatalog(urdf::Model& model);
+
+  /**
+   * @brief Builds an Obstacle message from a URDF Collision object and given pose
+   *
+   * @param frameID The frame ID for the obstacle's pose to be defined in
+   * @param collisionObject The URDF Collision object, defining geometry and type
+   * @param position The position of the obstacle
+   * @param orientation The orientation of the obstacle
+   * @return Obstacle The built Obstacle message
+   */
   Obstacle obstacleFromCollisionObject(const std::string& frameID, const urdf::Collision& collisionObject,
     const Eigen::Vector3d& position, const Eigen::Quaterniond& orientation);
 };

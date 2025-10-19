@@ -131,8 +131,9 @@ PotentialFieldManager::PotentialFieldManager()
   }
   );
 
-  // Setup planning joint state publisher
-  this->planningJointStatePub = this->create_publisher<JointState>("/pfield/joint_states", 10);
+  // Setup planning joint state publisher (latched so late subscribers receive the last sample)
+  auto jsPubQos = rclcpp::QoS(rclcpp::KeepLast(1)).reliable().transient_local();
+  this->planningJointStatePub = this->create_publisher<JointState>("/pfield/joint_states", jsPubQos);
   RCLCPP_INFO(this->get_logger(), "Planning joint states publishing on: %s", this->planningJointStatePub->get_topic_name());
   // Publish the initial joint states (home position)
   JointState initialJointState;
@@ -505,7 +506,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<Potenti
     obstacleMarker.header.frame_id = this->fixedFrame;
     obstacleMarker.header.stamp = this->now();
     obstacleMarker.frame_locked = true;
-    obstacleMarker.ns = "obstacle";
+    obstacleMarker.ns = "obstacle_" + obstacleTypeToString(obstacle.getType());
     obstacleMarker.id = hashID;
     obstacleMarker.action = Marker::ADD;
     auto position = obstacle.getPosition();
@@ -572,7 +573,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<Potenti
     influenceMarker.header.frame_id = this->fixedFrame;
     influenceMarker.header.stamp = this->now();
     influenceMarker.frame_locked = true;
-    influenceMarker.ns = "obstacle_influence";
+    influenceMarker.ns = "obstacle_influence_" + obstacleTypeToString(obstacle.getType());
     influenceMarker.id = hashID; // mirror id for influence volume
     influenceMarker.action = Marker::ADD;
     influenceMarker.pose.position.x = position.x();
@@ -605,8 +606,10 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<Potenti
       break;
     }
     case ObstacleType::MESH: {
-      // Represent mesh influence as a scaled bounding box around the mesh
+      // Represent mesh influence by rendering the same mesh, uniformly scaled by the influence factor
       influenceMarker.type = Marker::MESH_RESOURCE;
+      influenceMarker.mesh_resource = obstacle.getMeshResource();
+      influenceMarker.mesh_use_embedded_materials = false; // use our color/alpha below
       Eigen::Vector3d scale = obstacle.getMeshScale();
       influenceMarker.scale.x = obstacle.getInfluenceZoneScale() * scale.x();
       influenceMarker.scale.y = obstacle.getInfluenceZoneScale() * scale.y();

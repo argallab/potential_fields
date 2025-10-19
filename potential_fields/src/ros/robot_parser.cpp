@@ -51,7 +51,7 @@ RobotParser::RobotParser() : Node("robot_parser") {
     pinModel.njoints, pinModel.nframes);
   // Print the name of each frame
   for (const auto& frame : pinModel.frames) {
-    RCLCPP_INFO(this->get_logger(), "  Frame: %s", frame.name.c_str());
+    RCLCPP_DEBUG(this->get_logger(), "\tFrame: %s", frame.name.c_str());
   }
 
   // Parse URDF once to build the collision catalog
@@ -68,16 +68,29 @@ RobotParser::RobotParser() : Node("robot_parser") {
       else if (dynamic_cast<urdf::Sphere*>(entry.col->geometry.get())) gType = "Sphere";
       else if (dynamic_cast<urdf::Cylinder*>(entry.col->geometry.get())) gType = "Cylinder";
       else if (dynamic_cast<urdf::Mesh*>(entry.col->geometry.get())) gType = "Mesh";
-      RCLCPP_INFO(this->get_logger(), "Catalog: id=%s link=%s type=%s", entry.id.c_str(), entry.linkName.c_str(), gType.c_str());
+      RCLCPP_DEBUG(this->get_logger(), "\tCatalog: id=%s link=%s type=%s",
+        entry.id.c_str(), entry.linkName.c_str(), gType.c_str()
+      );
     }
     RCLCPP_INFO(this->get_logger(), "Robot has %zu links", this->robotModel.links_.size());
     RCLCPP_INFO(this->get_logger(), "Robot has %zu collision objects in catalog", this->collisionCatalog.size());
-    // Setup joint state subscriber
+    // Build cached obstacle geometry templates aligned to catalog entries
+    this->obstacleGeometryTemplates.clear();
+    this->obstacleGeometryTemplates.reserve(this->collisionCatalog.size());
+    for (const auto& entry : this->collisionCatalog) {
+      // Build a template with zero pose; we'll fill pose each callback fast
+      Obstacle templ = this->obstacleFromCollisionObject(
+        entry.id, *entry.col,
+        Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity()
+      );
+      this->obstacleGeometryTemplates.push_back(std::move(templ));
+    }
+    // Setup joint state subscriber with transient_local durability to receive latched initial sample
+    auto jsSubQos = rclcpp::QoS(rclcpp::KeepLast(2)).reliable().transient_local();
     this->jointStateSub = this->create_subscription<JointState>(
-      "/pfield/joint_states", 10,
+      "/pfield/joint_states", jsSubQos,
       std::bind(&RobotParser::jointStateCallback, this, std::placeholders::_1)
     );
-    RCLCPP_INFO(this->get_logger(), "PF Obstacles from JointStates initialized");
   }
   else {
     RCLCPP_ERROR(this->get_logger(), "Failed to load URDF model");
@@ -85,40 +98,50 @@ RobotParser::RobotParser() : Node("robot_parser") {
 }
 
 void RobotParser::jointStateCallback(const JointState::SharedPtr msg) {
-  std::unordered_map<std::string, double> jointAngleMap;
-  for (size_t i = 0; i < msg->name.size(); ++i) { jointAngleMap[msg->name[i]] = msg->position[i]; }
-  std::unordered_map<std::string, Eigen::Affine3d> linkTransforms = this->kinematicModel.jointAnglesToLinkTransforms(
-    jointAngleMap, this->collisionLinkNames
-  );
-  ObstacleArray obsArray = this->extractObstaclesFromCatalog(this->collisionCatalog, linkTransforms);
+  if (!this->kinematicsCachesInitialized) {
+    // Initialize caches with the runtime joint order on first message
+    this->kinematicModel.initializeCaches(msg->name, this->collisionLinkNames);
+    this->kinematicsCachesInitialized = true;
+    RCLCPP_INFO(this->get_logger(), "Initialized kinematics caches with %zu joints and %zu links",
+      msg->name.size(), this->collisionLinkNames.size());
+  }
+  std::vector<Eigen::Affine3d> transforms;
+  transforms.reserve(this->collisionLinkNames.size());
+  this->kinematicModel.computeLinkTransforms(msg->position, transforms);
+  RCLCPP_INFO(this->get_logger(), "Computed %zu link transforms", transforms.size());
+  ObstacleArray obsArray = this->buildObstaclesFromTransforms(transforms);
   this->obstaclePub->publish(obsArray);
+  RCLCPP_INFO(this->get_logger(), "Published %zu obstacles from joint state callback", obsArray.obstacles.size());
 }
 
-ObstacleArray RobotParser::extractObstaclesFromCatalog(
-  const std::vector<CollisionCatalogEntry>& catalog,
-  const std::unordered_map<std::string, Eigen::Affine3d>& linkToTransformMap) {
+ObstacleArray RobotParser::buildObstaclesFromTransforms(const std::vector<Eigen::Affine3d>& transforms) {
   ObstacleArray collisionObstacles;
   collisionObstacles.header.frame_id = this->fixedFrame;
   collisionObstacles.header.stamp = this->now();
-  collisionObstacles.obstacles.reserve(catalog.size());
-  // Build obstacles for links whose transforms we obtained
-  for (const auto& entry : catalog) {
-    auto it = linkToTransformMap.find(entry.linkName);
-    if (it == linkToTransformMap.end()) {
-      RCLCPP_WARN(this->get_logger(),
-        "No transform found for link '%s' (collision id '%s')",
-        entry.linkName.c_str(), entry.id.c_str()
-      );
-      continue;
-    }
+  collisionObstacles.obstacles.reserve(this->collisionCatalog.size());
+  // Each catalog entry aligns with collisionLinkNames and templates
+  size_t N = this->collisionCatalog.size();
+  for (size_t i = 0; i < N; ++i) {
+    const auto& entry = this->collisionCatalog[i];
+    // Find link index corresponding to this entry
+    // We built collisionLinkNames in the same order as catalog push_back; i aligns with link name index.
+    const Eigen::Affine3d& world_T_link = transforms[i];
     const urdf::Pose& origin = entry.col->origin;
     Eigen::Affine3d link_T_col =
       Eigen::Translation3d(origin.position.x, origin.position.y, origin.position.z) *
       Eigen::Quaterniond(origin.rotation.w, origin.rotation.x, origin.rotation.y, origin.rotation.z);
-    Eigen::Affine3d world_T_col = it->second * link_T_col;
-    Eigen::Vector3d obstCenter = world_T_col.translation();
-    Eigen::Quaterniond obstOrientation(world_T_col.rotation());
-    collisionObstacles.obstacles.push_back(this->obstacleFromCollisionObject(entry.id, *entry.col, obstCenter, obstOrientation));
+    Eigen::Affine3d world_T_col = world_T_link * link_T_col;
+    // Clone template and fill pose only
+    Obstacle o = this->obstacleGeometryTemplates[i];
+    o.pose.position.x = world_T_col.translation().x();
+    o.pose.position.y = world_T_col.translation().y();
+    o.pose.position.z = world_T_col.translation().z();
+    Eigen::Quaterniond q(world_T_col.rotation());
+    o.pose.orientation.x = q.x();
+    o.pose.orientation.y = q.y();
+    o.pose.orientation.z = q.z();
+    o.pose.orientation.w = q.w();
+    collisionObstacles.obstacles.push_back(std::move(o));
   }
   return collisionObstacles;
 }
@@ -182,6 +205,7 @@ Obstacle RobotParser::obstacleFromCollisionObject(
   }
   else if (urdf::Mesh* m = dynamic_cast<urdf::Mesh*>(geometry)) {
     obstacleType = "Mesh";
+    length = m->scale.x;
     width = m->scale.y;
     height = m->scale.z;
   }
