@@ -16,9 +16,7 @@
     - With obstacles obstructing the path to the goal
 - Debug FollowJointTrajectory Action client in pf_demo.py
   - When calling the action using the response from PlanPath, the action runs into PATH_TOLERANCE_VIOLATED error
-- Use Pinnochio/KDL library on the given URDF to compute FK and update robot obstacles instead of listening to TF frames
-  - Previous data-flow for URDF to PF Obstacles: URDF -> RSP (updates from JSP) -> TF -> PF Obstacles
-  - New data-flow for URDF to PF Obstacles: URDF -> Pinnochio/KDL -> FK Definition -> Joint Angles -> PF Obstacles
+- Consolidate `RobotParser` into `PFieldManager` (1 ROS node for managing everything)
 
 # Future TODOs and Refactors
 - Think about smoothness while still enforcing velocity and acceleration limits
