@@ -13,6 +13,7 @@ from trajectory_msgs.msg import JointTrajectory
 from control_msgs.msg import JointTolerance
 from control_msgs.action import FollowJointTrajectory
 import tf2_ros
+from sensor_msgs.msg import JointState
 
 
 class PFDemo(Node):
@@ -57,6 +58,51 @@ class PFDemo(Node):
         # Buffers for action execution logging
         self._traj_feedback_log = []  # list of samples captured from feedback
         self._current_joint_names = []
+        jsQos = rclpy.qos.QoSProfile(
+            depth=10,
+            reliability=rclpy.qos.ReliabilityPolicy.RMW_QOS_POLICY_RELIABILITY_RELIABLE,
+            durability=rclpy.qos.DurabilityPolicy.RMW_QOS_POLICY_DURABILITY_TRANSIENT_LOCAL
+        )
+        self.jointPub = self.create_publisher(
+            JointState, '/pfield/joint_states', jsQos)
+        freq = 50
+        self.timer = self.create_timer(1.0 / freq, self.timer_callback)
+
+        # Play a joint path to test joint state publishing
+        self.startingJointStates = JointState()
+        self.startingJointStates.name = [
+            'fer_joint1',
+            'fer_joint2',
+            'fer_joint3',
+            'fer_joint4',
+            'fer_joint5',
+            'fer_joint6',
+            'fer_joint7'
+        ]
+        self.startingJointStates.position = [
+            0.0,
+            -0.7853981633974483,
+            0.0,
+            -2.356194490192345,
+            0.0,
+            1.5707963267948966,
+            0.7853981633974483
+        ]
+        self.currentJS = 0
+        self.maxJS = 22
+        self.stepRadians = 0.1
+
+    def timer_callback(self):
+        pass
+        # nextJS = JointState()
+        # nextJS.name = self.startingJointStates.name
+        # nextJS.position = self.startingJointStates.position
+        # # Increment joint 1 position in a sawtooth pattern
+        # nextJS.position[0] += (self.currentJS * self.stepRadians)
+        # self.jointPub.publish(nextJS)
+        # self.currentJS += 1
+        # if self.currentJS > self.maxJS:
+        #     self.currentJS = 0
 
     def run_demo_callback(self, request, response):
         self.get_logger().info('Running plan path demo...')
@@ -151,8 +197,8 @@ class PFDemo(Node):
         try:
             t = 0.0
             if feedback.desired and feedback.desired.time_from_start:
-                t = feedback.desired.time_from_start.sec + \
-                    feedback.desired.time_from_start.nanosec * 1e-9
+                feedback_nsec = feedback.desired.time_from_start.nanosec * 1e-9
+                t = feedback.desired.time_from_start.sec + feedback_nsec
             # Compute a simple position error norm if available
             pos_err = None
             if feedback.error and feedback.error.positions:
@@ -305,8 +351,8 @@ class PFDemo(Node):
         # then path pose stamps, then joint time_from_start, else synthesize index * dt
         times = []
         if n_vel > 0 and ee_vels[0].header.stamp.sec != 0:
-            t0 = ee_vels[0].header.stamp.sec + \
-                ee_vels[0].header.stamp.nanosec * 1e-9
+            ee_vel_nsec = ee_vels[0].header.stamp.nanosec * 1e-9
+            t0 = ee_vels[0].header.stamp.sec + ee_vel_nsec
             for v in ee_vels:
                 ts = v.header.stamp.sec + v.header.stamp.nanosec * 1e-9
                 times.append(ts - t0)

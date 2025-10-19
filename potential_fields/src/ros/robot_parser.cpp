@@ -108,10 +108,9 @@ void RobotParser::jointStateCallback(const JointState::SharedPtr msg) {
   std::vector<Eigen::Affine3d> transforms;
   transforms.reserve(this->collisionLinkNames.size());
   this->kinematicModel.computeLinkTransforms(msg->position, transforms);
-  RCLCPP_INFO(this->get_logger(), "Computed %zu link transforms", transforms.size());
   ObstacleArray obsArray = this->buildObstaclesFromTransforms(transforms);
   this->obstaclePub->publish(obsArray);
-  RCLCPP_INFO(this->get_logger(), "Published %zu obstacles from joint state callback", obsArray.obstacles.size());
+  RCLCPP_DEBUG(this->get_logger(), "Published %zu obstacles from joint state callback", obsArray.obstacles.size());
 }
 
 ObstacleArray RobotParser::buildObstaclesFromTransforms(const std::vector<Eigen::Affine3d>& transforms) {
