@@ -70,12 +70,6 @@ PotentialFieldManager::PotentialFieldManager()
   this->motionPlugin = std::make_unique<FrankaPlugin>(frankaHostname);
   RCLCPP_INFO(this->get_logger(), "Using Motion Plugin: %s", this->motionPlugin->getName().c_str());
 
-  // Setup TF2 broadcaster, buffer, and listener
-  this->dynamicTfBroadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(this);
-  this->tfBuffer = std::make_shared<tf2_ros::Buffer>(this->get_clock());
-  this->tfListener = std::make_shared<tf2_ros::TransformListener>(*this->tfBuffer, this);
-  RCLCPP_INFO(this->get_logger(), "TF2 broadcaster, buffer, and listener initialized");
-
   // Setup marker publisher
   // Use reliable and transient_local QoS for RViz MarkerArray publisher
   auto markerPubQos = rclcpp::QoS(rclcpp::KeepLast(100))
@@ -188,7 +182,7 @@ void PotentialFieldManager::handleComputeAutonomyVector(
       request->start.pose.orientation.y, request->start.pose.orientation.z
     )
   );
-  TaskSpaceTwist autonomyVector = this->pField->evaluateVelocityAtPose(queryPose);
+  TaskSpaceTwist autonomyVector = this->pField->evaluateLimitedVelocityAtPose(queryPose);
   response->autonomy_vector.header.frame_id = this->fixedFrame;
   response->autonomy_vector.header.stamp = this->now();
   response->autonomy_vector.twist.linear.x = autonomyVector.getLinearVelocity().x();
@@ -241,9 +235,20 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
     }
     std::vector<double> seed = js.position;
     std::vector<double> solution;
-    // Build target isometry from the provided pose (not from current EE pose)
-    Eigen::Isometry3d targetIso;
-    tf2::fromMsg(pose.pose, targetIso);
+    // Build target isometry from the provided pose
+    Eigen::Isometry3d targetIso = Eigen::Isometry3d::Identity();
+    targetIso.translation() = Eigen::Vector3d(
+      pose.pose.position.x,
+      pose.pose.position.y,
+      pose.pose.position.z
+    );
+    Eigen::Quaterniond q(
+      pose.pose.orientation.w,
+      pose.pose.orientation.x,
+      pose.pose.orientation.y,
+      pose.pose.orientation.z
+    );
+    targetIso.linear() = q.toRotationMatrix();
     Eigen::Matrix<double, 6, Eigen::Dynamic> J;
     if (!ikSolver->solve(targetIso, seed, solution, /*J=*/J)) {
       RCLCPP_WARN(this->get_logger(), "IK solver failed to find a solution for target pose");
@@ -357,7 +362,7 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
     // Publish joint angles to planned joint state for PFManager to update its internal PF
     publishPlanningJointStates(jointAngles);
     // Call pfield interpolate function to get the next pose and the autonomy vector
-    TaskSpaceTwist twistAtCurrentPose = this->pField->evaluateVelocityAtPose(
+    TaskSpaceTwist twistAtCurrentPose = this->pField->evaluateLimitedVelocityAtPose(
       SpatialVector(
         Eigen::Vector3d(
           currentPose.pose.position.x,
@@ -710,7 +715,7 @@ MarkerArray PotentialFieldManager::createPotentialVectorMarkers(std::shared_ptr<
         if (pf->isPointInsideObstacle(point)) { continue; }
         Marker vectorMarker;
         SpatialVector position{point};
-        TaskSpaceTwist velocity = pf->evaluateVelocityAtPose(position);
+        TaskSpaceTwist velocity = pf->evaluateLimitedVelocityAtPose(position);
         double magnitude = velocity.getLinearVelocity().norm();
         vectorMarker.header.frame_id = this->fixedFrame;
         vectorMarker.header.stamp = this->now();
@@ -814,7 +819,7 @@ void PotentialFieldManager::exportFieldDataToCSV(std::shared_ptr<PotentialField>
           continue;
         }
         SpatialVector position{point};
-        TaskSpaceTwist velocity = pf->evaluateVelocityAtPose(position);
+        TaskSpaceTwist velocity = pf->evaluateLimitedVelocityAtPose(position);
         vectors_file << x << "," << y << "," << z << ","
           << velocity.getLinearVelocity().x() << ","
           << velocity.getLinearVelocity().y() << ","

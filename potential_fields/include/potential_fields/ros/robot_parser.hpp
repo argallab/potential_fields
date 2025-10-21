@@ -25,6 +25,11 @@
 #include "pfield/pf_kinematics.hpp"
 #include "pfield/pf_obstacle.hpp"
 
+#include "tf2_eigen/tf2_eigen.hpp"
+#include "tf2_ros/buffer.h"
+#include "tf2_ros/transform_broadcaster.h"
+#include "tf2_ros/transform_listener.h"
+
 using Obstacle = potential_fields_interfaces::msg::Obstacle;
 using ObstacleArray = potential_fields_interfaces::msg::ObstacleArray;
 using JointState = sensor_msgs::msg::JointState;
@@ -51,7 +56,11 @@ private:
   // Cached obstacle geometry templates aligned to collisionCatalog/collisionLinkNames
   std::vector<Obstacle> obstacleGeometryTemplates; // pose will be updated per callback
   bool kinematicsCachesInitialized = false;
+  std::string eeLinkName; // End-effector link name for TF broadcasting
 
+  std::shared_ptr<tf2_ros::TransformBroadcaster> dynamicTfBroadcaster; // Dynamic transform broadcaster
+  std::shared_ptr<tf2_ros::Buffer> tfBuffer; // TF buffer for transform lookups
+  std::shared_ptr<tf2_ros::TransformListener> tfListener; // TF Listener for populating the TF buffer
   rclcpp::Subscription<JointState>::SharedPtr jointStateSub; // Subscriber for live JointStates
   rclcpp::Publisher<ObstacleArray>::SharedPtr obstaclePub; // Publisher for Obstacles from Robot Collision Geometry
 

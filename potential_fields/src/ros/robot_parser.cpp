@@ -30,10 +30,12 @@ RobotParser::RobotParser() : Node("robot_parser") {
   this->robotUpdateFrequency = this->declare_parameter("robot_geometry_update_frequency", 50.0f); // [Hz]
   this->urdfFileName = this->declare_parameter("urdf_file_path", "urdf/robot.urdf");
   this->fixedFrame = this->declare_parameter("fixed_frame", "world"); // RViz fixed frame
+  this->eeLinkName = this->declare_parameter("end_effector_link_name", std::string()); // End-effector link name
   // Get parameters from yaml file
   this->robotUpdateFrequency = this->get_parameter("robot_geometry_update_frequency").as_double();
   this->urdfFileName = this->get_parameter("urdf_file_path").as_string();
   this->fixedFrame = this->get_parameter("fixed_frame").as_string();
+  this->eeLinkName = this->get_parameter("end_effector_link_name").as_string();
 
   RCLCPP_INFO(this->get_logger(), "Using URDF File: %s", this->urdfFileName.c_str());
 
@@ -42,6 +44,12 @@ RobotParser::RobotParser() : Node("robot_parser") {
     .best_effort()
     .durability_volatile();
   this->obstaclePub = this->create_publisher<ObstacleArray>("pfield/obstacles", qos);
+
+  // Setup TF2 broadcaster, buffer, and listener
+  this->dynamicTfBroadcaster = std::make_shared<tf2_ros::TransformBroadcaster>(this);
+  this->tfBuffer = std::make_shared<tf2_ros::Buffer>(this->get_clock());
+  this->tfListener = std::make_shared<tf2_ros::TransformListener>(*this->tfBuffer, this);
+  RCLCPP_INFO(this->get_logger(), "TF2 broadcaster, buffer, and listener initialized");
 
   // Setup Pinocchio kinematic model for converting joint angles to PF Obstacles
   this->kinematicModel = PFKinematics(this->urdfFileName);
@@ -52,6 +60,10 @@ RobotParser::RobotParser() : Node("robot_parser") {
   // Print the name of each frame
   for (const auto& frame : pinModel.frames) {
     RCLCPP_DEBUG(this->get_logger(), "\tFrame: %s", frame.name.c_str());
+  }
+  if (this->eeLinkName.empty()) {
+    // Store end-effector link name for TF broadcasting
+    this->eeLinkName = pinModel.frames[pinModel.nframes - 1].name;
   }
 
   // Parse URDF once to build the collision catalog
@@ -111,6 +123,28 @@ void RobotParser::jointStateCallback(const JointState::SharedPtr msg) {
   ObstacleArray obsArray = this->buildObstaclesFromTransforms(transforms);
   this->obstaclePub->publish(obsArray);
   RCLCPP_DEBUG(this->get_logger(), "Published %zu obstacles from joint state callback", obsArray.obstacles.size());
+  // Broadcast just the EE TF for users to use for planning reference
+  size_t eeIndex = transforms.size(); // Default to invalid
+  auto colLNIt = std::find(this->collisionLinkNames.begin(), this->collisionLinkNames.end(), this->eeLinkName);
+  if (colLNIt != this->collisionLinkNames.end()) {
+    eeIndex = std::distance(this->collisionLinkNames.begin(), colLNIt);
+  }
+  if (eeIndex < transforms.size()) {
+    Eigen::Affine3d eeTransform = transforms[eeIndex];
+    geometry_msgs::msg::TransformStamped eeTfMsg;
+    eeTfMsg.header.stamp = this->now();
+    eeTfMsg.header.frame_id = this->fixedFrame;
+    eeTfMsg.child_frame_id = this->eeLinkName;
+    eeTfMsg.transform.translation.x = eeTransform.translation().x();
+    eeTfMsg.transform.translation.y = eeTransform.translation().y();
+    eeTfMsg.transform.translation.z = eeTransform.translation().z();
+    Eigen::Quaterniond q(eeTransform.rotation());
+    eeTfMsg.transform.rotation.x = q.x();
+    eeTfMsg.transform.rotation.y = q.y();
+    eeTfMsg.transform.rotation.z = q.z();
+    eeTfMsg.transform.rotation.w = q.w();
+    this->dynamicTfBroadcaster->sendTransform(eeTfMsg);
+  }
 }
 
 ObstacleArray RobotParser::buildObstaclesFromTransforms(const std::vector<Eigen::Affine3d>& transforms) {

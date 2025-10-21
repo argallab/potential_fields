@@ -65,7 +65,10 @@ TaskSpaceWrench PotentialField::evaluateWrenchAtPose(const SpatialVector& queryP
 }
 
 TaskSpaceTwist PotentialField::evaluateVelocityAtPose(const SpatialVector& queryPose) const {
-  // Apply Velocity Limits by passing in dt=0.0
+  return this->wrenchToTwist(this->evaluateWrenchAtPose(queryPose));
+}
+
+TaskSpaceTwist PotentialField::evaluateLimitedVelocityAtPose(const SpatialVector& queryPose) const {
   return this->applyMotionConstraints(
     this->wrenchToTwist(this->evaluateWrenchAtPose(queryPose)),
     TaskSpaceTwist(Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero()),
@@ -82,8 +85,7 @@ TaskSpaceTwist PotentialField::wrenchToTwist(const TaskSpaceWrench& wrench) cons
 
 TaskSpaceTwist PotentialField::applyMotionConstraints(
   const TaskSpaceTwist& twist, const TaskSpaceTwist& prevTwist, const double dt) const {
-  auto isPositiveFinite = [](const double val) -> bool { return std::isfinite(val) && val > 1e-12; };
-  auto clampNorm = [isPositiveFinite](const Eigen::Vector3d& vec, double maxNorm)-> Eigen::Vector3d {
+  auto clampNorm = [](const Eigen::Vector3d& vec, double maxNorm)-> Eigen::Vector3d {
     if (maxNorm <= 0.0) return vec;
     const double norm = vec.norm();
     return norm > maxNorm && isPositiveFinite(norm) ? (vec / norm) * maxNorm : vec;
@@ -102,7 +104,7 @@ TaskSpaceTwist PotentialField::applyMotionConstraints(
   const double dVMaxLinear = this->maxLinearAcceleration * dt; // m/s^2 * s = m/s
   const double dVMaxAngular = this->maxAngularAcceleration * dt; // rad/s^2 * s = rad/s
 
-  auto limitStep = [isPositiveFinite](const Eigen::Vector3d& prev, const Eigen::Vector3d& curr, double dVMax) -> Eigen::Vector3d {
+  auto limitStep = [](const Eigen::Vector3d& prev, const Eigen::Vector3d& curr, double dVMax) -> Eigen::Vector3d {
     if (dVMax <= 0.0) return curr; // No acceleration limit
     Eigen::Vector3d deltaV = curr - prev;
     const double deltaVNorm = deltaV.norm();
@@ -125,7 +127,7 @@ TaskSpaceTwist PotentialField::applyMotionConstraints(
 SpatialVector PotentialField::interpolateNextPose(
   const SpatialVector& currentPose, const TaskSpaceTwist& prevTwist, const double dt) {
   // Compute the TaskSpaceTwist at the current pose
-  TaskSpaceTwist vel = this->wrenchToTwist(this->evaluateWrenchAtPose(currentPose));
+  TaskSpaceTwist vel = this->evaluateVelocityAtPose(currentPose);
   TaskSpaceTwist velLimited = this->applyMotionConstraints(vel, prevTwist, dt);
   // Integrate linear and angular velocities to get next pose
   Eigen::Vector3d nextPosition = this->integrateLinearVelocity(currentPose.getPosition(), velLimited.linearVelocity, dt);
@@ -205,7 +207,7 @@ PlannedPath PotentialField::planPath(
 
   while (iter < maxIterations) {
     // Evaluate (velocity-limited) twist at current pose for logging
-    TaskSpaceTwist evalTwist = this->evaluateVelocityAtPose(current);
+    TaskSpaceTwist evalTwist = this->evaluateLimitedVelocityAtPose(current);
     // Record current state
     path.addPoint(current, evalTwist, std::vector<double>{ /* IK joint angles placeholder */ }, timeStamp);
 

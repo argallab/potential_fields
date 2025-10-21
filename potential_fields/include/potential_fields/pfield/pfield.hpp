@@ -29,6 +29,8 @@
 
 #include "spatial_vector.hpp"
 #include "pf_obstacle.hpp"
+#include "pfield_common.hpp"
+
 
 struct TaskSpaceWrench {
   Eigen::Vector3d force{Eigen::Vector3d::Zero()}; // Linear Force [N]
@@ -267,6 +269,12 @@ public:
    * @return TaskSpaceTwist The resultant task-space twist [m/s, rad/s]
    */
   TaskSpaceTwist evaluateVelocityAtPose(const SpatialVector& queryPose) const;
+
+  /**
+   * @brief Performs the same operation as evaluateVelocityAtPose but applies
+   *        velocity limits to the resulting twist.
+   */
+  TaskSpaceTwist evaluateLimitedVelocityAtPose(const SpatialVector& queryPose) const;
 
   /**
    * @brief Converts a task-space wrench to a task-space twist (velocity)

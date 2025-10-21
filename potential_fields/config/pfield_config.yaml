@@ -14,3 +14,4 @@ pfield_manager:
 robot_parser:
   ros__parameters:
     robot_geometry_update_frequency: 100.0 # [Hz]
+    end_effector_link_name: "fer_hand_tcp" # End-effector link name for TF broadcasting
