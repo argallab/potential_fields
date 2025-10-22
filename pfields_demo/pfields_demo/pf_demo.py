@@ -108,12 +108,13 @@ class PFDemo(Node):
         self.get_logger().info('Running plan path demo...')
         req = PlanPath.Request()
 
-        # Get the transform from world -> fer_hand_tcp and use that tf
+        # Get the transform from world -> end effector and use that tf
         # pose as the start pose
         start = PoseStamped()
         try:
+            ee_link_name = 'fer_hand_tcp'
             transform = self.tf_buffer.lookup_transform(
-                self.fixed_frame, 'fer_hand_tcp', rclpy.time.Time()
+                self.fixed_frame, ee_link_name, rclpy.time.Time()
             )
             start.header.frame_id = transform.header.frame_id
             start.header.stamp = self.get_clock().now().to_msg()
@@ -123,7 +124,7 @@ class PFDemo(Node):
             start.pose.orientation = transform.transform.rotation
         except (tf2_ros.LookupException, tf2_ros.ConnectivityException, tf2_ros.ExtrapolationException) as e:
             self.get_logger().error(
-                f"Failed to get fer_hand_tcp transform: {e}"
+                f"Failed to get {ee_link_name} transform: {e}"
             )
             start.header.frame_id = self.fixed_frame
             start.header.stamp = self.get_clock().now().to_msg()
@@ -491,6 +492,9 @@ class PFDemo(Node):
         ee_vels = len(res.end_effector_velocity_trajectory)
         self.get_logger().info(
             f'Received plan_path response: success={res.success}, Path Length={ee_path_len}')
+        if not res.success:
+            self.get_logger().warn('Plan path was not successful; skipping further processing.')
+            return
         p = res.end_effector_path.poses[0].pose.position
         self.get_logger().info(
             f'First EE pose: ({p.x:.4f}, {p.y:.4f}, {p.z:.4f})')

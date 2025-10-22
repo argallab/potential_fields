@@ -113,20 +113,6 @@ include_directories(
 add_executable(pfield_manager src/ros/pfield_manager.cpp)
 add_executable(robot_parser src/ros/robot_parser.cpp)
 
-# Library version of robot_parser (without main) for unit testing
-add_library(robot_parser_lib STATIC src/ros/robot_parser.cpp)
-target_compile_definitions(robot_parser_lib PRIVATE COMPILE_ROBOT_PARSER_NO_MAIN)
-target_link_libraries(robot_parser_lib pfield_lib)
-ament_target_dependencies(robot_parser_lib
-  Eigen3
-  geometry_msgs
-  potential_fields_interfaces
-  rclcpp
-  tf2_eigen
-  tf2_ros
-  urdf
-  visualization_msgs
-)
 ament_target_dependencies(pfield_manager
   Eigen3
   geometry_msgs

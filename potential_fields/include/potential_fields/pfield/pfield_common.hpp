@@ -19,7 +19,8 @@ inline static Eigen::Vector3d softSaturateNorm(const Eigen::Vector3d& v, double 
   if (!isPositiveFinite(maxNorm)) return v;
   const double n = v.norm();
   if (!isPositiveFinite(n)) return v;
-  // scale ∈ (0, 1); beta controls how "soft" (beta=1 default)
+  // scale is between [0, 1], beta controls how "soft" the smoothing is
+  // higher beta results in steeper but still smooth curve near maxNorm
   const double s = (maxNorm * std::tanh(beta * n / maxNorm)) / n;
   return v * s;
 }

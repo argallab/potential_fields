@@ -46,7 +46,7 @@ public:
   ~RobotParser() = default;
 
 private:
-  double robotUpdateFrequency; // Frequency for updating Robot's TF frames [Hz]
+  double tfUpdateFreq; // Frequency for updating Robot's TF frames [Hz]
   std::string urdfFileName; // URDF file name
   std::string fixedFrame; // RViz fixed frame
   PFKinematics kinematicModel; // Pinocchio kinematic model for FK
@@ -57,12 +57,14 @@ private:
   std::vector<Obstacle> obstacleGeometryTemplates; // pose will be updated per callback
   bool kinematicsCachesInitialized = false;
   std::string eeLinkName; // End-effector link name for TF broadcasting
+  std::vector<Eigen::Affine3d> latestTransforms; // Latest computed link transforms
 
   std::shared_ptr<tf2_ros::TransformBroadcaster> dynamicTfBroadcaster; // Dynamic transform broadcaster
   std::shared_ptr<tf2_ros::Buffer> tfBuffer; // TF buffer for transform lookups
   std::shared_ptr<tf2_ros::TransformListener> tfListener; // TF Listener for populating the TF buffer
   rclcpp::Subscription<JointState>::SharedPtr jointStateSub; // Subscriber for live JointStates
   rclcpp::Publisher<ObstacleArray>::SharedPtr obstaclePub; // Publisher for Obstacles from Robot Collision Geometry
+  rclcpp::TimerBase::SharedPtr timer; // Timer for updating EE TF
 
   void jointStateCallback(const JointState::SharedPtr msg);
 

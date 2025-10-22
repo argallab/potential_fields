@@ -46,10 +46,11 @@ public:
    * @param[in] seed The current joint configuration to use as a seed for the IK solver [rad]
    * @param[out] solution The resulting joint configuration [rad]
    * @param[out] J The resulting Jacobian matrix (6xN) where N is the number of joints
+   * @param[out] errorMsg An error message string to be populated if the IK fails
    * @return true if the IK problem was solved successfully, false otherwise
    */
   bool solve(const Eigen::Isometry3d& targetPose, const std::vector<double>& seed,
-    std::vector<double>& solution, Eigen::Matrix<double, 6, Eigen::Dynamic>& J) override;
+    std::vector<double>& solution, Eigen::Matrix<double, 6, Eigen::Dynamic>& J, std::string& errorMsg) override;
 
   // Jacobian-only computation to satisfy IKSolver interface,
   // but Franka Jacobian needs targetPose so this function is not implemented

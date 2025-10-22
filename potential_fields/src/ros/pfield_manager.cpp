@@ -27,6 +27,7 @@
 #include "ros/pfield_manager.hpp"
 #include "robot_plugins/null_motion_plugin.hpp"
 #include "robot_plugins/franka_plugin.hpp"
+#include "tf2_eigen/tf2_eigen.hpp"
 
 PotentialFieldManager::PotentialFieldManager()
   : Node("potential_field_manager") {
@@ -230,28 +231,18 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
     sensor_msgs::msg::JointState js;
     geometry_msgs::msg::PoseStamped currentEEPose;
     if (!this->motionPlugin->readRobotState(js, currentEEPose)) {
-      RCLCPP_WARN(this->get_logger(), "Failed to read robot state for IK");
+      RCLCPP_ERROR(this->get_logger(), "Failed to read robot state for IK");
       return {};
     }
     std::vector<double> seed = js.position;
     std::vector<double> solution;
     // Build target isometry from the provided pose
-    Eigen::Isometry3d targetIso = Eigen::Isometry3d::Identity();
-    targetIso.translation() = Eigen::Vector3d(
-      pose.pose.position.x,
-      pose.pose.position.y,
-      pose.pose.position.z
-    );
-    Eigen::Quaterniond q(
-      pose.pose.orientation.w,
-      pose.pose.orientation.x,
-      pose.pose.orientation.y,
-      pose.pose.orientation.z
-    );
-    targetIso.linear() = q.toRotationMatrix();
+    Eigen::Isometry3d targetIso;
+    tf2::fromMsg(pose.pose, targetIso);
     Eigen::Matrix<double, 6, Eigen::Dynamic> J;
-    if (!ikSolver->solve(targetIso, seed, solution, /*J=*/J)) {
-      RCLCPP_WARN(this->get_logger(), "IK solver failed to find a solution for target pose");
+    std::string errorMsg;
+    if (!ikSolver->solve(targetIso, seed, solution, /*J=*/J, errorMsg)) {
+      RCLCPP_ERROR(this->get_logger(), "IKSolver failed to find a solution: %s", errorMsg.c_str());
       return {};
     }
     return solution;
@@ -306,9 +297,9 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
   RCLCPP_INFO(this->get_logger(), "Starting planning from start pose (%.3f, %.3f, %.3f)",
     currentPose.pose.position.x, currentPose.pose.position.y, currentPose.pose.position.z);
   nav_msgs::msg::Path path;
-  const auto base_time = this->now();
+  const auto baseTime = this->now();
   path.header.frame_id = this->fixedFrame; // ensure consistent frame
-  path.header.stamp = base_time;
+  path.header.stamp = baseTime;
   trajectory_msgs::msg::JointTrajectory jointTrajectory;
   jointTrajectory.header = path.header;
   jointTrajectory.joint_names = ikSolver->getJointNames();
@@ -318,7 +309,7 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
   const size_t max_iters = 30000; // TODO(Sharwin): Parameterize this (or derive from MotionPlugin)
   size_t iter = 0;
   bool reached = false;
-  // Deterministic time base: t_i = base_time + i * delta_time
+  // Deterministic time base: t_i = baseTime + i * delta_time
   const double dt = (request->delta_time > 0.0) ? request->delta_time : 0.1;
   std::size_t step = 0;
   const double euclidDistance = std::sqrt(
@@ -338,7 +329,7 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
     }
     // Save current pose (stamped deterministically)
     {
-      const rclcpp::Time stamp_i = base_time + rclcpp::Duration::from_seconds(step * dt);
+      const rclcpp::Time stamp_i = baseTime + rclcpp::Duration::from_seconds(step * dt);
       auto stampedPose = currentPose;
       stampedPose.header.frame_id = this->fixedFrame;
       stampedPose.header.stamp = stamp_i;
@@ -361,21 +352,19 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
     jointTrajectory.points.push_back(jointTrajectoryPoint);
     // Publish joint angles to planned joint state for PFManager to update its internal PF
     publishPlanningJointStates(jointAngles);
-    // Call pfield interpolate function to get the next pose and the autonomy vector
-    TaskSpaceTwist twistAtCurrentPose = this->pField->evaluateLimitedVelocityAtPose(
-      SpatialVector(
-        Eigen::Vector3d(
-          currentPose.pose.position.x,
-          currentPose.pose.position.y,
-          currentPose.pose.position.z
-        ),
-        Eigen::Quaterniond(
-          currentPose.pose.orientation.w, currentPose.pose.orientation.x,
-          currentPose.pose.orientation.y, currentPose.pose.orientation.z
-        )
+    // Evaluate the velocity at the current pose, and use it and the previous twist to apply motion constraints
+    SpatialVector currentPoseSV(
+      Eigen::Vector3d(
+        currentPose.pose.position.x,
+        currentPose.pose.position.y,
+        currentPose.pose.position.z
+      ),
+      Eigen::Quaterniond(
+        currentPose.pose.orientation.w, currentPose.pose.orientation.x,
+        currentPose.pose.orientation.y, currentPose.pose.orientation.z
       )
     );
-
+    TaskSpaceTwist twistAtCurrentPose = this->pField->evaluateVelocityAtPose(currentPoseSV);
     TaskSpaceTwist prevTwist = eeVelocityTrajectory.empty() ? TaskSpaceTwist() : TaskSpaceTwist(
       Eigen::Vector3d(
         eeVelocityTrajectory.back().twist.linear.x,
@@ -388,37 +377,27 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
         eeVelocityTrajectory.back().twist.angular.z
       )
     );
-    SpatialVector nextPose = this->pField->interpolateNextPose(
-      SpatialVector(
-        Eigen::Vector3d(
-          currentPose.pose.position.x,
-          currentPose.pose.position.y,
-          currentPose.pose.position.z
-        ),
-        Eigen::Quaterniond(
-          currentPose.pose.orientation.w, currentPose.pose.orientation.x,
-          currentPose.pose.orientation.y, currentPose.pose.orientation.z
-        )
-      ), prevTwist, request->delta_time
-    );
-    if (iter % (iterationsGuess / 5) == 0) {
-      RCLCPP_INFO(this->get_logger(),
+    TaskSpaceTwist constrainedTwist = this->pField->applyMotionConstraints(twistAtCurrentPose, prevTwist, request->delta_time);
+    Eigen::Vector3d nextPosition = this->pField->integrateLinearVelocity(
+      currentPoseSV.getPosition(), constrainedTwist.getLinearVelocity(), request->delta_time);
+    Eigen::Quaterniond nextOrientation = this->pField->integrateAngularVelocity(
+      currentPoseSV.getOrientation(), constrainedTwist.getAngularVelocity(), request->delta_time);
+    SpatialVector nextPose(nextPosition, nextOrientation);
+    if (iter % (iterationsGuess / 15) == 0) {
+      RCLCPP_DEBUG(this->get_logger(),
         "Planning iter=%zu: path_len=%zu, joint_points=%zu", iter, path.poses.size(), jointTrajectory.points.size());
-      RCLCPP_INFO(this->get_logger(), "iter=%zu autonomy linear=(%.4f, %.4f, %.4f) next_pos=(%.4f, %.4f, %.4f)", iter,
-        twistAtCurrentPose.getLinearVelocity().x(), twistAtCurrentPose.getLinearVelocity().y(),
-        twistAtCurrentPose.getLinearVelocity().z(),
+      RCLCPP_DEBUG(this->get_logger(), "iter=%zu autonomy linear=(%.4f, %.4f, %.4f) next_pos=(%.4f, %.4f, %.4f)", iter,
+        constrainedTwist.getLinearVelocity().x(),
+        constrainedTwist.getLinearVelocity().y(),
+        constrainedTwist.getLinearVelocity().z(),
         nextPose.getPosition().x(), nextPose.getPosition().y(), nextPose.getPosition().z());
     }
     // Store the autonomy vector (end-effector velocity) with deterministic stamp
-    {
-      const rclcpp::Time stamp_i = base_time + rclcpp::Duration::from_seconds(step * dt);
-      eeVelocityTrajectory.push_back(toTwistStamped(twistAtCurrentPose, stamp_i));
-    }
+    const rclcpp::Time stamp_i = baseTime + rclcpp::Duration::from_seconds(step * dt);
+    eeVelocityTrajectory.push_back(toTwistStamped(constrainedTwist, stamp_i));
     // Update the current pose before moving to next iteration; stamp next pose for continuity
-    {
-      const rclcpp::Time stamp_next = base_time + rclcpp::Duration::from_seconds((step + 1) * dt);
-      currentPose = toPoseStamped(nextPose, stamp_next);
-    }
+    const rclcpp::Time stamp_next = baseTime + rclcpp::Duration::from_seconds((step + 1) * dt);
+    currentPose = toPoseStamped(nextPose, stamp_next);
     // Move our step along before the next iteration
     ++step;
     ++iter;
