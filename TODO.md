@@ -9,16 +9,11 @@
 ---
 
 # Immediate TODOs
-- Finish PlanPath Service Implementation with FrankaIKPlugin to obtain a valid JointTrajectory
-  - Create 3 different demos for testing:
-    - No Obstacles and easy reachable goal (forwards or single motion)
-    - With Obstacles surrounding a easily reachable goal
-    - With obstacles obstructing the path to the goal
-- Debug FollowJointTrajectory Action client in pf_demo.py
-  - When calling the action using the response from PlanPath, the action runs into PATH_TOLERANCE_VIOLATED error
-- Use Pinnochio/KDL library on the given URDF to compute FK and update robot obstacles instead of listening to TF frames
-  - Previous data-flow for URDF to PF Obstacles: URDF -> RSP (updates from JSP) -> TF -> PF Obstacles
-  - New data-flow for URDF to PF Obstacles: URDF -> Pinnochio/KDL -> FK Definition -> Joint Angles -> PF Obstacles
+- Consolidate `RobotParser` into `PFieldManager` (1 ROS node for managing everything)
+- Update documentation and README files to reflect new changes in PF Equations
+- Work on Sphere robot demo with simple path planning
+- Include installation instructions for fcl, pinnochio, libfranka and other external dependencies
+
 
 # Future TODOs and Refactors
 - Think about smoothness while still enforcing velocity and acceleration limits
@@ -29,7 +24,6 @@
   - Update the wording/naming for gain parameters, influence zones, and function/variables
   - Update the README and in-code documentation to reflect PF wrench and twist definitions
   - Update plots and visualizations to reflect the correct units/etc.
-- Include installation instructions for fcl, pinnochio, libfranka and other external dependencies
 - Condense ROS Nodes into a single node and condense PF library code together.
   - The `pfield` library should contain its own path planning function
   - `pfield` should also contain its own IKSolver and MotionPlugin instances with a factory method to create them
