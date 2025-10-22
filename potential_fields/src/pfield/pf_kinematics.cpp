@@ -6,64 +6,82 @@
 #include <Eigen/Geometry>
 
 PFKinematics::PFKinematics(const std::string& urdfFileName) {
-  pinocchio::urdf::buildModel(urdfFileName, this->model);
+  if (urdfFileName.empty()) {
+    throw std::invalid_argument("PFKinematics: urdfFileName is empty; expected a path to a URDF file");
+  }
+  try {
+    pinocchio::urdf::buildModel(urdfFileName, this->model);
+  }
+  catch (const std::exception& e) {
+    throw std::runtime_error(std::string("PFKinematics: Failed to load URDF model from '") + urdfFileName + "': " + e.what());
+  }
   this->data = pinocchio::Data(this->model);
 }
 
-std::vector<Eigen::Affine3d> PFKinematics::jointAnglesToLinkTransforms(
-  const std::vector<double>& jointAngles,
+void PFKinematics::initializeCaches(
+  const std::vector<std::string>& jointNames,
   const std::vector<std::string>& linkNames) {
-  // Check joint angles size
-  if (jointAngles.size() != this->jointOrder.size()) {
-    throw std::runtime_error("Joint angles size does not match joint order size");
-  }
-  // Create configuration vector
-  Eigen::VectorXd q = Eigen::VectorXd::Zero(this->model.nq);
-  for (size_t i = 0; i < jointAngles.size(); ++i) {
-    const std::string& jointName = this->jointOrder[i];
-    auto it = this->jointNameToIndex.find(jointName);
-    if (it != this->jointNameToIndex.end()) {
-      int idx = it->second;
-      q(idx) = jointAngles[i];
-    }
-    else {
-      throw std::runtime_error("Joint name " + jointName + " not found in jointNameToIndex map");
+  jointNamesCache = jointNames;
+  linkNamesCache = linkNames;
+  jointQIndices.assign(jointNames.size(), -1);
+  frameIDCache.assign(linkNames.size(), -1);
+
+  // Map joints to q indices (only 1-DoF joints supported for now)
+  for (size_t i = 0; i < jointNames.size(); ++i) {
+    const auto& jn = jointNames[i];
+    if (!model.existJointName(jn)) continue;
+    pinocchio::JointIndex jid = model.getJointId(jn);
+    const auto& jmodel = model.joints[jid];
+    if (jmodel.nq() == 1) {
+      jointQIndices[i] = jmodel.idx_q();
     }
   }
-  // Perform forward kinematics
-  pinocchio::forwardKinematics(this->model, this->data, q);
-  pinocchio::updateFramePlacements(this->model, this->data);
-  // Get transforms for requested links
-  std::vector<Eigen::Affine3d> transforms;
-  for (const auto& linkName : linkNames) {
-    int frameId = this->model.getFrameId(linkName);
-    if (frameId == -1) {
-      throw std::runtime_error("Link name " + linkName + " not found in model frames");
-    }
-    const pinocchio::SE3& oMf = this->data.oMf[frameId];
-    Eigen::Affine3d transform(Eigen::Affine3d::Identity());
-    transform.linear() = oMf.rotation();
-    transform.translation() = oMf.translation();
-    transforms.push_back(transform);
+
+  // Map links to frame IDs
+  for (size_t k = 0; k < linkNames.size(); ++k) {
+    const auto& ln = linkNames[k];
+    if (!model.existFrame(ln)) continue;
+    frameIDCache[k] = model.getFrameId(ln);
   }
-  return transforms;
+
+  this->cachesReady = true;
 }
 
-std::vector<PotentialFieldObstacle> PFKinematics::getObstaclesFromJointAngles(
-  const std::vector<double>& jointAngles,
-  const std::vector<std::string>& linkNames) {
-  std::vector<PotentialFieldObstacle> obstacles;
-  auto transforms = this->jointAnglesToLinkTransforms(jointAngles, linkNames);
-  for (const auto& transform : transforms) {
-    auto position = transform.translation();
-    Eigen::Quaterniond quat(transform.rotation());
-    obstacles.push_back(PotentialFieldObstacle(
-      /*frameID=*/"",
-      /*centerPosition=*/position, /*orientation=*/quat,
-      /*type=*/ObstacleType::BOX, /*group=*/ObstacleGroup::ROBOT,
-      /*geometry=*/ObstacleGeometry(0.1, 0.1, 0.1, 0.1), // Example box geometry
-      /*influenceZoneScale=*/1.5, /*repulsiveGain=*/1.0
-    ));
+void PFKinematics::computeLinkTransforms(const std::vector<double>& jointPositions,
+  std::vector<Eigen::Affine3d>& out) {
+  if (!cachesReady) {
+    throw std::runtime_error("PFKinematics caches not initialized");
   }
-  return obstacles;
+  if (jointPositions.size() != jointNamesCache.size()) {
+    throw std::runtime_error("PFKinematics: jointPositions size does not match cached joint names size");
+  }
+
+  // Fill q using cached indices
+  // Note: We only set indices present; others remain from previous call (set nearest to zero if desired)
+  Eigen::VectorXd q = Eigen::VectorXd::Zero(this->model.nq);
+  for (size_t i = 0; i < jointPositions.size(); ++i) {
+    int qi = jointQIndices[i];
+    if (qi >= 0) {
+      q(qi) = jointPositions[i];
+    }
+  }
+
+  // Fast FK for frames
+  pinocchio::framesForwardKinematics(model, data, q);
+
+  // Write out transforms aligned to linkNamesCache
+  out.resize(frameIDCache.size());
+  for (size_t k = 0; k < frameIDCache.size(); ++k) {
+    int fid = frameIDCache[k];
+    if (fid >= 0) {
+      const pinocchio::SE3& oMf = data.oMf[fid];
+      Eigen::Affine3d tf(Eigen::Affine3d::Identity());
+      tf.linear() = oMf.rotation();
+      tf.translation() = oMf.translation();
+      out[k] = tf;
+    }
+    else {
+      out[k] = Eigen::Affine3d::Identity();
+    }
+  }
 }

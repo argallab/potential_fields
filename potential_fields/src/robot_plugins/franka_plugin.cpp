@@ -35,7 +35,8 @@ bool FrankaIKSolver::solve(
   const Eigen::Isometry3d& targetPose,
   const std::vector<double>& seed,
   std::vector<double>& solution,
-  Eigen::Matrix<double, 6, Eigen::Dynamic>& J) {
+  Eigen::Matrix<double, 6, Eigen::Dynamic>& J,
+  std::string& errorMsg) {
   // Use provided seed if valid, otherwise fall back to home configuration
   const bool seed_ok = seed.size() == 7;
   const std::array<double, 7> currentConfiguration = seed_ok
@@ -50,25 +51,31 @@ bool FrankaIKSolver::solve(
     targetPose.rotation()(1, 0), targetPose.rotation()(1, 1), targetPose.rotation()(1, 2),
     targetPose.rotation()(2, 0), targetPose.rotation()(2, 1), targetPose.rotation()(2, 2)
   };
-  WeightedIKResult result = this->solver->solve_q7_optimized(
-    /*target_position=*/targetPosition,
-    /*target_orientation=*/targetOrientation,
-    /*current_pose=*/currentConfiguration,
-    /*q7_min=*/ this->ikParams.q7Min,
-    /*q7_max=*/ this->ikParams.q7Max,
-    /*tolerance=*/ this->ikParams.ikTolerance,
-    /*max_iterations=*/ this->ikParams.ikMaxIterations
-  );
-  // Copy the result joint angles to the output solution vector
-  solution = std::vector<double>(result.joint_angles.begin(), result.joint_angles.end());
-  // Copy the result Jacobian to the output J matrix, resizing to 6x7 since  Franka is 7-DOF
-  J.resize(6, 7);
-  for (int col = 0; col < J.cols(); ++col) {
-    for (int row = 0; row < J.rows(); ++row) {
-      J(row, col) = result.jacobian.at(col).at(row);
+  try {
+    WeightedIKResult result = this->solver->solve_q7_optimized(
+      /*target_position=*/targetPosition,
+      /*target_orientation=*/targetOrientation,
+      /*current_pose=*/currentConfiguration,
+      /*q7_min=*/ this->ikParams.q7Min,
+      /*q7_max=*/ this->ikParams.q7Max,
+      /*tolerance=*/ this->ikParams.ikTolerance,
+      /*max_iterations=*/ this->ikParams.ikMaxIterations
+    );
+    // Copy the result joint angles to the output solution vector
+    solution = std::vector<double>(result.joint_angles.cbegin(), result.joint_angles.cend());
+    // Copy the result Jacobian to the output J matrix, resizing to 6x7 since  Franka is 7-DOF
+    J.resize(6, 7);
+    for (int col = 0; col < J.cols(); ++col) {
+      for (int row = 0; row < J.rows(); ++row) {
+        J(row, col) = result.jacobian.at(col).at(row);
+      }
     }
+    return result.success;
   }
-  return result.success;
+  catch (const std::exception& e) {
+    errorMsg = e.what();
+    return false;
+  }
 }
 
 FrankaPlugin::FrankaPlugin(const std::string& hostname) : MotionPlugin("FrankaPlugin") {

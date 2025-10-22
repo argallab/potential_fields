@@ -31,7 +31,8 @@ public:
     const Eigen::Isometry3d& targetPose,
     const std::vector<double>& seed,
     std::vector<double>& solution,
-    Eigen::Matrix<double, 6, Eigen::Dynamic>& J) = 0;
+    Eigen::Matrix<double, 6, Eigen::Dynamic>& J,
+    std::string& errorMsg) = 0;
 
   // Optional Jacobian-only function (for joint velocities from Cartesian twist)
   virtual bool computeJacobian(

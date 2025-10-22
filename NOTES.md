@@ -173,6 +173,12 @@ A couple of notes:
 - FollowJointTrajectory action client needs debugging since it is returning a PATH_TOLERANCE_VIOLATED error
 - Path smoothing of some sort needs to be implemented
 
+```log
+[ros2_control_node-4] [INFO] [1761144377.856630911] [fer_arm_controller]: Received new action goal
+[ros2_control_node-4] [ERROR] [1761144377.857129721] [fer_arm_controller]: Received trajectory with non-zero start time (1761144340.282935) that ends in the past (1761144346.197935)
+```
+
+
 # Franka Emika Panda Notes
 - [Kris' Joystick Repo](https://github.com/wengmister/franka_joystick_teleop/blob/main/README.md)
 - [Franka User Setup (Matt Elwin's Notes)](https://nu-msr.github.io/ros_notes/ros2/franka.html)
@@ -184,3 +190,11 @@ A couple of notes:
 - Refactor /goal_pose since it will get confused with navigation goal pose topic
 - Keep MotionPlugin separate but as a member of PotentialField
 - Implement the Pinocchio FK for obstacles and remove JSP/RSP
+
+
+Maintain a distancemap of the robot's geometry to obstacles for thresholding
+Sphere robot demo with some extent, obstacles influence should scale appropriately.
+Single integrator
+Simple joint trajectory
+Look into Configuration space planning instead
+Handle self collision externally

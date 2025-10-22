@@ -31,10 +31,6 @@
 #include "robot_plugins/motion_plugin.hpp"
 
 #include "rclcpp/rclcpp.hpp"
-#include "tf2_eigen/tf2_eigen.hpp"
-#include "tf2_ros/buffer.h"
-#include "tf2_ros/transform_broadcaster.h"
-#include "tf2_ros/transform_listener.h"
 
 using Marker = visualization_msgs::msg::Marker;
 using MarkerArray = visualization_msgs::msg::MarkerArray;
@@ -93,9 +89,6 @@ private:
   std::unique_ptr<MotionPlugin> motionPlugin;
 
   rclcpp::TimerBase::SharedPtr timer; // Timer to periodically update the potential field
-  std::shared_ptr<tf2_ros::TransformBroadcaster> dynamicTfBroadcaster; // Dynamic transform broadcaster
-  std::shared_ptr<tf2_ros::Buffer> tfBuffer; // TF buffer for transform lookups
-  std::shared_ptr<tf2_ros::TransformListener> tfListener; // TF Listener for populating the TF buffer
   rclcpp::Publisher<MarkerArray>::SharedPtr pFieldMarkerPub; // Publisher for PF Markers
   rclcpp::Publisher<JointState>::SharedPtr planningJointStatePub; // Publisher for planning joint states
   rclcpp::Publisher<Path>::SharedPtr plannedEndEffectorPathPub; // Publisher for planned end-effector path

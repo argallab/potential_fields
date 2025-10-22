@@ -13,7 +13,7 @@ public:
   ~SimpleIKSolver() override = default;
 
   bool solve([[maybe_unused]] const Eigen::Isometry3d& targetPose, const std::vector<double>& seed,
-    std::vector<double>& solution, Eigen::Matrix<double, 6, Eigen::Dynamic>& J) override {
+    std::vector<double>& solution, Eigen::Matrix<double, 6, Eigen::Dynamic>& J, std::string& errorMsg) override {
     if (seed.empty()) {
       // default to 7 zeros
       solution = std::vector<double>(7, 0.0);
@@ -23,6 +23,7 @@ public:
     }
     J.resize(6, solution.size());
     J.setZero();
+    errorMsg.clear();
     return true;
   }
 
