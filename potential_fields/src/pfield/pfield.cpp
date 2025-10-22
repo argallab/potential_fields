@@ -65,7 +65,10 @@ TaskSpaceWrench PotentialField::evaluateWrenchAtPose(const SpatialVector& queryP
 }
 
 TaskSpaceTwist PotentialField::evaluateVelocityAtPose(const SpatialVector& queryPose) const {
-  // Apply Velocity Limits by passing in dt=0.0
+  return this->wrenchToTwist(this->evaluateWrenchAtPose(queryPose));
+}
+
+TaskSpaceTwist PotentialField::evaluateLimitedVelocityAtPose(const SpatialVector& queryPose) const {
   return this->applyMotionConstraints(
     this->wrenchToTwist(this->evaluateWrenchAtPose(queryPose)),
     TaskSpaceTwist(Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero()),
@@ -82,50 +85,29 @@ TaskSpaceTwist PotentialField::wrenchToTwist(const TaskSpaceWrench& wrench) cons
 
 TaskSpaceTwist PotentialField::applyMotionConstraints(
   const TaskSpaceTwist& twist, const TaskSpaceTwist& prevTwist, const double dt) const {
-  auto isPositiveFinite = [](const double val) -> bool { return std::isfinite(val) && val > 1e-12; };
-  auto clampNorm = [isPositiveFinite](const Eigen::Vector3d& vec, double maxNorm)-> Eigen::Vector3d {
-    if (maxNorm <= 0.0) return vec;
-    const double norm = vec.norm();
-    return norm > maxNorm && isPositiveFinite(norm) ? (vec / norm) * maxNorm : vec;
-  };
-  if (!isPositiveFinite(dt)) {
-    // If dt is too small, negative, or zero, only apply velocity limits
-    return TaskSpaceTwist(
-      clampNorm(twist.linearVelocity, this->maxLinearVelocity),
-      clampNorm(twist.angularVelocity, this->maxAngularVelocity));
+  // Soft-saturate velocities by norm
+  const double beta = 1.0; // Soft-saturation parameter, higher = more aggressive curve
+  Eigen::Vector3d limitedLinear = softSaturateNorm(twist.linearVelocity, this->maxLinearVelocity, beta);
+  Eigen::Vector3d limitedAngular = softSaturateNorm(twist.angularVelocity, this->maxAngularVelocity, beta);
+
+  // If dt is valid, apply rate limits (acceleration limits)
+  if (isPositiveFinite(dt)) {
+    const double dVMaxLinear = this->maxLinearAcceleration * dt; // m/s^2 * s = m/s
+    const double dVMaxAngular = this->maxAngularAcceleration * dt; // rad/s^2 * s = rad/s
+    limitedLinear = rateLimitStep(prevTwist.linearVelocity, limitedLinear, dVMaxLinear);
+    limitedAngular = rateLimitStep(prevTwist.angularVelocity, limitedAngular, dVMaxAngular);
+
+    // Re-apply soft-saturation to prevent velocity limits
+    limitedLinear = softSaturateNorm(limitedLinear, this->maxLinearVelocity, beta);
+    limitedAngular = softSaturateNorm(limitedAngular, this->maxAngularVelocity, beta);
   }
-  // Apply velocity limits first
-  Eigen::Vector3d limitedLinear = clampNorm(twist.linearVelocity, this->maxLinearVelocity);
-  Eigen::Vector3d limitedAngular = clampNorm(twist.angularVelocity, this->maxAngularVelocity);
-
-  // Approximate acceleration using previous twist and dt
-  const double dVMaxLinear = this->maxLinearAcceleration * dt; // m/s^2 * s = m/s
-  const double dVMaxAngular = this->maxAngularAcceleration * dt; // rad/s^2 * s = rad/s
-
-  auto limitStep = [isPositiveFinite](const Eigen::Vector3d& prev, const Eigen::Vector3d& curr, double dVMax) -> Eigen::Vector3d {
-    if (dVMax <= 0.0) return curr; // No acceleration limit
-    Eigen::Vector3d deltaV = curr - prev;
-    const double deltaVNorm = deltaV.norm();
-    if (deltaVNorm > dVMax && isPositiveFinite(deltaVNorm)) {
-      return prev + deltaV * (dVMax / deltaVNorm);
-    }
-    return curr;
-  };
-
-  Eigen::Vector3d accelLimitedLinear = limitStep(prevTwist.linearVelocity, limitedLinear, dVMaxLinear);
-  Eigen::Vector3d accelLimitedAngular = limitStep(prevTwist.angularVelocity, limitedAngular, dVMaxAngular);
-
-  // Re-apply velocity limits after acceleration limiting to prevent overshoot and return
-  return TaskSpaceTwist(
-    clampNorm(accelLimitedLinear, this->maxLinearVelocity),
-    clampNorm(accelLimitedAngular, this->maxAngularVelocity)
-  );
+  return TaskSpaceTwist(limitedLinear, limitedAngular);
 }
 
 SpatialVector PotentialField::interpolateNextPose(
   const SpatialVector& currentPose, const TaskSpaceTwist& prevTwist, const double dt) {
   // Compute the TaskSpaceTwist at the current pose
-  TaskSpaceTwist vel = this->wrenchToTwist(this->evaluateWrenchAtPose(currentPose));
+  TaskSpaceTwist vel = this->evaluateVelocityAtPose(currentPose);
   TaskSpaceTwist velLimited = this->applyMotionConstraints(vel, prevTwist, dt);
   // Integrate linear and angular velocities to get next pose
   Eigen::Vector3d nextPosition = this->integrateLinearVelocity(currentPose.getPosition(), velLimited.linearVelocity, dt);
@@ -201,13 +183,18 @@ PlannedPath PotentialField::planPath(
   SpatialVector current = startPose;
   TaskSpaceTwist prevTwist; // previous applied twist (starts zero)
   double timeStamp = 0.0;
-  size_t iter = 0;
 
-  while (iter < maxIterations) {
+  for (size_t iter = 0; iter < maxIterations; ++iter) {
     // Evaluate (velocity-limited) twist at current pose for logging
     TaskSpaceTwist evalTwist = this->evaluateVelocityAtPose(current);
+    TaskSpaceTwist limitedTwist = this->applyMotionConstraints(evalTwist, prevTwist, stepDt);
     // Record current state
-    path.addPoint(current, evalTwist, std::vector<double>{ /* IK joint angles placeholder */ }, timeStamp);
+    // TODO: Compute IK for joint angles here and use pf_kinematics to update PF Obstacles
+    path.addPoint(
+      current, evalTwist,
+      std::vector<double>{ /* IK joint angles placeholder */ },
+      timeStamp
+    );
 
     // Check goal after recording
     const double translationalError = (current.getPosition() - this->goalPose.getPosition()).norm();
@@ -217,12 +204,15 @@ PlannedPath PotentialField::planPath(
     }
 
     // Advance pose using constrained interpolation (acceleration limits applied internally)
-    SpatialVector nextPose = this->interpolateNextPose(current, prevTwist, stepDt);
+    Eigen::Vector3d nextPosition = this->integrateLinearVelocity(
+      current.getPosition(), limitedTwist.linearVelocity, stepDt);
+    Eigen::Quaterniond nextOrientation = this->integrateAngularVelocity(
+      current.getOrientation(), limitedTwist.angularVelocity, stepDt);
+
     // Update loop variables
-    prevTwist = evalTwist; // supply velocity-limited twist as previous for next acceleration limiting
-    current = nextPose;
+    current = SpatialVector(nextPosition, nextOrientation);
+    prevTwist = limitedTwist; // supply velocity-limited twist as previous for next acceleration limiting
     timeStamp += stepDt;
-    ++iter;
   }
 
   path.dt = stepDt;
