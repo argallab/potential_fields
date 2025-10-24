@@ -232,6 +232,13 @@ public:
   void addObstacle(PotentialFieldObstacle obstacle);
 
   /**
+   * @brief Adds multiple obstacles to the potential field.
+   *
+   * @param obstacles The obstacles to be added.
+   */
+  void addObstacles(const std::vector<PotentialFieldObstacle>& obstacles);
+
+  /**
    * @brief Attempts to remove an obstacle by ID.
    *
    * @note If the obstacle is not found, no action is taken.

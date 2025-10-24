@@ -16,6 +16,10 @@ void PotentialField::addObstacle(PotentialFieldObstacle obstacle) {
   }
 }
 
+void PotentialField::addObstacles(const std::vector<PotentialFieldObstacle>& obstacles) {
+  for (const auto& obst : obstacles) { this->addObstacle(obst); }
+}
+
 bool PotentialField::removeObstacle(const std::string& obstacleFrameID) {
   auto itIndex = this->obstacleIndex.find(obstacleFrameID);
   if (itIndex == this->obstacleIndex.end()) { return false; }
@@ -189,7 +193,7 @@ PlannedPath PotentialField::planPath(
     TaskSpaceTwist evalTwist = this->evaluateVelocityAtPose(current);
     TaskSpaceTwist limitedTwist = this->applyMotionConstraints(evalTwist, prevTwist, stepDt);
     // Record current state
-    // TODO: Compute IK for joint angles here and use pf_kinematics to update PF Obstacles
+    // TODO(Sharwin24): Compute IK for joint angles here and use pf_kinematics to update PF Obstacles
     path.addPoint(
       current, evalTwist,
       std::vector<double>{ /* IK joint angles placeholder */ },

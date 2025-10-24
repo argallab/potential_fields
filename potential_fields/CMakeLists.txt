@@ -111,7 +111,6 @@ include_directories(
 )
 
 add_executable(pfield_manager src/ros/pfield_manager.cpp)
-add_executable(robot_parser src/ros/robot_parser.cpp)
 
 ament_target_dependencies(pfield_manager
   Eigen3
@@ -127,26 +126,10 @@ ament_target_dependencies(pfield_manager
   visualization_msgs
 )
 
-ament_target_dependencies(robot_parser
-  Eigen3
-  geometry_msgs
-  potential_fields_interfaces
-  rclcpp
-  tf2_eigen
-  tf2_ros
-  urdf
-  visualization_msgs
-)
-
 target_link_libraries(pfield_manager
   ${potential_fields_interfaces_LIBRARIES}
   pfield_lib
   robot_plugins
-)
-
-target_link_libraries(robot_parser
-  ${potential_fields_interfaces_LIBRARIES}
-  pfield_lib
 )
 
 # Install the shared library so runtime linker can find it
@@ -167,11 +150,6 @@ install(
 
 install(
   TARGETS pfield_manager
-  DESTINATION lib/${PROJECT_NAME}
-)
-
-install(
-  TARGETS robot_parser
   DESTINATION lib/${PROJECT_NAME}
 )
 

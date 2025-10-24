@@ -13,12 +13,7 @@
   <node pkg="potential_fields" exec="pfield_manager" name="pfield_manager" output="screen">
     <param from="$(find-pkg-share potential_fields)/config/pfield_config.yaml"/>
     <param name="fixed_frame" value="$(var rviz_fixed_frame)"/>
-  </node>
-
-  <!-- Robot Parser -->
-  <node pkg="potential_fields" exec="robot_parser" name="robot_parser" output="screen">
-    <param from="$(find-pkg-share potential_fields)/config/pfield_config.yaml"/>
-    <param name="fixed_frame" value="$(var rviz_fixed_frame)"/>
     <param name="urdf_file_path" value="$(var urdf_file_path)"/>
+    <remap from="/goal_pose" to="/pfield/planning_goal_pose"/>
   </node>
 </launch>
