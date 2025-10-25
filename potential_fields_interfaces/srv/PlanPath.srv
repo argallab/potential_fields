@@ -8,6 +8,9 @@ float32 delta_time
 # Tolerance for "reaching" the goal [m]
 float32 goal_tolerance
 
+# Max iterations for the planner (Default is 30000)
+int32 max_iterations
+
 ---
 bool success
 nav_msgs/Path end_effector_path

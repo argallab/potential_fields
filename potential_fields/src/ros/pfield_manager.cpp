@@ -46,7 +46,6 @@ PotentialFieldManager::PotentialFieldManager()
   this->visualizerBufferArea = this->declare_parameter("visualizer_buffer_area", 1.0f); // Extra area to visualize the PF [m]
   this->fieldResolution = this->declare_parameter("field_resolution", 0.5f); // Resolution of the potential field grid [m]
   this->urdfFileName = this->declare_parameter("urdf_file_path", "urdf/robot.urdf");
-  this->eeLinkName = this->declare_parameter("end_effector_link_name", std::string()); // End-effector link name
   // Get parameters from yaml file
   this->visualizerFrequency = this->get_parameter("visualize_pf_frequency").as_double();
   this->attractiveGain = this->get_parameter("attractive_gain").as_double();
@@ -61,7 +60,6 @@ PotentialFieldManager::PotentialFieldManager()
   this->visualizerBufferArea = this->get_parameter("visualizer_buffer_area").as_double();
   this->fieldResolution = this->get_parameter("field_resolution").as_double();
   this->urdfFileName = this->get_parameter("urdf_file_path").as_string();
-  this->eeLinkName = this->get_parameter("end_effector_link_name").as_string();
 
   // Initialize the potential fields
   this->pField = std::make_shared<PotentialField>(
@@ -69,54 +67,12 @@ PotentialFieldManager::PotentialFieldManager()
     this->maxLinearVelocity, this->maxAngularVelocity,
     this->maxLinearAcceleration, this->maxAngularAcceleration
   );
-
+  this->pField->initializeKinematics(this->urdfFileName, this->influenceZoneScale, this->repulsiveGain);
   // Initialize the motion plugin
   const std::string frankaHostname = std::string();
   // this->motionPlugin = std::make_unique<NullMotionPlugin>();
   this->motionPlugin = std::make_unique<FrankaPlugin>(frankaHostname);
   RCLCPP_INFO(this->get_logger(), "Using Motion Plugin: %s", this->motionPlugin->getName().c_str());
-
-  // Setup Pinocchio kinematic model for converting joint angles to PF Obstacles
-  this->kinematicModel = PFKinematics(this->urdfFileName);
-  // Log some information about the loaded model
-  auto pinModel = this->kinematicModel.getModel();
-  RCLCPP_INFO(this->get_logger(), "Loaded URDF model with %u joints and %u frames from file %s",
-    pinModel.njoints, pinModel.nframes, this->urdfFileName.c_str());
-  // Print the name of each frame
-  for (const auto& frame : pinModel.frames) {
-    RCLCPP_DEBUG(this->get_logger(), "\tFrame: %s", frame.name.c_str());
-  }
-  if (this->eeLinkName.empty()) {
-    // Store end-effector link name for TF broadcasting
-    this->eeLinkName = pinModel.frames[pinModel.nframes - 1].name;
-  }
-  RCLCPP_INFO(this->get_logger(), "Using end-effector link name: %s", this->eeLinkName.c_str());
-  // Parse URDF once to build the collision catalog
-  if (this->robotModel.initFile(this->urdfFileName)) {
-    RCLCPP_INFO(this->get_logger(), "Successfully loaded URDF model from file");
-    this->collisionCatalog = this->buildCollisionCatalog(this->robotModel, true);
-  }
-  else {
-    RCLCPP_ERROR(this->get_logger(), "Failed to load URDF model");
-  }
-  // Save the initial joint states (home position) if IKSolver is available
-  try {
-    auto ikInit = this->motionPlugin->getIKSolver();
-    if (!ikInit) {
-      RCLCPP_WARN(this->get_logger(), "IKSolver not available at initialization; skipping initial obstacle update");
-    }
-    else {
-      JointState initialJointState;
-      initialJointState.header.stamp = this->now();
-      initialJointState.header.frame_id = this->fixedFrame;
-      initialJointState.name = ikInit->getJointNames();
-      initialJointState.position = ikInit->getHomeConfiguration();
-      this->updateObstaclesFromJointStates(initialJointState);
-    }
-  }
-  catch (const std::exception& e) {
-    RCLCPP_ERROR(this->get_logger(), "Exception during initial obstacle update: %s", e.what());
-  }
 
   // Setup marker publisher
   // Use reliable and transient_local QoS for RViz MarkerArray publisher
@@ -346,7 +302,7 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
   // Container to accumulate end-effector velocity (TwistStamped) trajectory
   std::vector<geometry_msgs::msg::TwistStamped> eeVelocityTrajectory;
   // Interpolate until goal reached or max iterations
-  const size_t max_iters = 30000; // TODO(Sharwin): Parameterize this (or derive from MotionPlugin)
+  const size_t max_iters = request->max_iterations > 0 ? request->max_iterations : 30000;
   size_t iter = 0;
   bool reached = false;
   // Deterministic time base: t_i = baseTime + i * delta_time
@@ -391,14 +347,14 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
     jointTrajectoryPoint.time_from_start = rclcpp::Duration::from_seconds(step * dt);
     jointTrajectory.points.push_back(jointTrajectoryPoint);
     // Publish joint angles to planned joint state for PFManager to update its internal PF
-    this->updateObstaclesFromJointStates(
-      buildJointStateMsg(
-        jointTrajectory.joint_names,
-        jointTrajectoryPoint.positions,
-        this->fixedFrame,
-        baseTime + rclcpp::Duration::from_seconds(step * dt)
-      )
-    );
+    // this->updateObstaclesFromJointStates(
+    //   buildJointStateMsg(
+    //     jointTrajectory.joint_names,
+    //     jointTrajectoryPoint.positions,
+    //     this->fixedFrame,
+    //     baseTime + rclcpp::Duration::from_seconds(step * dt)
+    //   )
+    // );
     // Evaluate the velocity at the current pose, and use it and the previous twist to apply motion constraints
     SpatialVector currentPoseSV(
       Eigen::Vector3d(
@@ -857,162 +813,6 @@ void PotentialFieldManager::exportFieldDataToCSV(std::shared_ptr<PotentialField>
   else {
     RCLCPP_ERROR(this->get_logger(), "Unable to open file: %s", vectors_filename.c_str());
   }
-}
-
-std::vector<CollisionCatalogEntry> PotentialFieldManager::buildCollisionCatalog(urdf::Model& model, bool logCatalog) {
-  std::vector<CollisionCatalogEntry> catalog;
-  this->obstacleGeometryTemplates.clear();
-  for (const auto& [link_name, link] : model.links_) {
-    if (!link) { continue; }
-    RCLCPP_INFO(this->get_logger(), "Processing link: %s", link_name.c_str());
-    // Lambda helper to add a collision object to the catalog with the correct naming
-    auto addCollisionEntry = [this, &link_name, &catalog](const urdf::CollisionSharedPtr& col_ptr, size_t index) {
-      if (!col_ptr || !col_ptr->geometry) { return; }
-      CollisionCatalogEntry e;
-      e.linkName = link_name;
-      if (!col_ptr->name.empty()) {
-        e.id = link_name + "::" + col_ptr->name;
-      }
-      else {
-        e.id = link_name + "::col" + std::to_string(index);
-      }
-      e.col = col_ptr;
-      // Build cached obstacle geometry templates aligned to catalog entries
-      PotentialFieldObstacle templateObstacle = this->obstacleFromCollisionObject(
-        e.id, *e.col, Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity()
-      );
-      this->obstacleGeometryTemplates.push_back(templateObstacle);
-      catalog.push_back(std::move(e));
-      this->collisionLinkNames.push_back(link_name);
-    };
-
-    // Add collision objects, specifying the index for collision array objects
-    if (!link->collision_array.empty()) {
-      for (size_t i = 0; i < link->collision_array.size(); ++i) {
-        addCollisionEntry(link->collision_array[i], i);
-      }
-    }
-    else if (link->collision) {
-      addCollisionEntry(link->collision, 0);
-    }
-  }
-  if (logCatalog) {
-    // Emit a one-time detailed listing of expected collision-derived obstacles
-    for (const auto& entry : catalog) {
-      if (!entry.col || !entry.col->geometry) {
-        RCLCPP_WARN(this->get_logger(), "Collision entry '%s' has no geometry", entry.id.c_str());
-        continue;
-      }
-      std::string gType = "Unknown";
-      if (dynamic_cast<urdf::Box*>(entry.col->geometry.get())) gType = "Box";
-      else if (dynamic_cast<urdf::Sphere*>(entry.col->geometry.get())) gType = "Sphere";
-      else if (dynamic_cast<urdf::Cylinder*>(entry.col->geometry.get())) gType = "Cylinder";
-      else if (dynamic_cast<urdf::Mesh*>(entry.col->geometry.get())) gType = "Mesh";
-      RCLCPP_INFO(this->get_logger(), "\tCatalog: id=%s link=%s type=%s",
-        entry.id.c_str(), entry.linkName.c_str(), gType.c_str()
-      );
-    }
-    RCLCPP_INFO(this->get_logger(), "Robot has %zu links", model.links_.size());
-    RCLCPP_INFO(this->get_logger(), "Robot has %zu collision objects in catalog", catalog.size());
-  }
-  return catalog;
-}
-
-std::vector<PotentialFieldObstacle> PotentialFieldManager::buildObstaclesFromTransforms(
-  const std::vector<Eigen::Affine3d>& transforms) {
-  std::vector<PotentialFieldObstacle> collisionObstacles;
-  collisionObstacles.reserve(this->collisionCatalog.size());
-  // Each catalog entry aligns with collisionLinkNames and templates
-  size_t N = this->collisionCatalog.size();
-  for (size_t i = 0; i < N; ++i) {
-    const auto& entry = this->collisionCatalog[i];
-    // Find link index corresponding to this entry
-    // We built collisionLinkNames in the same order as catalog push_back; i aligns with link name index.
-    const Eigen::Affine3d& world_T_link = transforms[i];
-    const urdf::Pose& origin = entry.col->origin;
-    Eigen::Affine3d link_T_col =
-      Eigen::Translation3d(origin.position.x, origin.position.y, origin.position.z) *
-      Eigen::Quaterniond(origin.rotation.w, origin.rotation.x, origin.rotation.y, origin.rotation.z);
-    Eigen::Affine3d world_T_col = world_T_link * link_T_col;
-    // Clone template and update pose only
-    PotentialFieldObstacle obst = this->obstacleGeometryTemplates[i];
-    obst.setPose(
-      Eigen::Vector3d(
-        world_T_col.translation().x(),
-        world_T_col.translation().y(),
-        world_T_col.translation().z()
-      ),
-      Eigen::Quaterniond(world_T_col.rotation())
-    );
-    collisionObstacles.push_back(obst);
-  }
-  return collisionObstacles;
-}
-
-PotentialFieldObstacle PotentialFieldManager::obstacleFromCollisionObject(
-  const std::string& frameID, const urdf::Collision& collisionObject,
-  const Eigen::Vector3d& position, const Eigen::Quaterniond& orientation) {
-  ObstacleType obstacleType;
-  double radius = 0.0;
-  double length = 0.0;
-  double width = 0.0;
-  double height = 0.0;
-  bool isMesh = false;
-  std::string meshResource;
-
-  auto* geometry = collisionObject.geometry.get();
-  if (urdf::Box* b = dynamic_cast<urdf::Box*>(geometry)) {
-    obstacleType = ObstacleType::BOX;
-    length = b->dim.x;
-    width = b->dim.y;
-    height = b->dim.z;
-  }
-  else if (urdf::Sphere* s = dynamic_cast<urdf::Sphere*>(geometry)) {
-    obstacleType = ObstacleType::SPHERE;
-    radius = s->radius;
-  }
-  else if (urdf::Cylinder* c = dynamic_cast<urdf::Cylinder*>(geometry)) {
-    obstacleType = ObstacleType::CYLINDER;
-    radius = c->radius;
-    height = c->length;
-  }
-  else if (urdf::Mesh* m = dynamic_cast<urdf::Mesh*>(geometry)) {
-    obstacleType = ObstacleType::MESH;
-    length = m->scale.x;
-    width = m->scale.y;
-    height = m->scale.z;
-    isMesh = true;
-    meshResource = m->filename;
-  }
-  else {
-    RCLCPP_ERROR(this->get_logger(),
-      "Unhandled URDF geometry type for collision object with id: %s", frameID.c_str());
-  }
-  ObstacleGeometry obstacleGeom(radius, length, width, height);
-  PotentialFieldObstacle obstacle(
-    frameID, position, orientation, obstacleType, ObstacleGroup::ROBOT,
-    obstacleGeom, this->influenceZoneScale, this->repulsiveGain
-  );
-  // If mesh, set mesh resource and scale
-  if (isMesh) { obstacle.setMeshProperties(meshResource, Eigen::Vector3d(length, width, height)); }
-  return obstacle;
-}
-
-void PotentialFieldManager::updateObstaclesFromJointStates(JointState jointStateMsg) {
-  if (!this->kinematicsCachesInitialized) {
-    // Initialize caches with the runtime joint order on first message
-    this->kinematicModel.initializeCaches(jointStateMsg.name, this->collisionLinkNames);
-    this->kinematicsCachesInitialized = true;
-    RCLCPP_INFO(this->get_logger(), "Initialized kinematics caches with %zu joints and %zu links",
-      jointStateMsg.name.size(), this->collisionLinkNames.size());
-  }
-  std::vector<Eigen::Affine3d> transforms;
-  transforms.reserve(this->collisionLinkNames.size());
-  this->kinematicModel.computeLinkTransforms(jointStateMsg.position, transforms);
-  this->latestTransforms = transforms; // Store latest transforms for TF broadcasting
-  std::vector<PotentialFieldObstacle> obsArray = this->buildObstaclesFromTransforms(transforms);
-  this->pField->addObstacles(obsArray);
-  RCLCPP_DEBUG(this->get_logger(), "Updated %zu obstacles from new joint angles", obsArray.size());
 }
 
 int main(int argc, char* argv[]) {

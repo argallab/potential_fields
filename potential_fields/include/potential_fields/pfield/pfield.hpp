@@ -29,8 +29,10 @@
 
 #include "spatial_vector.hpp"
 #include "pf_obstacle.hpp"
+#include "pf_kinematics.hpp"
 #include "pfield_common.hpp"
 
+#include "robot_plugins/ik_solver.hpp"
 
 struct TaskSpaceWrench {
   Eigen::Vector3d force{Eigen::Vector3d::Zero()}; // Linear Force [N]
@@ -203,6 +205,8 @@ public:
 
   bool operator!=(const PotentialField& other) const { return !(*this == other); }
 
+  void initializeKinematics(const std::string& urdfFilePath, const double influenceZoneScale, const double repulsiveGain);
+
   // ============ Getters and Setters ============
   void setAttractiveGain(double newAttractiveGain) { this->attractiveGain = newAttractiveGain; }
   void setRotationalAttractiveGain(double newRotationalAttractiveGain) {
@@ -349,16 +353,16 @@ public:
   /**
    * @brief Plans a path from the start pose to the goal pose using the potential field.
    *
-   * @note TODO: This function will need to use an IKSolver for computing joint angles,
-   *             which needs to be a member of this class
    *
    * @param startPose The starting pose as a SpatialVector.
    * @param dt The time step for each iteration of the path planning [s].
    * @param goalTolerance The tolerance for reaching the goal pose [m].
+   * @param ikSolver A shared pointer to an IKSolver for computing joint angles.
    * @param maxIters The maximum number of iterations to perform for path planning, defaults to 30000.
    * @return PlannedPath The planned path containing poses, twists, joint angles, and timestamps.
    */
-  PlannedPath planPath(const SpatialVector& startPose, const double dt, const double goalTolerance, size_t maxIters = 30000);
+  PlannedPath planPath(const SpatialVector& startPose, const double dt, const double goalTolerance,
+    std::shared_ptr<IKSolver> ikSolver, const size_t maxIters = 30000);
 
 private:
   double attractiveGain; // Gain for attractive force
@@ -372,6 +376,8 @@ private:
   std::unordered_map<std::string, size_t> obstacleIndex; // Fast lookup for obstacle updates/removals by ID
   const double translationalTolerance = 1e-3; // Threshold for distances to the goal and obstacles [m]
   const double rotationalThreshold = 0.02; // Threshold for rotational geodesic distance [rad]
+  std::string urdfFileName; // URDF file path for kinematic model
+  PFKinematics pfKinematics; // Kinematics helper for obstacle updates via joint angles
 
   /**
    * @brief Computes the attractive force towards the goal position

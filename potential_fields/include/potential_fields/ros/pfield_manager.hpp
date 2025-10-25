@@ -60,12 +60,6 @@ struct PFLimits {
   double maxZ; // Maximum Z coordinate of the bounding box [m]
 };
 
-struct CollisionCatalogEntry {
-  std::string id;         // unique obstacle id (link::name or link::colN)
-  std::string linkName;  // link this collision belongs to
-  urdf::CollisionSharedPtr col; // collision element
-};
-
 class PotentialFieldManager : public rclcpp::Node {
 public:
   PotentialFieldManager();
@@ -90,22 +84,12 @@ private:
   double maxLinearAcceleration; // Maximum Linear Acceleration [m/s^2]
   double maxAngularAcceleration; // Maximum Angular Acceleration [rad/s^2]
   double influenceZoneScale; // Influence zone scaling factor
-  std::string fixedFrame; // RViz fixed frame for visualization and PF computation
-  // Potential field instances (shared_ptr to avoid inadvertent copying when passing to visualization helpers)
-  std::shared_ptr<PotentialField> pField; // Primary Potential Field
   double visualizerBufferArea; // Extra area around obstacles and goal to visualize the PF [m]
   double fieldResolution; // Resolution of the potential field grid [m]
+  std::string fixedFrame; // RViz fixed frame for visualization and PF computation
   std::string urdfFileName; // URDF file name
-  PFKinematics kinematicModel; // Pinocchio kinematic model for FK
-  urdf::Model robotModel; // URDF model
-  bool isRobotModelLoaded = false; // Flag indicating if the robot model was successfully loaded
-  std::vector<CollisionCatalogEntry> collisionCatalog; // Catalog of collision objects from URDF
-  std::vector<std::string> collisionLinkNames; // Names of links with collision geometry
-  // Cached obstacle geometry templates aligned to collisionCatalog/collisionLinkNames
-  std::vector<PotentialFieldObstacle> obstacleGeometryTemplates; // pose will be updated per callback
-  bool kinematicsCachesInitialized = false;
-  std::string eeLinkName; // End-effector link name for TF broadcasting
-  std::vector<Eigen::Affine3d> latestTransforms; // Latest computed link transforms
+  // Potential field instances (shared_ptr to avoid inadvertent copying when passing to visualization helpers)
+  std::shared_ptr<PotentialField> pField; // Primary Potential Field
 
   // The MotionPlugin containing robot-specific functions (Kinematics, Motion Planning, etc.)
   std::unique_ptr<MotionPlugin> motionPlugin;
@@ -203,39 +187,6 @@ private:
    * @param filename The name of the CSV file to export the data to
    */
   void exportFieldDataToCSV(std::shared_ptr<PotentialField> pf, const std::string& filename);
-
-  /**
- * @brief Using cached transforms vector aligned to collisionLinkNames,
- *        build obstacles using updated poses
- *
- * @param transforms The new poses of collision links, aligned to collisionLinkNames
- * @return std::vector<PotentialFieldObstacle> PotentialFieldObstacle objects with updated poses
- */
-  std::vector<PotentialFieldObstacle> buildObstaclesFromTransforms(const std::vector<Eigen::Affine3d>& transforms);
-
-  /**
-   * @brief Builds the collision catalog from the URDF model, holding info about
-   *        each collision object's link, name, and Collision pointer.
-   *
-   * @param model The URDF model
-   * @param logCatalog Whether to log the built catalog, defaults to true
-   * @return std::vector<CollisionCatalogEntry> The built collision catalog
-   */
-  std::vector<CollisionCatalogEntry> buildCollisionCatalog(urdf::Model& model, bool logCatalog = true);
-
-  /**
-   * @brief Builds an Obstacle message from a URDF Collision object and given pose
-   *
-   * @param frameID The frame ID for the obstacle's pose to be defined in
-   * @param collisionObject The URDF Collision object, defining geometry and type
-   * @param position The position of the obstacle
-   * @param orientation The orientation of the obstacle
-   * @return PotentialFieldObstacle The constructed PFObstacle to be inserted in the PF
-   */
-  PotentialFieldObstacle obstacleFromCollisionObject(const std::string& frameID, const urdf::Collision& collisionObject,
-    const Eigen::Vector3d& position, const Eigen::Quaterniond& orientation);
-
-  void updateObstaclesFromJointStates(JointState jointStateMsg);
 };
 
 #endif // PFIELD_MANAGER_HPP

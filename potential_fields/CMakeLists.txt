@@ -46,6 +46,7 @@ add_library(pfield_lib SHARED
 ament_target_dependencies(pfield_lib
   Eigen3
   geometric_shapes
+  urdf
 )
 target_include_directories(pfield_lib PUBLIC
   include/potential_fields/pfield
