@@ -2,24 +2,6 @@
 #include "weighted_ik.h"
 #include <cmath>
 
-// struct WeightedIKResult {
-//   bool success;
-//   std::array<double, 7> joint_angles;
-//   double q7_optimal;
-//   double score;
-//   double manipulability;
-//   double neutral_distance;
-//   double current_distance;
-//   int solution_index;
-//   std::array<std::array<double, 6>, 7> jacobian;
-
-//   int total_solutions_found;
-//   int valid_solutions_count;
-//   int q7_values_tested;
-//   int optimization_iterations;  // Number of iterations used by optimization algorithm
-//   long duration_microseconds;
-// };
-
 FrankaIKSolver::FrankaIKSolver(IKSolverSearchParameters params) : IKSolver("GeoFIK"), ikParams(params) {
   this->homeTransformOE = franka_fk(this->homeJointAngles);
   this->solver = std::make_unique<WeightedIKSolver>(
@@ -82,6 +64,7 @@ FrankaPlugin::FrankaPlugin(const std::string& hostname) : MotionPlugin("FrankaPl
   IKSolverSearchParameters ikSolverParams;
   this->assignIKSolver(std::make_shared<FrankaIKSolver>(ikSolverParams));
   if (!hostname.empty()) this->initializeRobot(hostname);
+  this->currentJointAngles = this->getIKSolver()->getHomeConfiguration();
 }
 
 bool FrankaPlugin::initializeRobot(const std::string& hostname) {
@@ -161,6 +144,7 @@ bool FrankaPlugin::readRobotState(sensor_msgs::msg::JointState& js, geometry_msg
     js.position = std::vector<double>(7, 0.0);
     js.velocity = std::vector<double>(7, 0.0);
     js.effort = std::vector<double>(7, 0.0);
+    this->currentJointAngles = js.position;
 
     if (this->clock) { endEffectorPose.header.stamp = this->clock->now(); }
     else { endEffectorPose.header.stamp = rclcpp::Time(0); }
@@ -172,6 +156,7 @@ bool FrankaPlugin::readRobotState(sensor_msgs::msg::JointState& js, geometry_msg
     endEffectorPose.pose.orientation.x = 0.0;
     endEffectorPose.pose.orientation.y = 0.0;
     endEffectorPose.pose.orientation.z = 0.0;
+
     return true;
   }
   try {
@@ -183,7 +168,7 @@ bool FrankaPlugin::readRobotState(sensor_msgs::msg::JointState& js, geometry_msg
     js.position = std::vector<double>(robotState.q.data(), robotState.q.data() + 7);
     js.velocity = std::vector<double>(robotState.dq.data(), robotState.dq.data() + 7);
     js.effort = std::vector<double>(robotState.tau_J.data(), robotState.tau_J.data() + 7);
-
+    this->currentJointAngles = js.position;
     // Set end-effector pose
     if (this->clock) { endEffectorPose.header.stamp = this->clock->now(); }
     else { endEffectorPose.header.stamp = rclcpp::Time(0); }
