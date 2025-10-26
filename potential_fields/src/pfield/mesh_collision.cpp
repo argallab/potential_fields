@@ -1,14 +1,18 @@
+#include "pfield/mesh_collision.hpp"
+
 #include <Eigen/Core>
-#include <fcl/fcl.h>
-#include <geometric_shapes/mesh_operations.h>      // createMeshFromResource
-#include <geometric_shapes/shape_operations.h>     // shapes::...
 #include <limits>
 #include <memory>
 #include <mutex>
 #include <unordered_map>
 #include <vector>
 
-#include "pfield/mesh_collision.hpp"
+#include <coal/shape/geometric_shapes.h>
+#include <coal/math/transform.h>
+#include <geometric_shapes/mesh_operations.h>      // createMeshFromResource
+#include <geometric_shapes/shape_operations.h>     // shapes::...
+
+constexpr double POINT_SPHERE_RADIUS = 1e-9;
 
 
 // Simple cache so identical mesh resources share BVH + triangles
@@ -28,9 +32,9 @@ std::shared_ptr<MeshCollisionData> loadMesh(const std::string& uri) {
   shapes::Mesh* shapeMesh = shapes::createMeshFromResource(uri);
   if (!shapeMesh) throw std::runtime_error("Failed to load mesh: " + uri);
 
-  auto model = std::make_shared<fcl::BVHModel<fcl::OBBRSSd>>();
-  std::vector<fcl::Vector3d> verts;
-  std::vector<fcl::Triangle> tris;
+  auto model = std::make_shared<coal::BVHModel<coal::OBBRSS>>();
+  std::vector<coal::Vec3s> verts;
+  std::vector<coal::Triangle> tris;
 
   verts.reserve(shapeMesh->vertex_count);
   for (size_t i = 0; i < shapeMesh->vertex_count; ++i) {
@@ -76,7 +80,7 @@ std::shared_ptr<MeshCollisionData> loadMesh(const std::string& uri) {
   result->triangles.reserve(tris.size());
   for (auto& t : tris) result->triangles.emplace_back(t[0], t[1], t[2]);
   // Pre-create collision object for distance queries
-  result->meshObj = std::make_shared<fcl::CollisionObjectd>(result->bvh, fcl::Transform3d::Identity());
+  result->meshObj = std::make_shared<coal::CollisionObject>(result->bvh, coal::Transform3s::Identity());
   delete shapeMesh;
   {
     std::lock_guard<std::mutex> lk(cacheMutex);
@@ -131,20 +135,20 @@ bool pointInsideMesh(const MeshCollisionData& meshData, const Eigen::Vector3d& p
 
 double distanceToMesh(const MeshCollisionData& meshData, const Eigen::Vector3d& pointInMeshFrame) {
   if (!meshData.bvh) return std::numeric_limits<double>::infinity();
-  // Lazy create point sphere shape (radius 0)
-  static std::shared_ptr<fcl::Sphere<double>> sphere_ptr = std::make_shared<fcl::Sphere<double>>(0.0);
-  fcl::Transform3d pt_tf = fcl::Transform3d::Identity();
+  // Lazy create point sphere shape (radius approximately zero)
+  static std::shared_ptr<coal::Sphere> sphere_ptr = std::make_shared<coal::Sphere>(POINT_SPHERE_RADIUS);
+  coal::Transform3s pt_tf = coal::Transform3s::Identity();
   pt_tf.translation() = pointInMeshFrame;
-  fcl::CollisionObjectd ptObj(sphere_ptr, pt_tf);
-  fcl::DistanceRequestd req;
-  fcl::DistanceResultd res;
-  const fcl::CollisionObjectd* meshObjPtr = meshData.meshObj ? meshData.meshObj.get() : nullptr;
+  coal::CollisionObject ptObj(sphere_ptr, pt_tf);
+  coal::DistanceRequest req;
+  coal::DistanceResult res;
+  const coal::CollisionObject* meshObjPtr = meshData.meshObj ? meshData.meshObj.get() : nullptr;
   if (!meshObjPtr) {
-    fcl::CollisionObjectd temp(meshData.bvh, fcl::Transform3d::Identity());
-    fcl::distance(&temp, &ptObj, req, res);
+    coal::CollisionObject temp(meshData.bvh, coal::Transform3s::Identity());
+    coal::distance(&temp, &ptObj, req, res);
   }
   else {
-    fcl::distance(meshObjPtr, &ptObj, req, res);
+    coal::distance(meshObjPtr, &ptObj, req, res);
   }
   return res.min_distance;
 }

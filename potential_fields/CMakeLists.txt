@@ -29,7 +29,7 @@ find_package(tf2_eigen REQUIRED)
 find_package(urdf REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(geometric_shapes REQUIRED)
-find_package(fcl REQUIRED)
+find_package(hpp-fcl REQUIRED)
 find_package(pinocchio REQUIRED)
 find_package(Franka REQUIRED)
 
@@ -54,9 +54,9 @@ target_include_directories(pfield_lib PUBLIC
   ${pinocchio_INCLUDE_DIRS}
 )
 target_link_libraries(pfield_lib
-  fcl
-  pinocchio::pinocchio
   ${EIGEN3_LIBRARIES}
+  pinocchio::pinocchio
+  hpp-fcl::hpp-fcl
 )
 
 # Use precompiled headers to speed up builds (CMake >= 3.16)
