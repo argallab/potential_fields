@@ -62,6 +62,7 @@ struct PlannedPath {
   unsigned int numPoints; // The number of points in the planned path, should be equal across all vectors
   double duration; // Total duration of the path [s]
   double dt; // Time difference between consecutive points [s]
+  bool success = false; // Whether the path planning was successful
 
   PlannedPath()
     : numPoints(0), duration(0.0), dt(0.0) {}

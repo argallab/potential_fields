@@ -93,6 +93,7 @@ private:
 
   // The MotionPlugin containing robot-specific functions (Kinematics, Motion Planning, etc.)
   std::unique_ptr<MotionPlugin> motionPlugin;
+  std::shared_ptr<IKSolver> ikSolver; // The IKSolver obtained from the MotionPlugin
 
   rclcpp::TimerBase::SharedPtr timer; // Timer to periodically update the potential field
   rclcpp::Publisher<MarkerArray>::SharedPtr pFieldMarkerPub; // Publisher for PF Markers

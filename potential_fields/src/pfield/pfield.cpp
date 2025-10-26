@@ -228,6 +228,7 @@ PlannedPath PotentialField::planPath(
     const double translationalError = (current.getPosition() - this->goalPose.getPosition()).norm();
     const double rotationalError = current.angularDistance(this->goalPose);
     if (translationalError <= goalTolerance && rotationalError <= this->rotationalThreshold) {
+      path.success = true;
       break;
     }
 
