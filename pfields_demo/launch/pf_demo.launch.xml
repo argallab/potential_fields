@@ -17,6 +17,11 @@
     <param name="fixed_frame" value="$(var rviz_fixed_frame)"/>
   </node>
 
+  <!-- Sphere Demo Node -->
+  <node pkg="pfields_demo" exec="sphere_robot_demo.py" name="pokeball" output="screen">
+    <param name="fixed_frame" value="$(var rviz_fixed_frame)"/>
+  </node>
+
   <!-- Static TF: $(var rviz_fixed_frame) -> $(var base_frame) -->
   <node pkg="tf2_ros" exec="static_transform_publisher" name="fixed_to_base_broadcaster" output="screen"
         args="$(var base_x) $(var base_y) $(var base_z) $(var base_roll) $(var base_pitch) $(var base_yaw) $(var rviz_fixed_frame) $(var base_frame)"/>
