@@ -28,25 +28,25 @@
 #include "robot_plugins/null_motion_plugin.hpp"
 #include "robot_plugins/franka_plugin.hpp"
 #include "tf2_eigen/tf2_eigen.hpp"
+#include <cctype>
 
-PotentialFieldManager::PotentialFieldManager()
-  : Node("potential_field_manager") {
+PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager") {
   RCLCPP_INFO(this->get_logger(), "PotentialFieldManager Initialized");
   // Declare parameters
-  this->visualizerFrequency = this->declare_parameter("visualize_pf_frequency", 100.0f); // [Hz]
-  this->attractiveGain = this->declare_parameter("attractive_gain", 1.0f); // [Ns/m]
-  this->rotationalAttractiveGain = this->declare_parameter("rotational_attractive_gain", 0.7f); // [Ns/m]
-  this->repulsiveGain = this->declare_parameter("repulsive_gain", 1.0f); // [Ns/m]
-  this->maxLinearVelocity = this->declare_parameter("max_linear_velocity", 1.0f); // [m/s]
-  this->maxAngularVelocity = this->declare_parameter("max_angular_velocity", 1.0f); // [rad/s]
-  this->maxLinearAcceleration = this->declare_parameter("max_linear_acceleration", 1.0f); // [m/s^2]
-  this->maxAngularAcceleration = this->declare_parameter("max_angular_acceleration", 1.0f); // [rad/s^2]
-  this->influenceZoneScale = this->declare_parameter("influence_zone_scale", 2.0f); // Influence zone scaling factor
+  this->visualizerFrequency = this->declare_parameter("visualize_pf_frequency", 100.0); // [Hz]
+  this->attractiveGain = this->declare_parameter("attractive_gain", 1.0); // [Ns/m]
+  this->rotationalAttractiveGain = this->declare_parameter("rotational_attractive_gain", 0.7); // [Ns/m]
+  this->repulsiveGain = this->declare_parameter("repulsive_gain", 0.1); // [Ns/m]
+  this->maxLinearVelocity = this->declare_parameter("max_linear_velocity", 1.0); // [m/s]
+  this->maxAngularVelocity = this->declare_parameter("max_angular_velocity", 1.0); // [rad/s]
+  this->maxLinearAcceleration = this->declare_parameter("max_linear_acceleration", 1.0); // [m/s^2]
+  this->maxAngularAcceleration = this->declare_parameter("max_angular_acceleration", 1.0); // [rad/s^2]
+  this->influenceZoneScale = this->declare_parameter("influence_zone_scale", 2.0); // Influence zone scaling factor
   this->fixedFrame = this->declare_parameter("fixed_frame", "world"); // RViz fixed frame
-  this->visualizerBufferArea = this->declare_parameter("visualizer_buffer_area", 1.0f); // Extra area to visualize the PF [m]
-  this->fieldResolution = this->declare_parameter("field_resolution", 0.5f); // Resolution of the potential field grid [m]
-  this->urdfFileName = this->declare_parameter("urdf_file_path", "");
-  this->motionPluginType = this->declare_parameter("motion_plugin_type", "null"); // Motion Plugin Type [e.g., "null", "franka", etc.]
+  this->visualizerBufferArea = this->declare_parameter("visualizer_buffer_area", 1.0); // Extra area to visualize the PF [m]
+  this->fieldResolution = this->declare_parameter("field_resolution", 0.5); // Resolution of the potential field grid [m]
+  this->urdfFileName = this->declare_parameter("urdf_file_path", std::string());
+  this->motionPluginType = this->declare_parameter("motion_plugin_type", std::string()); // Motion Plugin Type [e.g. "franka", etc.]
   // Get parameters from yaml file
   this->visualizerFrequency = this->get_parameter("visualize_pf_frequency").as_double();
   this->attractiveGain = this->get_parameter("attractive_gain").as_double();
@@ -71,7 +71,13 @@ PotentialFieldManager::PotentialFieldManager()
   );
 
   // Initialize the motion plugin
-  if (this->motionPluginType == "null") {
+  std::transform(
+    this->motionPluginType.cbegin(),
+    this->motionPluginType.cend(),
+    this->motionPluginType.begin(),
+    [](unsigned char c) { return std::tolower(c); }
+  );
+  if (this->motionPluginType.empty()) {
     this->motionPlugin = std::make_unique<NullMotionPlugin>();
   }
   else if (this->motionPluginType == "franka") {
@@ -84,18 +90,13 @@ PotentialFieldManager::PotentialFieldManager()
   }
   RCLCPP_INFO(this->get_logger(), "Using Motion Plugin: %s", this->motionPlugin->getName().c_str());
 
-  // Save the IKSolver
-  if (!this->motionPlugin) {
-    RCLCPP_WARN(this->get_logger(), "motionPlugin not initialized");
+  // Save the IKSolver from the motion plugin
+  this->ikSolver = this->motionPlugin->getIKSolver();
+  if (!this->ikSolver) {
+    RCLCPP_WARN(this->get_logger(), "IKSolver not available from motionPlugin");
   }
   else {
-    this->ikSolver = this->motionPlugin->getIKSolver();
-    if (!this->ikSolver) {
-      RCLCPP_WARN(this->get_logger(), "IKSolver not available from motionPlugin");
-    }
-    else {
-      RCLCPP_INFO(this->get_logger(), "Using IKSolver: %s", this->ikSolver->getName().c_str());
-    }
+    RCLCPP_INFO(this->get_logger(), "Using IKSolver: %s", this->ikSolver->getName().c_str());
   }
 
   // Allow the user to not use a URDF
@@ -105,6 +106,7 @@ PotentialFieldManager::PotentialFieldManager()
       this->ikSolver->getJointNames(),
       this->influenceZoneScale, this->repulsiveGain
     );
+    RCLCPP_INFO(this->get_logger(), "PF Kinematics initialized from URDF: %s", this->urdfFileName.c_str());
   }
   else {
     RCLCPP_WARN(this->get_logger(), "URDF file path is empty. Kinematics not initialized.");
@@ -118,8 +120,7 @@ PotentialFieldManager::PotentialFieldManager()
 
   // Setup goal pose subscriber
   auto goalPoseQos = rclcpp::QoS(rclcpp::KeepLast(10)).reliable();
-  this->goalPoseSub = this->create_subscription<geometry_msgs::msg::PoseStamped>(
-    "/pfield/planning_goal_pose",
+  this->goalPoseSub = this->create_subscription<geometry_msgs::msg::PoseStamped>("/pfield/planning_goal_pose",
     goalPoseQos,
     [this](const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
     const SpatialVector goalPose(

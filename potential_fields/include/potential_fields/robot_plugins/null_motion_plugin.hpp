@@ -7,20 +7,15 @@
 #include <memory>
 
 // A minimal IK solver that returns the seed as the solution (useful for offline testing)
-class SimpleIKSolver : public IKSolver {
+class NullIKSolver : public IKSolver {
 public:
-  SimpleIKSolver() : IKSolver("SimpleIKSolver") {}
-  ~SimpleIKSolver() override = default;
+  NullIKSolver() : IKSolver("NullIKSolver") {}
+  ~NullIKSolver() override = default;
 
   bool solve([[maybe_unused]] const Eigen::Isometry3d& targetPose, const std::vector<double>& seed,
     std::vector<double>& solution, Eigen::Matrix<double, 6, Eigen::Dynamic>& J, std::string& errorMsg) override {
-    if (seed.empty()) {
-      // default to 7 zeros
-      solution = std::vector<double>(7, 0.0);
-    }
-    else {
-      solution = seed;
-    }
+    if (seed.empty()) { solution = {}; }
+    else { solution = seed; }
     J.resize(6, solution.size());
     J.setZero();
     errorMsg.clear();
@@ -33,18 +28,16 @@ public:
     return true;
   }
 
-  std::vector<std::string> getJointNames() const override {
-    return {"joint1", "joint2", "joint3", "joint4", "joint5", "joint6", "joint7"};
-  }
+  std::vector<std::string> getJointNames() const override { return {}; }
 
-  std::vector<double> getHomeConfiguration() const override { return std::vector<double>(7, 0.0); }
+  std::vector<double> getHomeConfiguration() const override { return {}; }
 };
 
 // A null MotionPlugin which performs no real robot IO and is suitable for offline testing
 class NullMotionPlugin : public MotionPlugin {
 public:
   NullMotionPlugin() : MotionPlugin("NullMotionPlugin") {
-    this->assignIKSolver(std::make_shared<SimpleIKSolver>());
+    this->assignIKSolver(std::make_shared<NullIKSolver>());
     this->assignSharedClock(std::make_shared<rclcpp::Clock>(RCL_SYSTEM_TIME));
   }
   ~NullMotionPlugin() override = default;

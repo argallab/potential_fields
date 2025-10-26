@@ -5,6 +5,7 @@ import os
 
 from geometry_msgs.msg import PoseStamped
 from potential_fields_interfaces.srv import PlanPath
+from potential_fields_interfaces.msg import ObstacleArray, Obstacle
 import rclpy
 from rclpy.node import Node
 from std_srvs.srv import Empty
@@ -18,17 +19,58 @@ class SphereRobotDemo(Node):
             'fixed_frame', 'world').get_parameter_value().string_value
 
         self.goal_pub = self.create_publisher(
-            PoseStamped, '/goal_pose', 10)
+            PoseStamped, '/pfield/planning_goal_pose', 10
+        )
+        self.obstacle_pub = self.create_publisher(
+            ObstacleArray, '/pfield/obstacles', 10
+        )
         self.cli = self.create_client(PlanPath, 'pfield/plan_path')
         # Service to trigger demo
         self.create_service(
             Empty, '/run_sphere_demo', self.run_demo_callback
         )
         self.get_logger().info('Ready to run plan path demo via service call.')
+        self.start = (0.0, 0.0, 0.5)
+        self.goal = (7.0, 5.0, 3.5)
+        # Publish static obstacles
+        self.obstacle_pub.publish(self.create_obstacles(self.start, self.goal))
+        # Publish the goal pose
+        goal_pose = PoseStamped()
+        goal_pose.header.frame_id = self.fixed_frame
+        goal_pose.header.stamp = self.get_clock().now().to_msg()
+        goal_pose.pose.position.x = self.goal[0]
+        goal_pose.pose.position.y = self.goal[1]
+        goal_pose.pose.position.z = self.goal[2]
+        self.goal_pub.publish(goal_pose)
+        self.get_logger().info('Published goal pose.')
 
         # Wait for the plan path service
         while not self.cli.wait_for_service(timeout_sec=2.0):
             self.get_logger().info('Service not available, waiting again...')
+
+    def create_obstacles(self, start: tuple[float, float, float], goal: tuple[float, float, float]):
+        obstacles_msg = ObstacleArray()
+        # This demo will have a sphere start at the origin and move to some goal point
+        # I want to create several (primitive) obstacles in the area that will influence the sphere's path
+        # and demonstrate the path avoidance
+        # The sphere has a diameter of 1.0m, so obstacles should be sized appropriately
+
+        # Create a sphere directly in the path (halfway between the straight line)
+        midpoint = (
+            (start[0] + goal[0]) / 2.0,
+            (start[1] + goal[1]) / 2.0,
+            (start[2] + goal[2]) / 2.0,
+        )
+        sphere_obstacle = Obstacle()
+        sphere_obstacle.type = "Sphere"
+        sphere_obstacle.group = "Static"
+        sphere_obstacle.pose.position.x = midpoint[0]
+        sphere_obstacle.pose.position.y = midpoint[1]
+        sphere_obstacle.pose.position.z = midpoint[2]
+        sphere_obstacle.radius = 1.0
+        obstacles_msg.obstacles.append(sphere_obstacle)
+
+        return obstacles_msg
 
     def run_demo_callback(self, request, response):
         self.get_logger().info('Running Sphere Robot Demo...')
@@ -36,25 +78,24 @@ class SphereRobotDemo(Node):
         # Define start and goal poses
         start_pose = PoseStamped()
         start_pose.header.frame_id = self.fixed_frame
-        start_pose.pose.position.x = 0.0
-        start_pose.pose.position.y = 0.0
-        start_pose.pose.position.z = 0.5
-        start_pose.pose.orientation.w = 1.0
+        start_pose.header.stamp = self.get_clock().now().to_msg()
+        start_pose.pose.position.x = self.start[0]
+        start_pose.pose.position.y = self.start[1]
+        start_pose.pose.position.z = self.start[2]
 
         goal_pose = PoseStamped()
         goal_pose.header.frame_id = self.fixed_frame
-        goal_pose.pose.position.x = 3.0
-        goal_pose.pose.position.y = 3.0
-        goal_pose.pose.position.z = 0.5
-        goal_pose.pose.orientation.w = 1.0
-
-        # Publish the goal pose
-        self.goal_pub.publish(goal_pose)
-        self.get_logger().info('Published goal pose.')
+        goal_pose.header.stamp = self.get_clock().now().to_msg()
+        goal_pose.pose.position.x = self.goal[0]
+        goal_pose.pose.position.y = self.goal[1]
+        goal_pose.pose.position.z = self.goal[2]
 
         req = PlanPath.Request()
         req.start = start_pose
         req.goal = goal_pose
+        req.delta_time = 0.05  # 50ms time step
+        req.goal_tolerance = 0.1  # 10cm tolerance
+        req.max_iterations = 100000
 
         # call service asynchronously; handle response in done-callback
         self.get_logger().info('Sending plan_path request (async)...')
@@ -98,6 +139,131 @@ class SphereRobotDemo(Node):
         except Exception as e:
             self.get_logger().error(
                 f'Failed to save planned path response (async): {e}')
+
+    def save_planned_path_response(self, plan_path_response):
+        # Save a CSV file with the planned path details for offline plotting.
+        # CSV columns:
+        # time, ee_px, ee_py, ee_pz, ee_qx, ee_qy, ee_qz, ee_qw, ee_vx, ee_vy, ee_vz, joint1, ...
+
+        # Determine lengths
+        path_poses = plan_path_response.end_effector_path.poses
+        ee_vels = plan_path_response.end_effector_velocity_trajectory
+        jt = plan_path_response.joint_trajectory
+        jt_points = jt.points if jt is not None else []
+
+        n_path = len(path_poses)
+        n_vel = len(ee_vels)
+        n_jt = len(jt_points)
+
+        # Determine joint names
+        joint_names = list(jt.joint_names) if jt and jt.joint_names else []
+        n_joints = len(joint_names)
+
+        # Compute time base: prefer EE velocity trajectory stamps (closest to PF output),
+        # then path pose stamps, then joint time_from_start, else synthesize index * dt
+        times = []
+        if n_vel > 0 and ee_vels[0].header.stamp.sec != 0:
+            ee_vel_nsec = ee_vels[0].header.stamp.nanosec * 1e-9
+            t0 = ee_vels[0].header.stamp.sec + ee_vel_nsec
+            for v in ee_vels:
+                ts = v.header.stamp.sec + v.header.stamp.nanosec * 1e-9
+                times.append(ts - t0)
+        else:
+            # fallback: use index with assumed dt of 0.1s
+            est_dt = 0.1
+            maxlen = max(n_path, n_vel, n_jt, 1)
+            times = [i * est_dt for i in range(maxlen)]
+
+        # Determine number of rows (use max of available series lengths)
+        n_rows = max(len(times), n_path, n_vel, n_jt)
+
+        # Prepare rows
+        rows = []
+        last_pose = None
+        last_vel = None
+        last_joints = [math.nan] * n_joints if n_joints > 0 else []
+
+        for i in range(n_rows):
+            # time
+            t = times[i] if i < len(times) else (
+                times[-1] + (i - len(times) + 1) * 0.1)
+
+            # pose
+            if i < n_path:
+                pose = path_poses[i].pose
+                last_pose = pose
+            elif last_pose is not None:
+                pose = last_pose
+            else:
+                # default empty pose
+                pose = PoseStamped().pose
+
+            px = pose.position.x
+            py = pose.position.y
+            pz = pose.position.z
+            qx = pose.orientation.x
+            qy = pose.orientation.y
+            qz = pose.orientation.z
+            qw = pose.orientation.w
+
+            # velocity
+            if i < n_vel:
+                vel = ee_vels[i].twist.linear
+                last_vel = vel
+            elif last_vel is not None:
+                vel = last_vel
+            else:
+                # zero velocity
+                class _V:
+                    x = 0.0
+                    y = 0.0
+                    z = 0.0
+                vel = _V()
+
+            vx = vel.x
+            vy = vel.y
+            vz = vel.z
+
+            # joints
+            joints_row = []
+            if i < n_jt:
+                positions = jt_points[i].positions if jt_points[i].positions else [
+                ]
+                # pad/truncate to n_joints
+                for j in range(n_joints):
+                    if j < len(positions):
+                        joints_row.append(positions[j])
+                        last_joints[j] = positions[j]
+                    else:
+                        joints_row.append(last_joints[j] if not math.isnan(
+                            last_joints[j]) else math.nan)
+            else:
+                # no new joint point, use last known or nan
+                for j in range(n_joints):
+                    joints_row.append(last_joints[j] if not math.isnan(
+                        last_joints[j]) else math.nan)
+
+            row = [t, px, py, pz, qx, qy, qz, qw, vx, vy, vz] + joints_row
+            rows.append(row)
+
+        # Write CSV
+        filename = 'data/planned_path.csv'
+        header = ['time_s', 'ee_px', 'ee_py', 'ee_pz', 'ee_qx',
+                  'ee_qy', 'ee_qz', 'ee_qw', 'ee_vx', 'ee_vy', 'ee_vz']
+        header += joint_names if joint_names else [
+            f'joint_{i}' for i in range(len(rows[0]) - len(header))]
+
+        with open(filename, 'w', newline='') as csvfile:
+            writer = csv.writer(csvfile)
+            writer.writerow(header)
+            for r in rows:
+                # replace math.nan with empty string for readability
+                out = [('' if (isinstance(x, float) and math.isnan(x)) else x)
+                       for x in r]
+                writer.writerow(out)
+
+        abs_path = os.path.abspath(filename)
+        self.get_logger().info(f'Saved planned path CSV to {abs_path}')
 
 
 def main(args=None):
