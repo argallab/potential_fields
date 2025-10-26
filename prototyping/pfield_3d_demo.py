@@ -86,6 +86,74 @@ class SphereObstacle:
 
 
 @dataclass
+class CylinderObstacle:
+    cx: float
+    cy: float
+    cz: float
+    radius: float
+    half_h: float  # half height along local Z
+    yaw: float = 0.0
+    pitch: float = 0.0
+    roll: float = 0.0
+    influence_distance: float = 1.0
+
+    def R(self) -> np.ndarray:
+        return _rotzxy(self.yaw, self.pitch, self.roll)
+
+    def _world_to_local(self, p: np.ndarray) -> np.ndarray:
+        R = self.R().T
+        return R @ (p - np.array([self.cx, self.cy, self.cz]))
+
+    def _local_to_world_vec(self, v: np.ndarray) -> np.ndarray:
+        return self.R() @ v
+
+    def distance_and_direction(self, p: np.ndarray) -> Tuple[float, np.ndarray]:
+        """
+        Signed distance to the surface of a finite cylinder (axis along local Z).
+        Positive outside, negative inside. Also returns an outward normal direction.
+        """
+        pl = self._world_to_local(p)
+        x, y, z = float(pl[0]), float(pl[1]), float(pl[2])
+        r = math.hypot(x, y)
+        # Outside/inside classification
+        outside_rad = max(r - self.radius, 0.0)
+        outside_z = max(abs(z) - self.half_h, 0.0)
+        outside_dist = math.hypot(outside_rad, outside_z)
+
+        if outside_dist > 0.0:
+            # Compute nearest point on the cylinder surface
+            if r > 1e-12:
+                nx, ny = x / r, y / r
+            else:
+                nx, ny = 1.0, 0.0
+            clamped_z = max(-self.half_h, min(self.half_h, z))
+            nearest_local = np.array(
+                [self.radius * nx, self.radius * ny, clamped_z])
+            dvec_local = pl - nearest_local
+            n_local = dvec_local / (np.linalg.norm(dvec_local) + 1e-12)
+            signed = outside_dist
+        else:
+            # Inside: pick the smaller penetration to lateral or caps
+            pr = self.radius - r
+            pz = self.half_h - abs(z)
+            if pr <= pz:
+                # Closer to lateral surface
+                if r > 1e-12:
+                    n_local = np.array([x / r, y / r, 0.0])
+                else:
+                    n_local = np.array([1.0, 0.0, 0.0])
+                signed = -pr
+            else:
+                # Closer to top/bottom cap
+                n_local = np.array([0.0, 0.0, 1.0 if z >= 0.0 else -1.0])
+                signed = -pz
+
+        n_world = self._local_to_world_vec(n_local)
+        n_world /= (np.linalg.norm(n_world) + 1e-12)
+        return float(signed), n_world
+
+
+@dataclass
 class OBBObstacle:
     cx: float
     cy: float
@@ -149,6 +217,7 @@ class PotentialField3D:
         self.beta_velocity = float(beta_velocity)
         self._spheres: List[SphereObstacle] = []
         self._obbs: List[OBBObstacle] = []
+        self._cyls: List["CylinderObstacle"] = []
 
     def add_sphere(self, cx, cy, cz, radius, influence_distance=1.0):
         self._spheres.append(SphereObstacle(
@@ -157,6 +226,14 @@ class PotentialField3D:
     def add_box(self, cx, cy, cz, sx, sy, sz, yaw=0.0, pitch=0.0, roll=0.0, influence_distance=1.0):
         self._obbs.append(OBBObstacle(cx, cy, cz, sx/2.0, sy /
                           2.0, sz/2.0, yaw, pitch, roll, influence_distance))
+
+    def add_cylinder(self, cx, cy, cz, radius, height, yaw=0.0, pitch=0.0, roll=0.0, influence_distance=1.0):
+        """
+        Add a finite cylinder (local axis along +Z) with center at (cx,cy,cz), radius, and total height.
+        Orientation is specified by yaw/pitch/roll (Z-Y-X order), matching OBB conventions.
+        """
+        self._cyls.append(CylinderObstacle(cx, cy, cz, radius,
+                          height/2.0, yaw, pitch, roll, influence_distance))
 
     def attractive_force(self, p: np.ndarray, g: np.ndarray) -> np.ndarray:
         return self.attractive_gain * (g - p)
@@ -179,43 +256,40 @@ class PotentialField3D:
                 coeff = self.repulsive_gain * \
                     (1.0/d_eff - 1.0/d_inf) * (1.0/(d_eff*d_eff))
                 total += coeff * n_hat
+        for c in self._cyls:
+            d, n_hat = c.distance_and_direction(p)
+            d_inf = c.influence_distance
+            if d < d_inf:
+                d_eff = np.sign(d) * max(abs(d), 1e-6)
+                coeff = self.repulsive_gain * \
+                    (1.0/d_eff - 1.0/d_inf) * (1.0/(d_eff*d_eff))
+                total += coeff * n_hat
         return total
 
     def total_force(self, p: np.ndarray, g: np.ndarray, v_curr: np.ndarray) -> np.ndarray:
         return self.attractive_force(p, g) + self.repulsive_force(p) - self.damping * v_curr
 
-    def _apply_motion_limits(self, v_cmd: np.ndarray, v_prev: np.ndarray, dt: float, use_soft_saturate: bool = True) -> np.ndarray:
+    def _apply_motion_limits(self, v_cmd: np.ndarray, v_prev: np.ndarray, dt: float) -> np.ndarray:
         """
           Mirror the C++ sequence:
             1) soft-saturate v_cmd by max speed
             2) rate-limit step by max accel * dt
             3) re-apply soft-saturation to ensure speed stays within the limit
           """
-        if use_soft_saturate:
-            # 1) soft-saturate instantaneous command
-            v_soft = soft_saturate_norm(
-                v_cmd, self.max_speed, self.beta_velocity)
+        # 1) soft-saturate instantaneous command
+        v_soft = soft_saturate_norm(
+            v_cmd, self.max_speed, self.beta_velocity)
 
-            # 2) rate-limit step magnitude (acceleration limit)
-            dV_max = self.max_accel * \
-                (dt if _is_positive_finite(dt) else 0.0)
-            v_rl = rate_limit_step(v_prev, v_soft, dV_max)
+        # 2) rate-limit step magnitude (acceleration limit)
+        dV_max = self.max_accel * \
+            (dt if _is_positive_finite(dt) else 0.0)
+        v_rl = rate_limit_step(v_prev, v_soft, dV_max)
 
-            # 3) re-apply soft saturation to keep just inside speed limit
-            v_final = soft_saturate_norm(
-                v_rl, self.max_speed, self.beta_velocity)
+        # 3) re-apply soft saturation to keep just inside speed limit
+        v_final = soft_saturate_norm(
+            v_rl, self.max_speed, self.beta_velocity)
 
-            return v_final
-        else:
-            v = _clip_norm(
-                v_cmd, self.max_speed if self.max_speed > 0 else np.inf)
-            a = (v - v_prev) / max(dt, 1e-6)
-            a = _clip_norm(
-                a, self.max_accel if self.max_accel > 0 else np.inf)
-            v_limited = v_prev + a * dt
-            v_limited = _clip_norm(
-                v_limited, self.max_speed if self.max_speed > 0 else np.inf)
-            return v_limited
+        return v_final
 
     def plan_path(self,
                   start: Tuple[float, float, float],
@@ -224,8 +298,7 @@ class PotentialField3D:
                   max_steps: int = 6000,
                   goal_tolerance: float = 0.05,
                   stagnation_window: int = 120,
-                  stagnation_eps: float = 1e-4,
-                  use_soft_saturate: bool = True) -> Dict[str, Any]:
+                  stagnation_eps: float = 1e-4) -> Dict[str, Any]:
         p = np.array(start, dtype=float)
         g = np.array(goal, dtype=float)
         v_prev = np.zeros(3, dtype=float)
@@ -238,7 +311,7 @@ class PotentialField3D:
         for k in range(1, max_steps + 1):
             F = self.total_force(p, g, v_prev)
             v_cmd = self.linear_gain * F
-            v = self._apply_motion_limits(v_cmd, v_prev, dt, use_soft_saturate)
+            v = self._apply_motion_limits(v_cmd, v_prev, dt)
 
             p_next = p + v * dt
             p = p_next
@@ -274,17 +347,23 @@ class PotentialField3D:
                  dt: float = 0.03,
                  max_steps: int = 6000,
                  goal_tolerance: float = 0.05,
-                 use_soft_saturate: bool = True,
                  save_path: str = None,
                  fps: int = 30,
                  dpi: int = 100,
-                 writer: str = "pillow"):
+                 writer: str = "pillow",
+                 save_every: int = 5,
+                 bitrate: int = 1800):
+        # Build a frame index list that decimates frames.
+        frames_idx = list(range(0, max_steps, max(1, int(save_every))))
         p = np.array(start, dtype=float)
         g = np.array(goal, dtype=float)
         v_prev = np.zeros(3, dtype=float)
 
         fig = plt.figure(figsize=(8, 8))
         ax = fig.add_subplot(111, projection='3d')
+        ax.set_box_aspect([1, 1, 1])
+        ax.set_title("3D Potential Field Simulation")
+        ax.grid(False)
 
         xs = [p[0], g[0]] + [s.cx for s in self._spheres] + \
             [b.cx for b in self._obbs]
@@ -296,9 +375,9 @@ class PotentialField3D:
         ax.set_ylim(min(ys)-2, max(ys)+2)
         ax.set_zlim(min(zs)-2, max(zs)+2)
 
-        # spheres
-        u = np.linspace(0, 2*np.pi, 20)
-        vgrid = np.linspace(0, np.pi, 10)
+    # spheres
+        u = np.linspace(0, 2*np.pi, 16)
+        vgrid = np.linspace(0, np.pi, 8)
         for s in self._spheres:
             xsph = s.radius*np.outer(np.cos(u), np.sin(vgrid)) + s.cx
             ysph = s.radius*np.outer(np.sin(u), np.sin(vgrid)) + s.cy
@@ -336,6 +415,33 @@ class PotentialField3D:
             draw_obb(ax, b, inflate=0.0, ls='-')
             draw_obb(ax, b, inflate=b.influence_distance, ls='--')
 
+        def draw_cylinder(ax, cyl: "CylinderObstacle", inflate: float = 0.0, ls='-'):
+            R = cyl.radius + inflate
+            H = cyl.half_h + inflate
+            thetas = np.linspace(0, 2*np.pi, 24)
+            zs = np.linspace(-H, H, 8)
+            # Rotation and translation
+            Rmat = cyl.R()
+            center = np.array([cyl.cx, cyl.cy, cyl.cz])
+            # Draw lateral rings
+            for z in zs:
+                circle_local = np.stack(
+                    [R*np.cos(thetas), R*np.sin(thetas), np.full_like(thetas, z)], axis=1)
+                circle_world = (Rmat @ circle_local.T).T + center
+                ax.plot(circle_world[:, 0], circle_world[:, 1],
+                        circle_world[:, 2], linestyle=ls, linewidth=0.8)
+            # Draw a few vertical lines at fixed angles
+            for th in thetas[::6]:
+                p1_local = np.array([R*np.cos(th), R*np.sin(th), -H])
+                p2_local = np.array([R*np.cos(th), R*np.sin(th),  H])
+                p12 = (Rmat @ np.stack([p1_local, p2_local]).T).T + center
+                ax.plot(p12[:, 0], p12[:, 1], p12[:, 2],
+                        linestyle=ls, linewidth=0.8)
+
+        for c in self._cyls:
+            draw_cylinder(ax, c, inflate=0.0, ls='-')
+            draw_cylinder(ax, c, inflate=c.influence_distance, ls='--')
+
         ax.scatter([start[0]], [start[1]], [start[2]])
         ax.scatter([goal[0]], [goal[1]], [goal[2]])
 
@@ -358,7 +464,7 @@ class PotentialField3D:
             nonlocal p, v_prev
             F = self.total_force(p, g, v_prev)
             v_cmd = self.linear_gain * F
-            v = self._apply_motion_limits(v_cmd, v_prev, dt, use_soft_saturate)
+            v = self._apply_motion_limits(v_cmd, v_prev, dt)
             p = p + v * dt
             # Save for HUD
             v_soft = soft_saturate_norm(
@@ -386,66 +492,26 @@ class PotentialField3D:
             return traj_line, agent, hud_speed, hud_rl
 
         anim = animation.FuncAnimation(
-            fig, update, init_func=init, frames=max_steps, interval=dt*1000, blit=False)
+            fig, update, init_func=init, frames=frames_idx, interval=dt*1000, blit=False
+        )
 
-        # Optional save to GIF (requires Pillow installed), or a supported writer
         if save_path:
             try:
-                if writer == "pillow":
-                    try:
-                        from matplotlib.animation import PillowWriter
-                        pw = PillowWriter(fps=fps)
-                        anim.save(save_path, writer=pw, dpi=dpi)
-                    except Exception:
-                        # Fallback to string-based writer if PillowWriter import path differs
-                        anim.save(save_path, writer="pillow", fps=fps, dpi=dpi)
+                if writer.lower() in ("ffmpeg", "ffmpeg_file", "ffmpeg_writer", "mp4", "h264"):
+                    from matplotlib.animation import FFMpegWriter
+                    w = FFMpegWriter(fps=fps, bitrate=bitrate)
+                    anim.save(save_path, writer=w, dpi=dpi)
+                elif writer.lower() == "pillow":
+                    from matplotlib.animation import PillowWriter
+                    anim.save(save_path, writer=PillowWriter(
+                        fps=fps), dpi=dpi, bitrate=bitrate)
                 else:
-                    # e.g., writer="imagemagick" (requires ImageMagick installed)
                     anim.save(save_path, writer=writer, fps=fps, dpi=dpi)
                 print(f"Saved animation to {save_path}")
             except Exception as e:
                 print(f"Failed to save animation to {save_path}: {e}")
 
         plt.show()
-
-
-def _demo_3d():
-    pf = PotentialField3D(
-        attractive_gain=1.2,
-        repulsive_gain=0.22,
-        linear_gain=1.0,
-        max_speed=1.5,
-        max_accel=3.2,
-        damping=0.0,
-        beta_velocity=1.0
-    )
-    pf.add_sphere(cx=1.5, cy=1.0, cz=0.7, radius=0.7, influence_distance=1.0)
-    pf.add_box(cx=3.0, cy=-0.5, cz=0.0, sx=1.2, sy=2.0, sz=1.0,
-               yaw=np.deg2rad(25.0), pitch=np.deg2rad(10.0), roll=np.deg2rad(-5.0),
-               influence_distance=0.9)
-
-    start = (-2.0, -1.5, -0.5)
-    goal = (4.0,  1.0,  0.6)
-
-    dt = 0.04
-    tol = 0.08
-    steps = 4000
-
-    res = pf.plan_path(start, goal, dt=dt, goal_tolerance=tol,
-                       max_steps=steps, use_soft_saturate=True)
-    res_clipped = pf.plan_path(start, goal, dt=dt, goal_tolerance=tol,
-                               max_steps=steps, use_soft_saturate=False)
-    print("Goal reached:", res["goal_reached"], "Duration:", float(res["t"][-1]), "s",
-          "End:", (float(res["x"][-1]), float(res["y"][-1]), float(res["z"][-1])))
-    # Plot kinematics
-    plot_kinematics(
-        "Kinematics vs Time (Soft-Saturated)", res, show=True, save_path="Demo3DKinematicsSoftSaturate"
-    )
-    plot_kinematics(
-        "Kinematics vs Time (Clipped)", res_clipped, show=False, save_path="Demo3DKinematicsClipped"
-    )
-    pf.simulate(start, goal, dt=dt, goal_tolerance=tol,
-                max_steps=steps, use_soft_saturate=True, save_path="Demo3DSimulation.gif")
 
 
 def plot_kinematics(title: str, res: Dict[str, Any], show: bool = True, save_path: str = None):
@@ -521,5 +587,77 @@ def plot_kinematics(title: str, res: Dict[str, Any], show: bool = True, save_pat
     return fig, axes
 
 
+def obstacles_in_the_way():
+    pf = PotentialField3D(
+        attractive_gain=1.2,
+        repulsive_gain=0.22,
+        linear_gain=1.0,
+        max_speed=1.5,
+        max_accel=3.2,
+        damping=0.0,
+        beta_velocity=1.0
+    )
+    pf.add_sphere(cx=1.5, cy=1.0, cz=0.7, radius=0.7, influence_distance=1.0)
+    pf.add_box(cx=3.0, cy=-0.5, cz=0.0, sx=1.2, sy=2.0, sz=1.0,
+               yaw=np.deg2rad(25.0), pitch=np.deg2rad(10.0), roll=np.deg2rad(-5.0),
+               influence_distance=0.9)
+    # Add a cylinder obstacle (axis along its local Z, rotated by yaw/pitch/roll)
+    pf.add_cylinder(cx=1.0, cy=-1.0, cz=0.3, radius=0.45, height=1.2,
+                    yaw=np.deg2rad(15.0), pitch=np.deg2rad(0.0), roll=np.deg2rad(0.0),
+                    influence_distance=0.8)
+
+    start = (-2.0, -1.5, -0.5)
+    goal = (4.0,  1.0,  0.6)
+
+    dt = 0.01
+    tol = 0.1
+    steps = 4000
+
+    res = pf.plan_path(start, goal, dt=dt, goal_tolerance=tol, max_steps=steps)
+    print("Goal reached:", res["goal_reached"], "Duration:", float(res["t"][-1]), "s",
+          "End:", (float(res["x"][-1]), float(res["y"][-1]), float(res["z"][-1])))
+    plot_kinematics(
+        "Kinematics vs Time (Obstacles In the Way)", res, show=True, save_path="ObstaclesInTheWay"
+    )
+    pf.simulate(
+        start, goal, dt=dt, goal_tolerance=tol,
+        max_steps=steps,
+        # save_path="Demo3DSimulation.gif", writer="pillow", fps=15, dpi=90, save_every=6, bitrate=1800
+    )
+
+
+def no_obstacles():
+    pf = PotentialField3D(
+        attractive_gain=1.0,
+        repulsive_gain=0.0,
+        linear_gain=1.0,
+        max_speed=2.0,
+        max_accel=4.0,
+        damping=0.0,
+        beta_velocity=1.0
+    )
+
+    start = (-2.0, -1.5, -0.5)
+    goal = (4.0,  1.0,  0.6)
+
+    dt = 0.01
+    tol = 0.1
+    steps = 3000
+
+    res = pf.plan_path(start, goal, dt=dt, goal_tolerance=tol, max_steps=steps)
+    print("Goal reached:", res["goal_reached"], "Duration:", float(res["t"][-1]), "s",
+          "End:", (float(res["x"][-1]), float(res["y"][-1]), float(res["z"][-1])))
+    # Plot kinematics
+    plot_kinematics(
+        "Kinematics vs Time (No Obstacles)", res, show=True, save_path="NoObstacles"
+    )
+    pf.simulate(
+        start, goal, dt=dt, goal_tolerance=tol,
+        max_steps=steps,
+        # save_path="Demo3DSimulationNoObstacles.gif", writer="pillow", fps=15, dpi=90, save_every=6, bitrate=1800
+    )
+
+
 if __name__ == "__main__":
-    _demo_3d()
+    obstacles_in_the_way()
+    no_obstacles()
