@@ -7,6 +7,7 @@
   <!-- RViz -->
   <node pkg="rviz2" exec="rviz2" args="-d $(var rviz_config) --fixed-frame $(var rviz_fixed_frame)" if="$(var use_rviz)" output="screen">
     <param name="use_sim_time" value="true"/>
+    <remap from="goal_pose" to="pfield/planning_goal_pose"/>
   </node>
 
   <!-- Potential Field Manager -->
@@ -14,6 +15,5 @@
     <param from="$(find-pkg-share potential_fields)/config/pfield_config.yaml"/>
     <param name="fixed_frame" value="$(var rviz_fixed_frame)"/>
     <param name="urdf_file_path" value="$(var urdf_file_path)"/>
-    <remap from="/goal_pose" to="/pfield/planning_goal_pose"/>
   </node>
 </launch>
