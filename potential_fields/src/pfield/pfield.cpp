@@ -2,9 +2,18 @@
 #include "pfield/pf_obstacle.hpp"
 #include "pfield/spatial_vector.hpp"
 
-void PotentialField::initializeKinematics(const std::string& urdfFilePath, const double influenceZoneScale, const double repulsiveGain) {
+void PotentialField::initializeKinematics(
+  const std::string& urdfFilePath,
+  const std::vector<std::string>& jointNames,
+  const double influenceZoneScale, const double repulsiveGain) {
   this->urdfFileName = urdfFilePath;
-  this->pfKinematics = PFKinematics(this->urdfFileName, influenceZoneScale, repulsiveGain);
+  this->pfKinematics = std::make_unique<PFKinematics>(this->urdfFileName, jointNames, influenceZoneScale, repulsiveGain);
+}
+
+void PotentialField::updateObstaclesFromKinematics(const std::vector<double>& jointAngles) {
+  if (!this->pfKinematics) return;
+  std::vector<PotentialFieldObstacle> newObstacles = this->pfKinematics->updateObstaclesFromJointAngles(jointAngles);
+  this->addObstacles(newObstacles);
 }
 
 void PotentialField::addObstacle(PotentialFieldObstacle obstacle) {
@@ -239,7 +248,7 @@ PlannedPath PotentialField::planPath(
       current.getOrientation(), limitedTwist.angularVelocity, stepDt);
     // Update obstacles from new JointAngles
     auto jointAngles = path.jointAngles.back();
-    this->pfKinematics.updateObstaclesFromJointAngles(jointAngles);
+    this->pfKinematics->updateObstaclesFromJointAngles(jointAngles);
 
     // Update loop variables
     current = SpatialVector(nextPosition, nextOrientation);

@@ -5,7 +5,9 @@
 #include <pinocchio/algorithm/kinematics.hpp>
 #include <Eigen/Geometry>
 
-PFKinematics::PFKinematics(const std::string& urdfFileName, const double influenceZoneScale, const double repulsiveGain) {
+PFKinematics::PFKinematics(
+  const std::string& urdfFileName, const std::vector<std::string>& jointNames,
+  const double influenceZoneScale, const double repulsiveGain) {
   if (urdfFileName.empty()) {
     throw std::invalid_argument("PFKinematics: urdfFileName is empty; expected a path to a URDF file");
   }
@@ -18,7 +20,7 @@ PFKinematics::PFKinematics(const std::string& urdfFileName, const double influen
   this->data = pinocchio::Data(this->model);
   this->robotModel.initFile(urdfFileName);
   this->collisionCatalog = this->buildCollisionCatalog(this->robotModel, influenceZoneScale, repulsiveGain);
-  this->initializeCaches(this->model.names, this->collisionLinkNames);
+  this->initializeCaches(jointNames, this->collisionLinkNames);
 }
 
 void PFKinematics::initializeCaches(
@@ -55,7 +57,10 @@ std::vector<Eigen::Affine3d> PFKinematics::computeLinkTransforms(const std::vect
     throw std::runtime_error("PFKinematics caches not initialized");
   }
   if (jointPositions.size() != jointNamesCache.size()) {
-    throw std::runtime_error("PFKinematics: jointPositions size does not match cached joint names size");
+    throw std::runtime_error(
+      std::string("PFKinematics: jointPositions size (") + std::to_string(jointPositions.size()) +
+      ") does not match cached joint names size (" + std::to_string(jointNamesCache.size()) + ")"
+    );
   }
 
   // Fill q using cached indices

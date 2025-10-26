@@ -206,7 +206,10 @@ public:
 
   bool operator!=(const PotentialField& other) const { return !(*this == other); }
 
-  void initializeKinematics(const std::string& urdfFilePath, const double influenceZoneScale, const double repulsiveGain);
+  void initializeKinematics(
+    const std::string& urdfFilePath,
+    const std::vector<std::string>& jointNames,
+    const double influenceZoneScale, const double repulsiveGain);
 
   // ============ Getters and Setters ============
   void setAttractiveGain(double newAttractiveGain) { this->attractiveGain = newAttractiveGain; }
@@ -228,6 +231,17 @@ public:
   std::vector<PotentialFieldObstacle> getObstacles() const { return this->obstacles; }
 
   // ============ Obstacle Management ============
+
+  /**
+   * @brief Given a new set of joint angles, updates the internal obstacles
+   *        based on the robot kinematics.
+   *
+   * @note This function requires that PFKinematics has been initialized using
+   *       initializeKinematics prior to calling this function.
+   *
+   * @param jointAngles The new joint angles to compute the updated obstacle poses [rad]
+   */
+  void updateObstaclesFromKinematics(const std::vector<double>& jointAngles);
 
   /**
    * @brief Adds a new obstacle to the potential field.
@@ -378,7 +392,7 @@ private:
   const double translationalTolerance = 1e-3; // Threshold for distances to the goal and obstacles [m]
   const double rotationalThreshold = 0.02; // Threshold for rotational geodesic distance [rad]
   std::string urdfFileName; // URDF file path for kinematic model
-  PFKinematics pfKinematics; // Kinematics helper for obstacle updates via joint angles
+  std::unique_ptr<PFKinematics> pfKinematics; // Kinematics helper for obstacle updates via joint angles
 
   /**
    * @brief Computes the attractive force towards the goal position
