@@ -45,7 +45,8 @@ PotentialFieldManager::PotentialFieldManager()
   this->fixedFrame = this->declare_parameter("fixed_frame", "world"); // RViz fixed frame
   this->visualizerBufferArea = this->declare_parameter("visualizer_buffer_area", 1.0f); // Extra area to visualize the PF [m]
   this->fieldResolution = this->declare_parameter("field_resolution", 0.5f); // Resolution of the potential field grid [m]
-  this->urdfFileName = this->declare_parameter("urdf_file_path", "urdf/robot.urdf");
+  this->urdfFileName = this->declare_parameter("urdf_file_path", "");
+  this->motionPluginType = this->declare_parameter("motion_plugin_type", "null"); // Motion Plugin Type [e.g., "null", "franka", etc.]
   // Get parameters from yaml file
   this->visualizerFrequency = this->get_parameter("visualize_pf_frequency").as_double();
   this->attractiveGain = this->get_parameter("attractive_gain").as_double();
@@ -60,6 +61,7 @@ PotentialFieldManager::PotentialFieldManager()
   this->visualizerBufferArea = this->get_parameter("visualizer_buffer_area").as_double();
   this->fieldResolution = this->get_parameter("field_resolution").as_double();
   this->urdfFileName = this->get_parameter("urdf_file_path").as_string();
+  this->motionPluginType = this->get_parameter("motion_plugin_type").as_string();
 
   // Initialize the potential fields
   this->pField = std::make_shared<PotentialField>(
@@ -69,9 +71,17 @@ PotentialFieldManager::PotentialFieldManager()
   );
 
   // Initialize the motion plugin
-  const std::string frankaHostname = std::string();
-  // this->motionPlugin = std::make_unique<NullMotionPlugin>();
-  this->motionPlugin = std::make_unique<FrankaPlugin>(frankaHostname);
+  if (this->motionPluginType == "null") {
+    this->motionPlugin = std::make_unique<NullMotionPlugin>();
+  }
+  else if (this->motionPluginType == "franka") {
+    const std::string frankaHostname = this->declare_parameter("franka_hostname", std::string());
+    this->motionPlugin = std::make_unique<FrankaPlugin>(frankaHostname);
+  }
+  else {
+    RCLCPP_ERROR(this->get_logger(), "Unknown motion plugin type: %s. Using NullMotionPlugin", this->motionPluginType.c_str());
+    this->motionPlugin = std::make_unique<NullMotionPlugin>();
+  }
   RCLCPP_INFO(this->get_logger(), "Using Motion Plugin: %s", this->motionPlugin->getName().c_str());
 
   // Save the IKSolver
@@ -88,11 +98,17 @@ PotentialFieldManager::PotentialFieldManager()
     }
   }
 
-  this->pField->initializeKinematics(
-    this->urdfFileName,
-    this->ikSolver->getJointNames(),
-    this->influenceZoneScale, this->repulsiveGain
-  );
+  // Allow the user to not use a URDF
+  if (!this->urdfFileName.empty()) {
+    this->pField->initializeKinematics(
+      this->urdfFileName,
+      this->ikSolver->getJointNames(),
+      this->influenceZoneScale, this->repulsiveGain
+    );
+  }
+  else {
+    RCLCPP_WARN(this->get_logger(), "URDF file path is empty. Kinematics not initialized.");
+  }
 
   // Setup marker publisher
   // Use reliable and transient_local QoS for RViz MarkerArray publisher

@@ -248,7 +248,7 @@ PlannedPath PotentialField::planPath(
       current.getOrientation(), limitedTwist.angularVelocity, stepDt);
     // Update obstacles from new JointAngles
     auto jointAngles = path.jointAngles.back();
-    this->pfKinematics->updateObstaclesFromJointAngles(jointAngles);
+    this->updateObstaclesFromKinematics(jointAngles);
 
     // Update loop variables
     current = SpatialVector(nextPosition, nextOrientation);

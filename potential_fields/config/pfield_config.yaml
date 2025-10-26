@@ -11,3 +11,4 @@ pfield_manager:
     influence_zone_scale: 1.25 # Influence zone scaling factor
     visualizer_buffer_area: 0.5 # Extra area around obstacles and goal to visualize the PF [m]
     field_resolution: 0.5 # Resolution to show PF velocity arrows in RViz [m]
+    motion_plugin_type: "franka" # Type of motion plugin to use ["null", "franka", <add your own>]
