@@ -658,6 +658,192 @@ def no_obstacles():
     )
 
 
+def narrow_gap_corridor():
+    """
+    Two long OBB 'walls' separated by a narrow gap (doorway).
+    Tests: repulsion shaping near tight passages, speed/accel limits.
+    """
+    pf = PotentialField3D(
+        attractive_gain=1.2,
+        repulsive_gain=0.35,
+        linear_gain=1.0,
+        max_speed=1.2,
+        max_accel=2.0,
+        damping=0.1,
+        beta_velocity=1.0,
+    )
+
+    # Two long walls with a narrow doorway between them around x ~ 0
+    wall_len = 6.0
+    wall_th = 0.3
+    gap_y = 0.25  # half-gap (actual gap ~0.5 m)
+    inf = 0.6
+
+    # Left wall (upper segment), right wall (lower segment) — rotated slightly
+    pf.add_box(cx=-0.5, cy=+gap_y+1.0, cz=0.0, sx=wall_len, sy=wall_th, sz=1.5,
+               yaw=np.deg2rad(5.0), influence_distance=inf)
+    pf.add_box(cx=-0.5, cy=-gap_y-1.0, cz=0.0, sx=wall_len, sy=wall_th, sz=1.5,
+               yaw=np.deg2rad(-5.0), influence_distance=inf)
+
+    start = (-3.0, 0.0, 0.0)
+    goal = (3.0, 0.0, 0.0)
+
+    dt = 0.02
+    tol = 0.05
+    steps = 3500
+    res = pf.plan_path(start, goal, dt=dt, goal_tolerance=tol, max_steps=steps)
+    print("[narrow_gap_corridor] Goal reached:",
+          res["goal_reached"], "Duration:", float(res["t"][-1]))
+    plot_kinematics("Narrow Gap Corridor – Kinematics",
+                    res, show=True, save_path=None)
+    pf.simulate(start, goal, dt=dt, goal_tolerance=tol, max_steps=steps)
+
+
+def u_trap_local_minima():
+    """
+    A U-shaped cul-de-sac (three OBBs). Pure potential fields often stall here.
+    Try adjusting damping / attractive_gain to see escape behavior.
+    """
+    pf = PotentialField3D(
+        attractive_gain=1.0,
+        repulsive_gain=0.4,
+        linear_gain=1.0,
+        max_speed=1.0,
+        max_accel=2.0,
+        damping=0.2,          # more damping can help
+        beta_velocity=1.0,
+    )
+
+    inf = 0.8
+    # Bottom of U
+    pf.add_box(cx=0.0, cy=-0.5, cz=0.0, sx=4.0, sy=0.3,
+               sz=1.5, yaw=0.0, influence_distance=inf)
+    # Sides of U
+    pf.add_box(cx=-1.9, cy=0.7, cz=0.0, sx=0.3, sy=2.0,
+               sz=1.5, yaw=0.0, influence_distance=inf)
+    pf.add_box(cx=+1.9, cy=0.7, cz=0.0, sx=0.3, sy=2.0,
+               sz=1.5, yaw=0.0, influence_distance=inf)
+
+    start = (0.0, 0.0, 0.0)        # inside the U
+    goal = (0.0, 2.5, 0.0)        # outside the U, above
+
+    dt = 0.02
+    tol = 0.05
+    steps = 4000
+    res = pf.plan_path(start, goal, dt=dt, goal_tolerance=tol, max_steps=steps)
+    print("[u_trap_local_minima] Goal reached:",
+          res["goal_reached"], "Duration:", float(res["t"][-1]))
+    plot_kinematics("U-Trap (Local Minima) – Kinematics",
+                    res, show=True, save_path=None)
+    pf.simulate(start, goal, dt=dt, goal_tolerance=tol, max_steps=steps)
+
+
+def cluttered_spheres(seed: int = 7):
+    """
+    Random 'forest' of spheres with varied radii/influence.
+    Tests: vector superposition, oscillations, soft saturation ergonomics.
+    """
+    rng = np.random.default_rng(seed)
+    pf = PotentialField3D(
+        attractive_gain=1.1,
+        repulsive_gain=0.25,
+        linear_gain=1.0,
+        max_speed=1.3,
+        max_accel=2.5,
+        damping=0.12,
+        beta_velocity=1.2,
+    )
+
+    # Place ~10 spheres in a region; keep a corridor open
+    for _ in range(10):
+        cx = rng.uniform(-1.5, 2.5)
+        cy = rng.uniform(-1.0, 1.0)
+        cz = rng.uniform(-0.4, 0.4)
+        r = rng.uniform(0.25, 0.55)
+        inf = rng.uniform(0.6, 1.0)
+        # Keep center corridor near y ~ 0 slightly clearer
+        if abs(cy) < 0.2 and rng.random() < 0.7:
+            cy += rng.choice([-1, 1]) * rng.uniform(0.3, 0.6)
+        pf.add_sphere(cx, cy, cz, r, influence_distance=inf)
+
+    start = (-2.0, 0.0, 0.0)
+    goal = (3.0, 0.0, 0.0)
+
+    dt = 0.02
+    tol = 0.06
+    steps = 4000
+    res = pf.plan_path(start, goal, dt=dt, goal_tolerance=tol, max_steps=steps)
+    print("[cluttered_spheres] Goal reached:",
+          res["goal_reached"], "Duration:", float(res["t"][-1]))
+    plot_kinematics("Cluttered Spheres – Kinematics",
+                    res, show=True, save_path=None)
+    pf.simulate(start, goal, dt=dt, goal_tolerance=tol, max_steps=steps)
+
+
+def start_inside_obstacle():
+    """
+    Start point is inside a sphere; should be pushed out along outward normal.
+    Good for verifying signed distance handling and clamp near singularity.
+    """
+    pf = PotentialField3D(
+        attractive_gain=1.0,
+        repulsive_gain=0.35,
+        linear_gain=1.0,
+        max_speed=1.2,
+        max_accel=2.2,
+        damping=0.1,
+        beta_velocity=1.0,
+    )
+    pf.add_sphere(cx=0.0, cy=0.0, cz=0.0, radius=0.7, influence_distance=1.0)
+
+    start = (0.0, 0.0, 0.0)     # inside the sphere
+    goal = (2.0, 0.0, 0.0)
+
+    dt = 0.02
+    tol = 0.05
+    steps = 3000
+    res = pf.plan_path(start, goal, dt=dt, goal_tolerance=tol, max_steps=steps)
+    print("[start_inside_obstacle] Goal reached:",
+          res["goal_reached"], "Duration:", float(res["t"][-1]))
+    plot_kinematics("Start Inside Obstacle – Kinematics",
+                    res, show=True, save_path=None)
+    pf.simulate(start, goal, dt=dt, goal_tolerance=tol, max_steps=steps)
+
+
+def high_speed_low_accel():
+    """
+    Very high speed limit but tight acceleration limit — showcases the rate limiter (HUD 'ON' a lot).
+    No obstacles; straight shot to goal.
+    """
+    pf = PotentialField3D(
+        attractive_gain=1.5,
+        repulsive_gain=0.0,
+        linear_gain=1.2,
+        max_speed=4.0,    # high speed ceiling
+        max_accel=0.5,    # small accel
+        damping=0.05,
+        beta_velocity=1.0,
+    )
+
+    start = (-3.0, 0.0, 0.0)
+    goal = (3.0, 0.0, 0.0)
+
+    dt = 0.02
+    tol = 0.05
+    steps = 2500
+    res = pf.plan_path(start, goal, dt=dt, goal_tolerance=tol, max_steps=steps)
+    print("[high_speed_low_accel] Goal reached:",
+          res["goal_reached"], "Duration:", float(res["t"][-1]))
+    plot_kinematics("High Speed, Low Accel – Kinematics",
+                    res, show=True, save_path=None)
+    pf.simulate(start, goal, dt=dt, goal_tolerance=tol, max_steps=steps)
+
+
 if __name__ == "__main__":
-    obstacles_in_the_way()
-    no_obstacles()
+    # obstacles_in_the_way()
+    # no_obstacles()
+    narrow_gap_corridor()
+    u_trap_local_minima()
+    cluttered_spheres()
+    # start_inside_obstacle()
+    high_speed_low_accel()
