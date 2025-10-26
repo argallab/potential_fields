@@ -23,10 +23,12 @@ public:
   virtual void assignIKSolver(std::shared_ptr<IKSolver> ikSolver) { this->ikSolver = ikSolver; }
   virtual std::shared_ptr<IKSolver> getIKSolver() const { return ikSolver; }
   virtual std::string getName() const { return name; }
+  virtual std::vector<double> getCurrentJointAngles() const { return currentJointAngles; }
 protected:
   rclcpp::Clock::SharedPtr clock;
   std::shared_ptr<IKSolver> ikSolver;
   std::string name;
+  std::vector<double> currentJointAngles; // Current joint angles of the robot
 };
 
 #endif // !MOTION_PLUGIN_HPP

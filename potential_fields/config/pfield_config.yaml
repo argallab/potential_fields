@@ -11,7 +11,3 @@ pfield_manager:
     influence_zone_scale: 1.25 # Influence zone scaling factor
     visualizer_buffer_area: 0.5 # Extra area around obstacles and goal to visualize the PF [m]
     field_resolution: 0.5 # Resolution to show PF velocity arrows in RViz [m]
-    end_effector_link_name: "fer_hand" # End-effector link name for TF broadcasting (must be a collision link)
-robot_parser:
-  ros__parameters:
-    end_effector_link_name: "fer_hand" # End-effector link name for TF broadcasting (must be a collision link)

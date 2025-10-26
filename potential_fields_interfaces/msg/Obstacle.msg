@@ -1,6 +1,6 @@
 string frame_id
-string type
-string group
+string type # Either "Sphere", "Box", "Cylinder", or "Mesh"
+string group # Either "Static", "Dynamic", or "Robot"
 geometry_msgs/Pose pose
 float32 radius
 float32 length

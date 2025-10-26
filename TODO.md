@@ -9,21 +9,20 @@
 ---
 
 # Immediate TODOs
-- Consolidate `RobotParser` into `PFieldManager` (1 ROS node for managing everything)
+- Work on Sphere robot demo with simple path planning through several obstacles
 - Update documentation and README files to reflect new changes in PF Equations
-- Work on Sphere robot demo with simple path planning
 - Include installation instructions for fcl, pinnochio, libfranka and other external dependencies
 - Refactor pfield_lib with better naming and clearer definitions for maintaining a potential field
-  - Update the wording/naming for gain parameters, influence zones, and function/variables
+  - Update the wording/naming/labeling for gain parameters, influence zones, and function/variables
   - Update the README and in-code documentation to reflect PF wrench and twist definitions
-  - Update plots and visualizations to reflect the correct units/etc.
-- Think about smoothness while still enforcing velocity and acceleration limits
-  - Improve interpolation and numerical integration methods
-  - User should define motion constraints (velocity, acceleration, jerk) and planned path should respect those constraints
-  - Somehow derive PF parameters from motion constraints (Repulsive Gain, Attractive Gain, Influence Zone Size, etc)
+  - Update plots, docs, and visualizations to reflect the correct units/etc.
 
 
 # Future TODOs and Refactors
 - Investigate Configuration Space planning with the PF
 - Read Modern Robotics book about potential fields
 - Read stephen lavalle planning book's section on following constraints with potential fields
+- Think about smoothness while still enforcing velocity and acceleration limits
+  - Improve interpolation and numerical integration methods
+  - User should define motion constraints (velocity, acceleration, jerk) and planned path should respect those constraints
+  - Somehow derive PF parameters from motion constraints and/or robot's extent (Repulsive Gain, Attractive Gain, Influence Zone Size, etc)

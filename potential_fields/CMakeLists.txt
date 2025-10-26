@@ -29,7 +29,7 @@ find_package(tf2_eigen REQUIRED)
 find_package(urdf REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(geometric_shapes REQUIRED)
-find_package(fcl REQUIRED)
+find_package(hpp-fcl REQUIRED)
 find_package(pinocchio REQUIRED)
 find_package(Franka REQUIRED)
 
@@ -46,6 +46,7 @@ add_library(pfield_lib SHARED
 ament_target_dependencies(pfield_lib
   Eigen3
   geometric_shapes
+  urdf
 )
 target_include_directories(pfield_lib PUBLIC
   include/potential_fields/pfield
@@ -53,9 +54,9 @@ target_include_directories(pfield_lib PUBLIC
   ${pinocchio_INCLUDE_DIRS}
 )
 target_link_libraries(pfield_lib
-  fcl
-  pinocchio::pinocchio
   ${EIGEN3_LIBRARIES}
+  pinocchio::pinocchio
+  hpp-fcl::hpp-fcl
 )
 
 # Use precompiled headers to speed up builds (CMake >= 3.16)
@@ -111,7 +112,6 @@ include_directories(
 )
 
 add_executable(pfield_manager src/ros/pfield_manager.cpp)
-add_executable(robot_parser src/ros/robot_parser.cpp)
 
 ament_target_dependencies(pfield_manager
   Eigen3
@@ -127,26 +127,10 @@ ament_target_dependencies(pfield_manager
   visualization_msgs
 )
 
-ament_target_dependencies(robot_parser
-  Eigen3
-  geometry_msgs
-  potential_fields_interfaces
-  rclcpp
-  tf2_eigen
-  tf2_ros
-  urdf
-  visualization_msgs
-)
-
 target_link_libraries(pfield_manager
   ${potential_fields_interfaces_LIBRARIES}
   pfield_lib
   robot_plugins
-)
-
-target_link_libraries(robot_parser
-  ${potential_fields_interfaces_LIBRARIES}
-  pfield_lib
 )
 
 # Install the shared library so runtime linker can find it
@@ -167,11 +151,6 @@ install(
 
 install(
   TARGETS pfield_manager
-  DESTINATION lib/${PROJECT_NAME}
-)
-
-install(
-  TARGETS robot_parser
   DESTINATION lib/${PROJECT_NAME}
 )
 

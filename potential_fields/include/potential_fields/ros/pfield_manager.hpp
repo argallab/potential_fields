@@ -27,8 +27,13 @@
 #include "potential_fields_interfaces/srv/compute_autonomy_vector.hpp"
 
 #include "pfield/pfield.hpp"
+#include "pfield/pf_obstacle.hpp"
+#include "pfield/pf_kinematics.hpp"
 #include "robot_plugins/ik_solver.hpp"
 #include "robot_plugins/motion_plugin.hpp"
+
+#include "urdf/model.h"
+#include "urdf_parser/urdf_parser.h"
 
 #include "rclcpp/rclcpp.hpp"
 
@@ -79,14 +84,14 @@ private:
   double maxLinearAcceleration; // Maximum Linear Acceleration [m/s^2]
   double maxAngularAcceleration; // Maximum Angular Acceleration [rad/s^2]
   double influenceZoneScale; // Influence zone scaling factor
-  std::string fixedFrame; // RViz fixed frame for visualization and PF computation
-  // Potential field instances (shared_ptr to avoid inadvertent copying when passing to visualization helpers)
-  std::shared_ptr<PotentialField> pField; // Primary Potential Field
   double visualizerBufferArea; // Extra area around obstacles and goal to visualize the PF [m]
   double fieldResolution; // Resolution of the potential field grid [m]
-
-  // The MotionPlugin containing robot-specific functions (Kinematics, Motion Planning, etc.)
-  std::unique_ptr<MotionPlugin> motionPlugin;
+  std::string fixedFrame; // RViz fixed frame for visualization and PF computation
+  std::string urdfFileName; // URDF file name
+  std::string motionPluginType; // Motion Plugin Type [e.g., "null", "franka", etc.]
+  std::shared_ptr<PotentialField> pField; // Potential Field Instance containing main PF functionality
+  std::unique_ptr<MotionPlugin> motionPlugin; // The MotionPlugin containing robot-specific functions like IK and state reading
+  std::shared_ptr<IKSolver> ikSolver; // The IKSolver obtained from the MotionPlugin
 
   rclcpp::TimerBase::SharedPtr timer; // Timer to periodically update the potential field
   rclcpp::Publisher<MarkerArray>::SharedPtr pFieldMarkerPub; // Publisher for PF Markers
@@ -96,6 +101,8 @@ private:
   rclcpp::Subscription<ObstacleArray>::SharedPtr obstacleSub; // Subscriber for obstacles
   rclcpp::Service<PlanPath>::SharedPtr pathPlanningService; // Now hosted here
   rclcpp::Service<ComputeAutonomyVector>::SharedPtr autonomyVectorService; // Service to compute velocity vector at a given pose
+
+  void timerCallback();
 
   // Service callbacks
   void handlePlanPath(const PlanPath::Request::SharedPtr request, PlanPath::Response::SharedPtr response);

@@ -59,8 +59,10 @@ ament_target_dependencies(pfield_demo_node
 install(
   PROGRAMS
   pfields_demo/pf_demo.py
+  pfields_demo/sphere_robot_demo.py
   DESTINATION lib/${PROJECT_NAME}
 )
+
 install(
   DIRECTORY launch
   DESTINATION share/${PROJECT_NAME}

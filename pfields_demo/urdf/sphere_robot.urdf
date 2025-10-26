@@ -1,0 +1,21 @@
+<?xml version="1.0" ?>
+<robot name="pokeball">
+  <link name="base_link">
+    <!-- Visual: colored pokeball mesh for clear orientation cues -->
+    <visual>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <!-- Mesh is unit radius; scale 0.3 => radius 0.15 to match collision -->
+        <mesh filename="package://pfields_demo/meshes/pokeball.dae" scale="0.3 0.3 0.3"/>
+      </geometry>
+    </visual>
+    <!-- Collision: keep simple analytic sphere for fast collision checks -->
+    <collision>
+      <origin xyz="0 0 0" rpy="0 0 0"/>
+      <geometry>
+        <sphere radius="0.15"/>
+      </geometry>
+      <!-- defaults to origin (0 0 0) relative to link frame -->
+    </collision>
+  </link>
+</robot>
