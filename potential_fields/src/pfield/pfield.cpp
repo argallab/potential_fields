@@ -2,6 +2,20 @@
 #include "pfield/pf_obstacle.hpp"
 #include "pfield/spatial_vector.hpp"
 
+void PotentialField::initializeKinematics(
+  const std::string& urdfFilePath,
+  const std::vector<std::string>& jointNames,
+  const double influenceZoneScale, const double repulsiveGain) {
+  this->urdfFileName = urdfFilePath;
+  this->pfKinematics = std::make_unique<PFKinematics>(this->urdfFileName, jointNames, influenceZoneScale, repulsiveGain);
+}
+
+void PotentialField::updateObstaclesFromKinematics(const std::vector<double>& jointAngles) {
+  if (!this->pfKinematics) return;
+  std::vector<PotentialFieldObstacle> newObstacles = this->pfKinematics->updateObstaclesFromJointAngles(jointAngles);
+  this->addObstacles(newObstacles);
+}
+
 void PotentialField::addObstacle(PotentialFieldObstacle obstacle) {
   const std::string frameID = obstacle.getFrameID();
   auto itIndex = this->obstacleIndex.find(frameID);
@@ -14,6 +28,10 @@ void PotentialField::addObstacle(PotentialFieldObstacle obstacle) {
     this->obstacles.push_back(obstacle);
     this->obstacleIndex.emplace(frameID, this->obstacles.size() - 1);
   }
+}
+
+void PotentialField::addObstacles(const std::vector<PotentialFieldObstacle>& obstacles) {
+  for (const auto& obst : obstacles) { this->addObstacle(obst); }
 }
 
 bool PotentialField::removeObstacle(const std::string& obstacleFrameID) {
@@ -166,14 +184,34 @@ Eigen::Vector3d PotentialField::computeRepulsiveForceLinear(const SpatialVector&
 
 PlannedPath PotentialField::planPath(
   const SpatialVector& startPose,
-  const double dt, const double goalTolerance, size_t maxIterations) {
+  const double dt,
+  const double goalTolerance,
+  std::shared_ptr<IKSolver> ikSolver,
+  const size_t maxIterations) {
   PlannedPath path;
   const double stepDt = (dt > 0.0) ? dt : 0.1;
+
+  auto getJointAnglesAtPose = [&](const SpatialVector& sv) -> std::vector<double> {
+    std::vector<double> jointAngles;
+    if (ikSolver) {
+      Eigen::Isometry3d targetPose = Eigen::Isometry3d::Identity();
+      targetPose.translate(sv.getPosition());
+      targetPose.rotate(sv.getOrientation());
+      std::vector<double> seed = ikSolver->getHomeConfiguration();
+      std::string errorMsg;
+      Eigen::Matrix<double, 6, Eigen::Dynamic> J;
+      bool success = ikSolver->solve(targetPose, seed, jointAngles, J, errorMsg);
+      if (!success) {
+        jointAngles = std::vector<double>{}; // Return empty on failure
+      }
+    }
+    return jointAngles;
+  };
 
   // Already at goal? Single point path.
   const Eigen::Vector3d startDiff = startPose.getPosition() - this->goalPose.getPosition();
   if (startDiff.norm() <= goalTolerance) {
-    path.addPoint(startPose, TaskSpaceTwist(), std::vector<double>{ /* IK placeholder */ }, 0.0);
+    path.addPoint(startPose, TaskSpaceTwist(), getJointAnglesAtPose(startPose), 0.0);
     path.dt = stepDt;
     path.duration = 0.0;
     path.numPoints = 1;
@@ -189,10 +227,9 @@ PlannedPath PotentialField::planPath(
     TaskSpaceTwist evalTwist = this->evaluateVelocityAtPose(current);
     TaskSpaceTwist limitedTwist = this->applyMotionConstraints(evalTwist, prevTwist, stepDt);
     // Record current state
-    // TODO: Compute IK for joint angles here and use pf_kinematics to update PF Obstacles
     path.addPoint(
       current, evalTwist,
-      std::vector<double>{ /* IK joint angles placeholder */ },
+      getJointAnglesAtPose(current),
       timeStamp
     );
 
@@ -200,6 +237,7 @@ PlannedPath PotentialField::planPath(
     const double translationalError = (current.getPosition() - this->goalPose.getPosition()).norm();
     const double rotationalError = current.angularDistance(this->goalPose);
     if (translationalError <= goalTolerance && rotationalError <= this->rotationalThreshold) {
+      path.success = true;
       break;
     }
 
@@ -208,6 +246,9 @@ PlannedPath PotentialField::planPath(
       current.getPosition(), limitedTwist.linearVelocity, stepDt);
     Eigen::Quaterniond nextOrientation = this->integrateAngularVelocity(
       current.getOrientation(), limitedTwist.angularVelocity, stepDt);
+    // Update obstacles from new JointAngles
+    auto jointAngles = path.jointAngles.back();
+    this->updateObstaclesFromKinematics(jointAngles);
 
     // Update loop variables
     current = SpatialVector(nextPosition, nextOrientation);

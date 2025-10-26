@@ -1,14 +1,14 @@
 // Unit tests for mesh collision helpers: pointInsideMesh & distanceToMesh
 // We build a synthetic unit cube mesh programmatically to avoid external resources.
 
+#include "pfield/mesh_collision.hpp"
+
 #include <gtest/gtest.h>
 #include <Eigen/Core>
 #include <Eigen/Geometry>
-#include <fcl/fcl.h>
 #include <vector>
 #include <memory>
 
-#include "pfield/mesh_collision.hpp"
 
 namespace {
 
@@ -29,11 +29,11 @@ namespace {
     };
 
     // Build FCL BVH
-    auto model = std::make_shared<fcl::BVHModel<fcl::OBBRSSd>>();
-    std::vector<fcl::Vector3d> fclVerts;
+    auto model = std::make_shared<coal::BVHModel<coal::OBBRSS>>();
+    std::vector<coal::Vec3s> fclVerts;
     fclVerts.reserve(verts.size());
     for (auto& v : verts) fclVerts.emplace_back(v.x(), v.y(), v.z());
-    std::vector<fcl::Triangle> fclTris;
+    std::vector<coal::Triangle> fclTris;
     fclTris.reserve(tris.size());
     for (auto& t : tris) fclTris.emplace_back(t.x(), t.y(), t.z());
     model->beginModel();
@@ -59,7 +59,7 @@ namespace {
     data.aabbMax = maxB;
     data.radius = std::sqrt(maxR2);
     data.maxExtent = (maxB - minB).maxCoeff();
-    data.meshObj = std::make_shared<fcl::CollisionObjectd>(data.bvh, fcl::Transform3d::Identity());
+    data.meshObj = std::make_shared<coal::CollisionObject>(data.bvh, coal::Transform3s::Identity());
     return data;
   }
 

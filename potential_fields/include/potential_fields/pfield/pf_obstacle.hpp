@@ -221,10 +221,31 @@ public:
   const std::string& getMeshResource() const { return this->meshResource; }
   Eigen::Vector3d getMeshScale() const { return this->meshScale; }
 
+  void setPose(const Eigen::Vector3d newPosition, const Eigen::Quaterniond newOrientation) {
+    this->position = newPosition;
+    this->orientation = newOrientation;
+    this->orientationConjugate = newOrientation.conjugate();
+  }
   void setPosition(Eigen::Vector3d newPosition) { this->position = newPosition; }
   void setOrientation(Eigen::Quaterniond newOrientation) {
     this->orientation = newOrientation;
     this->orientationConjugate = newOrientation.conjugate();
+  }
+
+  void setMeshProperties(const std::string& meshResource, const Eigen::Vector3d& meshScale) {
+    this->meshResource = meshResource;
+    this->meshScale = meshScale;
+    if (type == ObstacleType::MESH && !meshResource.empty()) {
+      try {
+        meshCollisionData = loadMesh(meshResource);
+        if (meshCollisionData) {
+          meshInfluenceMargin = (influenceZoneScale - 1.0) * 0.5 * meshCollisionData->maxExtent;
+        }
+      }
+      catch (const std::exception&) {
+        meshCollisionData.reset();
+      }
+    }
   }
 
   bool withinInfluenceZone(Eigen::Vector3d pos) const;

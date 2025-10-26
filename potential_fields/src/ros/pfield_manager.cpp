@@ -28,23 +28,25 @@
 #include "robot_plugins/null_motion_plugin.hpp"
 #include "robot_plugins/franka_plugin.hpp"
 #include "tf2_eigen/tf2_eigen.hpp"
+#include <cctype>
 
-PotentialFieldManager::PotentialFieldManager()
-  : Node("potential_field_manager") {
+PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager") {
   RCLCPP_INFO(this->get_logger(), "PotentialFieldManager Initialized");
   // Declare parameters
-  this->visualizerFrequency = this->declare_parameter("visualize_pf_frequency", 100.0f); // [Hz]
-  this->attractiveGain = this->declare_parameter("attractive_gain", 1.0f); // [Ns/m]
-  this->rotationalAttractiveGain = this->declare_parameter("rotational_attractive_gain", 0.7f); // [Ns/m]
-  this->repulsiveGain = this->declare_parameter("repulsive_gain", 1.0f); // [Ns/m]
-  this->maxLinearVelocity = this->declare_parameter("max_linear_velocity", 1.0f); // [m/s]
-  this->maxAngularVelocity = this->declare_parameter("max_angular_velocity", 1.0f); // [rad/s]
-  this->maxLinearAcceleration = this->declare_parameter("max_linear_acceleration", 1.0f); // [m/s^2]
-  this->maxAngularAcceleration = this->declare_parameter("max_angular_acceleration", 1.0f); // [rad/s^2]
-  this->influenceZoneScale = this->declare_parameter("influence_zone_scale", 2.0f); // Influence zone scaling factor
+  this->visualizerFrequency = this->declare_parameter("visualize_pf_frequency", 100.0); // [Hz]
+  this->attractiveGain = this->declare_parameter("attractive_gain", 1.0); // [Ns/m]
+  this->rotationalAttractiveGain = this->declare_parameter("rotational_attractive_gain", 0.7); // [Ns/m]
+  this->repulsiveGain = this->declare_parameter("repulsive_gain", 0.1); // [Ns/m]
+  this->maxLinearVelocity = this->declare_parameter("max_linear_velocity", 1.0); // [m/s]
+  this->maxAngularVelocity = this->declare_parameter("max_angular_velocity", 1.0); // [rad/s]
+  this->maxLinearAcceleration = this->declare_parameter("max_linear_acceleration", 1.0); // [m/s^2]
+  this->maxAngularAcceleration = this->declare_parameter("max_angular_acceleration", 1.0); // [rad/s^2]
+  this->influenceZoneScale = this->declare_parameter("influence_zone_scale", 2.0); // Influence zone scaling factor
   this->fixedFrame = this->declare_parameter("fixed_frame", "world"); // RViz fixed frame
-  this->visualizerBufferArea = this->declare_parameter("visualizer_buffer_area", 1.0f); // Extra area to visualize the PF [m]
-  this->fieldResolution = this->declare_parameter("field_resolution", 0.5f); // Resolution of the potential field grid [m]
+  this->visualizerBufferArea = this->declare_parameter("visualizer_buffer_area", 1.0); // Extra area to visualize the PF [m]
+  this->fieldResolution = this->declare_parameter("field_resolution", 0.5); // Resolution of the potential field grid [m]
+  this->urdfFileName = this->declare_parameter("urdf_file_path", std::string());
+  this->motionPluginType = this->declare_parameter("motion_plugin_type", std::string()); // Motion Plugin Type [e.g. "franka", etc.]
   // Get parameters from yaml file
   this->visualizerFrequency = this->get_parameter("visualize_pf_frequency").as_double();
   this->attractiveGain = this->get_parameter("attractive_gain").as_double();
@@ -58,6 +60,8 @@ PotentialFieldManager::PotentialFieldManager()
   this->fixedFrame = this->get_parameter("fixed_frame").as_string();
   this->visualizerBufferArea = this->get_parameter("visualizer_buffer_area").as_double();
   this->fieldResolution = this->get_parameter("field_resolution").as_double();
+  this->urdfFileName = this->get_parameter("urdf_file_path").as_string();
+  this->motionPluginType = this->get_parameter("motion_plugin_type").as_string();
 
   // Initialize the potential fields
   this->pField = std::make_shared<PotentialField>(
@@ -66,25 +70,59 @@ PotentialFieldManager::PotentialFieldManager()
     this->maxLinearAcceleration, this->maxAngularAcceleration
   );
 
-  const std::string frankaHostname = std::string();
-  // this->motionPlugin = std::make_unique<NullMotionPlugin>();
-  this->motionPlugin = std::make_unique<FrankaPlugin>(frankaHostname);
+  // Initialize the motion plugin
+  std::transform(
+    this->motionPluginType.cbegin(),
+    this->motionPluginType.cend(),
+    this->motionPluginType.begin(),
+    [](unsigned char c) { return std::tolower(c); }
+  );
+  if (this->motionPluginType.empty()) {
+    this->motionPlugin = std::make_unique<NullMotionPlugin>();
+  }
+  else if (this->motionPluginType == "franka") {
+    const std::string frankaHostname = this->declare_parameter("franka_hostname", std::string());
+    this->motionPlugin = std::make_unique<FrankaPlugin>(frankaHostname);
+  }
+  else {
+    RCLCPP_ERROR(this->get_logger(), "Unknown motion plugin type: %s. Using NullMotionPlugin", this->motionPluginType.c_str());
+    this->motionPlugin = std::make_unique<NullMotionPlugin>();
+  }
   RCLCPP_INFO(this->get_logger(), "Using Motion Plugin: %s", this->motionPlugin->getName().c_str());
+
+  // Save the IKSolver from the motion plugin
+  this->ikSolver = this->motionPlugin->getIKSolver();
+  if (!this->ikSolver) {
+    RCLCPP_WARN(this->get_logger(), "IKSolver not available from motionPlugin");
+  }
+  else {
+    RCLCPP_INFO(this->get_logger(), "Using IKSolver: %s", this->ikSolver->getName().c_str());
+  }
+
+  // Allow the user to not use a URDF
+  if (!this->urdfFileName.empty()) {
+    this->pField->initializeKinematics(
+      this->urdfFileName,
+      this->ikSolver->getJointNames(),
+      this->influenceZoneScale, this->repulsiveGain
+    );
+    RCLCPP_INFO(this->get_logger(), "PF Kinematics initialized from URDF: %s", this->urdfFileName.c_str());
+  }
+  else {
+    RCLCPP_WARN(this->get_logger(), "URDF file path is empty. Kinematics not initialized.");
+  }
 
   // Setup marker publisher
   // Use reliable and transient_local QoS for RViz MarkerArray publisher
-  auto markerPubQos = rclcpp::QoS(rclcpp::KeepLast(100))
-    .reliable()
-    .transient_local();
+  auto markerPubQos = rclcpp::QoS(rclcpp::KeepLast(100)).reliable().transient_local();
   this->pFieldMarkerPub = this->create_publisher<MarkerArray>("pfield/markers", markerPubQos);
   RCLCPP_INFO(this->get_logger(), "PF Markers publishing on: %s", this->pFieldMarkerPub->get_topic_name());
 
   // Setup goal pose subscriber
-  this->goalPoseSub = this->create_subscription<geometry_msgs::msg::PoseStamped>(
-    "goal_pose",
-    10,
+  auto goalPoseQos = rclcpp::QoS(rclcpp::KeepLast(10)).reliable();
+  this->goalPoseSub = this->create_subscription<geometry_msgs::msg::PoseStamped>("/pfield/planning_goal_pose",
+    goalPoseQos,
     [this](const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
-    // RCLCPP_INFO(this->get_logger(), "Received goal pose");
     const SpatialVector goalPose(
       Eigen::Vector3d(
         msg->pose.position.x,
@@ -102,7 +140,7 @@ PotentialFieldManager::PotentialFieldManager()
   }
   );
 
-  // Setup obstacle subscriber
+  // Setup obstacle subscriber for external obstacles
   auto obstacleSubQos = rclcpp::QoS(rclcpp::KeepLast(100)).best_effort().durability_volatile();
   this->obstacleSub = this->create_subscription<ObstacleArray>("pfield/obstacles", obstacleSubQos,
     [this](const ObstacleArray::SharedPtr msg) {
@@ -126,18 +164,6 @@ PotentialFieldManager::PotentialFieldManager()
   }
   );
 
-  // Setup planning joint state publisher (latched so late subscribers receive the last sample)
-  auto jsPubQos = rclcpp::QoS(rclcpp::KeepLast(1)).reliable().transient_local();
-  this->planningJointStatePub = this->create_publisher<JointState>("/pfield/joint_states", jsPubQos);
-  RCLCPP_INFO(this->get_logger(), "Planning joint states publishing on: %s", this->planningJointStatePub->get_topic_name());
-  // Publish the initial joint states (home position)
-  JointState initialJointState;
-  initialJointState.header.stamp = this->now();
-  initialJointState.header.frame_id = this->fixedFrame;
-  initialJointState.name = this->motionPlugin->getIKSolver()->getJointNames();
-  initialJointState.position = this->motionPlugin->getIKSolver()->getHomeConfiguration();
-  this->planningJointStatePub->publish(initialJointState);
-
   // Setup planned end-effector path publisher
   this->plannedEndEffectorPathPub = this->create_publisher<Path>("pfield/planned_path", 10);
   RCLCPP_INFO(this->get_logger(), "Planned EE path publishing on: %s", this->plannedEndEffectorPathPub->get_topic_name());
@@ -160,12 +186,16 @@ PotentialFieldManager::PotentialFieldManager()
 
   // Run the timer for visualizing the potential field
   this->timer = this->create_wall_timer(
-    std::chrono::duration<double>(1.0 / this->visualizerFrequency), // Timer period based on frequency
-    [this]() {
-    MarkerArray pfieldMarkers = this->visualizePF(this->pField);
-    this->pFieldMarkerPub->publish(pfieldMarkers);
-  }
+    std::chrono::duration<double>(1.0 / this->visualizerFrequency),
+    std::bind(&PotentialFieldManager::timerCallback, this)
   );
+}
+
+void PotentialFieldManager::timerCallback() {
+  // Get updated obstacles from PFKinematics and update internal PF
+  this->pField->updateObstaclesFromKinematics(this->motionPlugin->getCurrentJointAngles());
+  MarkerArray pfieldMarkers = this->visualizePF(this->pField);
+  this->pFieldMarkerPub->publish(pfieldMarkers);
 }
 
 void PotentialFieldManager::handleComputeAutonomyVector(
@@ -212,209 +242,84 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
     request->delta_time, request->goal_tolerance
   );
 
-  // Save the IKSolver
-  if (!this->motionPlugin) {
-    RCLCPP_WARN(this->get_logger(), "motionPlugin not initialized");
-    response->success = false;
-    return;
-  }
-  auto ikSolver = this->motionPlugin->getIKSolver();
-  if (!ikSolver) {
-    RCLCPP_WARN(this->get_logger(), "IKSolver not available from motionPlugin");
-    response->success = false;
-    return;
-  }
-  RCLCPP_INFO(this->get_logger(), "Using IK Solver: %s", ikSolver->getName().c_str());
+  auto startSV = SpatialVector(
+    Eigen::Vector3d(
+      request->start.pose.position.x,
+      request->start.pose.position.y,
+      request->start.pose.position.z
+    ),
+    Eigen::Quaterniond(
+      request->start.pose.orientation.w,
+      request->start.pose.orientation.x,
+      request->start.pose.orientation.y,
+      request->start.pose.orientation.z
+    )
+  );
 
-  auto getJointAngles = [this, ikSolver](const geometry_msgs::msg::PoseStamped& pose) -> std::vector<double> {
-    // Use current robot state as seed if available
-    sensor_msgs::msg::JointState js;
-    geometry_msgs::msg::PoseStamped currentEEPose;
-    if (!this->motionPlugin->readRobotState(js, currentEEPose)) {
-      RCLCPP_ERROR(this->get_logger(), "Failed to read robot state for IK");
-      return {};
-    }
-    std::vector<double> seed = js.position;
-    std::vector<double> solution;
-    // Build target isometry from the provided pose
-    Eigen::Isometry3d targetIso;
-    tf2::fromMsg(pose.pose, targetIso);
-    Eigen::Matrix<double, 6, Eigen::Dynamic> J;
-    std::string errorMsg;
-    if (!ikSolver->solve(targetIso, seed, solution, /*J=*/J, errorMsg)) {
-      RCLCPP_ERROR(this->get_logger(), "IKSolver failed to find a solution: %s", errorMsg.c_str());
-      return {};
-    }
-    return solution;
-  };
+  // Plan a path using the request parameters and store the result
+  auto planningResult = this->pField->planPath(
+    /*startPose=*/startSV,
+    /*dt=*/request->delta_time,
+    /*goalTolerance=*/request->goal_tolerance,
+    /*ikSolver=*/this->ikSolver,
+    /*maxIterations=*/request->max_iterations
+  );
 
-  auto publishPlanningJointStates = [this](const std::vector<double>& jointPositions) {
-    JointState js;
-    js.header.stamp = this->now();
-    js.name = this->motionPlugin->getIKSolver()->getJointNames();
-    js.position = jointPositions;
-    this->planningJointStatePub->publish(js);
-  };
-
-  auto checkReached = [this](const geometry_msgs::msg::PoseStamped& current,
-    const geometry_msgs::msg::PoseStamped& goal, double tolerance) -> bool {
-    double dx = current.pose.position.x - goal.pose.position.x;
-    double dy = current.pose.position.y - goal.pose.position.y;
-    double dz = current.pose.position.z - goal.pose.position.z;
-    double dist = std::sqrt(dx * dx + dy * dy + dz * dz);
-    return dist <= tolerance;
-  };
-
-  auto toTwistStamped = [this](const TaskSpaceTwist& twist, const rclcpp::Time& stamp) -> geometry_msgs::msg::TwistStamped {
-    geometry_msgs::msg::TwistStamped ts;
-    ts.header.frame_id = this->fixedFrame;
-    ts.header.stamp = stamp;
-    ts.twist.linear.x = twist.getLinearVelocity().x();
-    ts.twist.linear.y = twist.getLinearVelocity().y();
-    ts.twist.linear.z = twist.getLinearVelocity().z();
-    ts.twist.angular.x = twist.getAngularVelocity().x();
-    ts.twist.angular.y = twist.getAngularVelocity().y();
-    ts.twist.angular.z = twist.getAngularVelocity().z();
-    return ts;
-  };
-
-  auto toPoseStamped = [this](const SpatialVector& sv, const rclcpp::Time& stamp) -> geometry_msgs::msg::PoseStamped {
-    geometry_msgs::msg::PoseStamped ps;
-    ps.header.frame_id = this->fixedFrame;
-    ps.header.stamp = stamp;
-    ps.pose.position.x = sv.getPosition().x();
-    ps.pose.position.y = sv.getPosition().y();
-    ps.pose.position.z = sv.getPosition().z();
-    ps.pose.orientation.w = sv.getOrientation().w();
-    ps.pose.orientation.x = sv.getOrientation().x();
-    ps.pose.orientation.y = sv.getOrientation().y();
-    ps.pose.orientation.z = sv.getOrientation().z();
-    return ps;
-  };
-
-  // Build initial pose
-  geometry_msgs::msg::PoseStamped currentPose = request->start;
-  RCLCPP_INFO(this->get_logger(), "Starting planning from start pose (%.3f, %.3f, %.3f)",
-    currentPose.pose.position.x, currentPose.pose.position.y, currentPose.pose.position.z);
+  // Create Path msg from EE Poses
   nav_msgs::msg::Path path;
-  const auto baseTime = this->now();
-  path.header.frame_id = this->fixedFrame; // ensure consistent frame
-  path.header.stamp = baseTime;
-  trajectory_msgs::msg::JointTrajectory jointTrajectory;
-  jointTrajectory.header = path.header;
-  jointTrajectory.joint_names = ikSolver->getJointNames();
-  // Container to accumulate end-effector velocity (TwistStamped) trajectory
-  std::vector<geometry_msgs::msg::TwistStamped> eeVelocityTrajectory;
-  // Interpolate until goal reached or max iterations
-  const size_t max_iters = 30000; // TODO(Sharwin): Parameterize this (or derive from MotionPlugin)
-  size_t iter = 0;
-  bool reached = false;
-  // Deterministic time base: t_i = baseTime + i * delta_time
-  const double dt = (request->delta_time > 0.0) ? request->delta_time : 0.1;
-  std::size_t step = 0;
-  const double euclidDistance = std::sqrt(
-    std::pow(request->goal.pose.position.x - request->start.pose.position.x, 2) +
-    std::pow(request->goal.pose.position.y - request->start.pose.position.y, 2) +
-    std::pow(request->goal.pose.position.z - request->start.pose.position.z, 2)
-  );
-  const auto iterationsGuess = static_cast<size_t>(euclidDistance / dt);
-  RCLCPP_INFO(this->get_logger(),
-    "Estimated iterations to reach goal: %zu (euclid_dist=%.3f, dt=%.3f)", iterationsGuess, euclidDistance, dt
-  );
-  while (iter < max_iters && !reached) {
-    // Check if we reached the goal within the tolerance and exit early if so
-    if (checkReached(currentPose, request->goal, request->goal_tolerance)) {
-      reached = true;
-      break;
-    }
-    // Save current pose (stamped deterministically)
-    {
-      const rclcpp::Time stamp_i = baseTime + rclcpp::Duration::from_seconds(step * dt);
-      auto stampedPose = currentPose;
-      stampedPose.header.frame_id = this->fixedFrame;
-      stampedPose.header.stamp = stamp_i;
-      path.poses.push_back(stampedPose);
-    }
-    // Call IK on current pose to get current joint angles
-    auto jointAngles = getJointAngles(currentPose);
-    if (jointAngles.empty() && !jointTrajectory.points.empty()) {
-      RCLCPP_WARN(this->get_logger(),
-        "Failed to get joint angles from IK at iter=%zu for pose (%.3f, %.3f, %.3f), aborting plan",
-        iter, currentPose.pose.position.x, currentPose.pose.position.y, currentPose.pose.position.z);
-      response->success = false;
-      return;
-    }
-    // Save joint angles for JointTrajectory
-    trajectory_msgs::msg::JointTrajectoryPoint jointTrajectoryPoint;
-    jointTrajectoryPoint.positions = jointTrajectory.points.empty() ? ikSolver->getHomeConfiguration() : jointAngles;
-    // Deterministic time_from_start aligned with step index
-    jointTrajectoryPoint.time_from_start = rclcpp::Duration::from_seconds(step * dt);
-    jointTrajectory.points.push_back(jointTrajectoryPoint);
-    // Publish joint angles to planned joint state for PFManager to update its internal PF
-    publishPlanningJointStates(jointAngles);
-    // Evaluate the velocity at the current pose, and use it and the previous twist to apply motion constraints
-    SpatialVector currentPoseSV(
-      Eigen::Vector3d(
-        currentPose.pose.position.x,
-        currentPose.pose.position.y,
-        currentPose.pose.position.z
-      ),
-      Eigen::Quaterniond(
-        currentPose.pose.orientation.w, currentPose.pose.orientation.x,
-        currentPose.pose.orientation.y, currentPose.pose.orientation.z
-      )
-    );
-    TaskSpaceTwist twistAtCurrentPose = this->pField->evaluateVelocityAtPose(currentPoseSV);
-    TaskSpaceTwist prevTwist = eeVelocityTrajectory.empty() ? TaskSpaceTwist() : TaskSpaceTwist(
-      Eigen::Vector3d(
-        eeVelocityTrajectory.back().twist.linear.x,
-        eeVelocityTrajectory.back().twist.linear.y,
-        eeVelocityTrajectory.back().twist.linear.z
-      ),
-      Eigen::Vector3d(
-        eeVelocityTrajectory.back().twist.angular.x,
-        eeVelocityTrajectory.back().twist.angular.y,
-        eeVelocityTrajectory.back().twist.angular.z
-      )
-    );
-    TaskSpaceTwist constrainedTwist = this->pField->applyMotionConstraints(twistAtCurrentPose, prevTwist, request->delta_time);
-    Eigen::Vector3d nextPosition = this->pField->integrateLinearVelocity(
-      currentPoseSV.getPosition(), constrainedTwist.getLinearVelocity(), request->delta_time);
-    Eigen::Quaterniond nextOrientation = this->pField->integrateAngularVelocity(
-      currentPoseSV.getOrientation(), constrainedTwist.getAngularVelocity(), request->delta_time);
-    SpatialVector nextPose(nextPosition, nextOrientation);
-    if (iter % (iterationsGuess / 15) == 0) {
-      RCLCPP_DEBUG(this->get_logger(),
-        "Planning iter=%zu: path_len=%zu, joint_points=%zu", iter, path.poses.size(), jointTrajectory.points.size());
-      RCLCPP_DEBUG(this->get_logger(), "iter=%zu autonomy linear=(%.4f, %.4f, %.4f) next_pos=(%.4f, %.4f, %.4f)", iter,
-        constrainedTwist.getLinearVelocity().x(),
-        constrainedTwist.getLinearVelocity().y(),
-        constrainedTwist.getLinearVelocity().z(),
-        nextPose.getPosition().x(), nextPose.getPosition().y(), nextPose.getPosition().z());
-    }
-    // Store the autonomy vector (end-effector velocity) with deterministic stamp
-    const rclcpp::Time stamp_i = baseTime + rclcpp::Duration::from_seconds(step * dt);
-    eeVelocityTrajectory.push_back(toTwistStamped(constrainedTwist, stamp_i));
-    // Update the current pose before moving to next iteration; stamp next pose for continuity
-    const rclcpp::Time stamp_next = baseTime + rclcpp::Duration::from_seconds((step + 1) * dt);
-    currentPose = toPoseStamped(nextPose, stamp_next);
-    // Move our step along before the next iteration
-    ++step;
-    ++iter;
+  path.header.frame_id = this->fixedFrame;
+  path.header.stamp = this->now();
+  for (const auto& pose : planningResult.poses) {
+    geometry_msgs::msg::PoseStamped poseStamped;
+    poseStamped.header.frame_id = this->fixedFrame;
+    poseStamped.header.stamp = this->now();
+    poseStamped.pose.position.x = pose.getPosition().x();
+    poseStamped.pose.position.y = pose.getPosition().y();
+    poseStamped.pose.position.z = pose.getPosition().z();
+    poseStamped.pose.orientation.x = pose.getOrientation().x();
+    poseStamped.pose.orientation.y = pose.getOrientation().y();
+    poseStamped.pose.orientation.z = pose.getOrientation().z();
+    poseStamped.pose.orientation.w = pose.getOrientation().w();
+    path.poses.push_back(poseStamped);
   }
+
+  // Create JointTrajectory from vector of joint angles
+  trajectory_msgs::msg::JointTrajectory jointTrajectory;
+  for (const auto& joints : planningResult.jointAngles) {
+    trajectory_msgs::msg::JointTrajectoryPoint jtp;
+    jtp.positions = joints;
+    jtp.time_from_start = rclcpp::Duration::from_seconds(request->delta_time * jointTrajectory.points.size());
+    jointTrajectory.points.push_back(jtp);
+  }
+
+  // Create EE Velocity Trajectory
+  std::vector<geometry_msgs::msg::TwistStamped> eeVelocityTrajectory;
+  for (const auto& twist : planningResult.twists) {
+    geometry_msgs::msg::TwistStamped eeVel;
+    eeVel.header.frame_id = this->fixedFrame;
+    eeVel.header.stamp = this->now();
+    eeVel.twist.linear.x = twist.getLinearVelocity().x();
+    eeVel.twist.linear.y = twist.getLinearVelocity().y();
+    eeVel.twist.linear.z = twist.getLinearVelocity().z();
+    eeVel.twist.angular.x = twist.getAngularVelocity().x();
+    eeVel.twist.angular.y = twist.getAngularVelocity().y();
+    eeVel.twist.angular.z = twist.getAngularVelocity().z();
+    eeVelocityTrajectory.push_back(eeVel);
+  }
+
+  // Publish the planned path and fill in the response
   this->plannedEndEffectorPathPub->publish(path);
   response->end_effector_path = path;
   response->joint_trajectory = jointTrajectory;
-  // Move accumulated EE velocity trajectory into the response
   response->end_effector_velocity_trajectory = eeVelocityTrajectory;
-  response->success = reached;
+  response->success = planningResult.success;
   RCLCPP_INFO(this->get_logger(),
-    "Planning finished: success=%s, waypoints=%zu, joint_points=%zu, velocities=%zu, iterations=%zu",
+    "Planning finished: success=%s, waypoints=%zu, joint_points=%zu, velocities=%zu",
     response->success ? "true" : "false",
     response->end_effector_path.poses.size(),
-    response->joint_trajectory.points.size(), response->end_effector_velocity_trajectory.size(), iter);
-  if (reached) RCLCPP_INFO(this->get_logger(), "Plan path succeeded in %zu iterations", iter);
-  else if (iter >= max_iters) RCLCPP_WARN(this->get_logger(), "Plan path reached iteration limit without reaching goal");
+    response->joint_trajectory.points.size(),
+    response->end_effector_velocity_trajectory.size()
+  );
 }
 
 PFLimits PotentialFieldManager::getPFLimits(std::shared_ptr<PotentialField> pf) {

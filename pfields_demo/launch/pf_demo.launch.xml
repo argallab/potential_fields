@@ -2,6 +2,7 @@
   <arg name="use_rviz" default="true" description="Whether to launch RViz or not."/>
   <arg name="rviz_fixed_frame" default="world" description="The fixed frame for RVIZ"/>
   <arg name="urdf_file_path" default="" description="The filepath to the URDF file for the robot"/>
+  <arg name="motion_plugin_type" default="" description="The type of motion plugin to use in PFieldManager (e.g., 'franka')"/>
   <!-- Static transform config from fixed frame to robot base frame -->
   <arg name="base_frame" default="base" description="Robot base frame (child)"/>
   <arg name="base_x" default="0.0" description="X position of the robot's base frame relative to RViz fixed frame"/>
@@ -13,7 +14,12 @@
   <arg name="base_yaw" default="0.0" description="Yaw of the robot's base frame relative to RViz fixed frame"/>
 
   <!-- PF Demo Node -->
-  <node pkg="pfields_demo" exec="pf_demo.py" name="pf_demo_node" output="screen">
+  <!-- <node pkg="pfields_demo" exec="pf_demo.py" name="pf_demo_node" output="screen">
+    <param name="fixed_frame" value="$(var rviz_fixed_frame)"/>
+  </node> -->
+
+  <!-- Sphere Demo Node -->
+  <node pkg="pfields_demo" exec="sphere_robot_demo.py" name="pokeball" output="screen">
     <param name="fixed_frame" value="$(var rviz_fixed_frame)"/>
   </node>
 
@@ -26,6 +32,7 @@
     <arg name="use_rviz" value="$(var use_rviz)"/>
     <arg name="rviz_fixed_frame" value="$(var rviz_fixed_frame)"/>
     <arg name="urdf_file_path" value="$(find-pkg-share pfields_demo)/urdf/$(var urdf_file_path)"/>
+    <arg name="motion_plugin_type" value="$(var motion_plugin_type)"/>
   </include>
 
 </launch>

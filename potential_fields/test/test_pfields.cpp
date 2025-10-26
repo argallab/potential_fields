@@ -3,6 +3,8 @@
 #include "pfield/pfield.hpp"
 #include "pfield/pf_obstacle.hpp"
 #include "pfield/spatial_vector.hpp"
+// Use the simple IK from the NullMotionPlugin for planPath tests
+#include "robot_plugins/null_motion_plugin.hpp"
 
 TEST(PotentialFieldTest, AddAndRemoveObstacles) {
   PotentialField pf;
@@ -531,9 +533,12 @@ TEST(PotentialFieldTest, PlanPathSinglePointWhenAlreadyAtGoal) {
   SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
   // Construct PF with goal in constructor
   PotentialField pf(goal, 1.0, 0.0);
+  // Provide a simple IK solver from the NullMotionPlugin
+  NullMotionPlugin nullPlugin;
+  auto ik = nullPlugin.getIKSolver();
   const double dt = 0.05;
   const double tol = 1e-3; // matches translationalTolerance
-  PlannedPath path = pf.planPath(goal, dt, tol); // startPose == goal
+  PlannedPath path = pf.planPath(goal, dt, tol, ik); // startPose == goal
   ASSERT_EQ(path.numPoints, 1u);
   ASSERT_EQ(path.poses.size(), 1u);
   ASSERT_EQ(path.twists.size(), 1u);
@@ -549,9 +554,12 @@ TEST(PotentialFieldTest, PlanPathMonotonicConvergenceToGoal) {
   SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
   PotentialField pf(goal, 1.0, 0.0); // pure translation attraction
   SpatialVector start(Eigen::Vector3d(2.0, 0.0, 0.0), Eigen::Quaterniond::Identity());
+  NullMotionPlugin nullPlugin;
+  auto ik = nullPlugin.getIKSolver();
   const double dt = 0.1;
   const double tol = 1e-3;
-  PlannedPath path = pf.planPath(start, dt, tol, 500); // limit iterations
+  const size_t maxIters = 500;
+  PlannedPath path = pf.planPath(start, dt, tol, ik, maxIters);
   ASSERT_GT(path.numPoints, 1u); // should have progressed
   // Distances should be non-increasing
   double prevDist = (path.poses.front().getPosition() - goal.getPosition()).norm();
@@ -573,9 +581,12 @@ TEST(PotentialFieldTest, PlanPathTimeStampConsistency) {
   SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
   PotentialField pf(goal, 1.0, 0.0);
   SpatialVector start(Eigen::Vector3d(1.0, 0.0, 0.0), Eigen::Quaterniond::Identity());
+  NullMotionPlugin nullPlugin;
+  auto ik = nullPlugin.getIKSolver();
   const double dt = 0.05;
   const double tol = 1e-3;
-  PlannedPath path = pf.planPath(start, dt, tol, 400);
+  const size_t maxIters = 400;
+  PlannedPath path = pf.planPath(start, dt, tol, ik, maxIters);
   ASSERT_EQ(path.dt, dt); // stored dt
   // timeStamps[i] should be approximately i*dt
   for (size_t i = 0; i < path.timeStamps.size(); ++i) {
@@ -592,9 +603,12 @@ TEST(PotentialFieldTest, PlanPathTwistMatchesEvaluateVelocityAtPose) {
   SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
   PotentialField pf(goal, 1.0, 0.0);
   SpatialVector start(Eigen::Vector3d(1.5, 0.0, 0.0), Eigen::Quaterniond::Identity());
+  NullMotionPlugin nullPlugin;
+  auto ik = nullPlugin.getIKSolver();
   const double dt = 0.1;
   const double tol = 1e-3;
-  PlannedPath path = pf.planPath(start, dt, tol, 200);
+  const size_t maxIters = 200;
+  PlannedPath path = pf.planPath(start, dt, tol, ik, maxIters);
   ASSERT_EQ(path.poses.size(), path.twists.size());
   for (size_t i = 0; i < path.poses.size(); ++i) {
     TaskSpaceTwist expectedTwist = pf.evaluateVelocityAtPose(path.poses[i]);

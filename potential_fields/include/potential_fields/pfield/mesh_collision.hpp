@@ -5,13 +5,19 @@
 #include <string>
 #include <utility>
 #include <vector>
-
 #include <Eigen/Core>
-#include <fcl/fcl.h>
+
+#include <coal/BVH/BVH_model.h>
+#include <coal/BV/OBBRSS.h>
+#include <coal/collision_object.h>
+#include <coal/math/transform.h>
+#include <coal/distance.h>
+#include <coal/shape/geometric_shape_to_BVH_model.h>
+#include <coal/data_types.h>
 
 struct MeshCollisionData {
-  std::shared_ptr<fcl::BVHModel<fcl::OBBRSSd>> bvh;
-  std::shared_ptr<fcl::CollisionObjectd> meshObj;
+  std::shared_ptr<coal::BVHModel<coal::OBBRSS>> bvh;
+  std::shared_ptr<coal::CollisionObject> meshObj;
   Eigen::Vector3d aabbMin, aabbMax;
   Eigen::Vector3d centroid{Eigen::Vector3d::Zero()};
   double radius{0.0};
