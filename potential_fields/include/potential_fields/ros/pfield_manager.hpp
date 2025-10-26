@@ -88,11 +88,8 @@ private:
   double fieldResolution; // Resolution of the potential field grid [m]
   std::string fixedFrame; // RViz fixed frame for visualization and PF computation
   std::string urdfFileName; // URDF file name
-  // Potential field instances (shared_ptr to avoid inadvertent copying when passing to visualization helpers)
-  std::shared_ptr<PotentialField> pField; // Primary Potential Field
-
-  // The MotionPlugin containing robot-specific functions (Kinematics, Motion Planning, etc.)
-  std::unique_ptr<MotionPlugin> motionPlugin;
+  std::shared_ptr<PotentialField> pField; // Potential Field Instance containing main PF functionality
+  std::unique_ptr<MotionPlugin> motionPlugin; // The MotionPlugin containing robot-specific functions like IK and state reading
   std::shared_ptr<IKSolver> ikSolver; // The IKSolver obtained from the MotionPlugin
 
   rclcpp::TimerBase::SharedPtr timer; // Timer to periodically update the potential field

@@ -67,7 +67,7 @@ PotentialFieldManager::PotentialFieldManager()
     this->maxLinearVelocity, this->maxAngularVelocity,
     this->maxLinearAcceleration, this->maxAngularAcceleration
   );
-  this->pField->initializeKinematics(this->urdfFileName, this->influenceZoneScale, this->repulsiveGain);
+
   // Initialize the motion plugin
   const std::string frankaHostname = std::string();
   // this->motionPlugin = std::make_unique<NullMotionPlugin>();
@@ -87,6 +87,12 @@ PotentialFieldManager::PotentialFieldManager()
       RCLCPP_INFO(this->get_logger(), "Using IKSolver: %s", this->ikSolver->getName().c_str());
     }
   }
+
+  this->pField->initializeKinematics(
+    this->urdfFileName,
+    this->ikSolver->getJointNames(),
+    this->influenceZoneScale, this->repulsiveGain
+  );
 
   // Setup marker publisher
   // Use reliable and transient_local QoS for RViz MarkerArray publisher
@@ -169,6 +175,8 @@ PotentialFieldManager::PotentialFieldManager()
 }
 
 void PotentialFieldManager::timerCallback() {
+  // Get updated obstacles from PFKinematics and update internal PF
+  this->pField->updateObstaclesFromKinematics(this->motionPlugin->getCurrentJointAngles());
   MarkerArray pfieldMarkers = this->visualizePF(this->pField);
   this->pFieldMarkerPub->publish(pfieldMarkers);
 }
