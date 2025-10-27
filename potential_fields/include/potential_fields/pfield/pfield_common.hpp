@@ -42,5 +42,22 @@ inline Eigen::Vector3d rateLimitStep(const Eigen::Vector3d& prev, const Eigen::V
   return prev + (d * (dMax / dn));
 }
 
+/**
+ * @brief Rotates the given vector v by the quaternion q
+ *
+ * @param q The quaternion representing the rotation
+ * @param v The 3D Vector to be rotated
+ * @return Eigen::Vector3d The rotated vector
+ */
+static inline Eigen::Vector3d rotateVector(const Eigen::Quaterniond& q, const Eigen::Vector3d& v) { return q * v; }
+
+constexpr double DEFAULT_ATTRACTIVE_GAIN = 1.0; // Gain for attractive force [Ns/m]
+constexpr double DEFAULT_ROTATIONAL_ATTRACTIVE_GAIN = 0.7; // Gain for rotational attractive force [Ns/m]
+constexpr double DEFAULT_MAX_LINEAR_VELOCITY = 5.0; // [m/s]
+constexpr double DEFAULT_MAX_ANGULAR_VELOCITY = 1.0; // [rad/s]
+constexpr double DEFAULT_MAX_LINEAR_ACCELERATION = 1.0; // [m/s^2]
+constexpr double DEFAULT_MAX_ANGULAR_ACCELERATION = 1.0; // [rad/s^2]
+constexpr double NEAR_ZERO_THRESHOLD = 1e-9; // Threshold for floating point near-zero comparisons
+
 
 #endif // !PFIELD_COMMON_HPP_
