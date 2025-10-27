@@ -20,13 +20,12 @@ struct CollisionCatalogEntry {
   urdf::CollisionSharedPtr col; // collision element
 };
 
-
 class PFKinematics {
 public:
   PFKinematics() = default;
   PFKinematics(
     const std::string& urdfFileName, const std::vector<std::string>& jointNames,
-    const double influenceZoneScale, const double repulsiveGain);
+    const double influenceDistance, const double repulsiveGain);
   ~PFKinematics() = default;
 
   pinocchio::Model& getModel() { return this->model; }
@@ -53,18 +52,18 @@ public:
    *        each collision object's link, name, and Collision pointer.
    *
    * @param model The URDF model
-   * @param influenceZoneScale The influence zone scale for the robot obstacles
+   * @param influenceDistance The distance from the obstacle surface to the edge of the influence zone
    * @param repulsiveGain The repulsive gain for the robot obstacles
    * @return std::vector<CollisionCatalogEntry> The built collision catalog
    */
   std::vector<CollisionCatalogEntry> buildCollisionCatalog(urdf::Model& model,
-    const double influenceZoneScale, const double repulsiveGain);
+    const double influenceDistance, const double repulsiveGain);
 
   /**
    * @brief Builds an Obstacle message from a URDF Collision object and given pose
    *
    * @param frameID The frame ID for the obstacle's pose to be defined in
-   * @param influenceZoneScale The influence zone scale for the obstacle
+   * @param influenceDistance The influence distance for the obstacle
    * @param collisionObject The URDF Collision object, defining geometry and type
    * @param position The position of the obstacle
    * @param orientation The orientation of the obstacle
@@ -72,7 +71,7 @@ public:
    */
   PotentialFieldObstacle obstacleFromCollisionObject(
     const std::string& frameID,
-    const double influenceZoneScale, const double repulsiveGain,
+    const double influenceDistance, const double repulsiveGain,
     const urdf::Collision& collisionObject,
     const Eigen::Vector3d& position, const Eigen::Quaterniond& orientation);
 
@@ -94,7 +93,6 @@ private:
   std::vector<std::string> collisionLinkNames; // Names of links with collision geometry
   std::vector<CollisionCatalogEntry> collisionCatalog; // Catalog of collision objects from URDF
   std::vector<PotentialFieldObstacle> obstacleGeometryTemplates; // pose will be updated per callback
-
 };
 
 #endif // PF_KINEMATICS_HPP

@@ -5,9 +5,9 @@
 void PotentialField::initializeKinematics(
   const std::string& urdfFilePath,
   const std::vector<std::string>& jointNames,
-  const double influenceZoneScale, const double repulsiveGain) {
+  const double influenceDistance, const double repulsiveGain) {
   this->urdfFileName = urdfFilePath;
-  this->pfKinematics = std::make_unique<PFKinematics>(this->urdfFileName, jointNames, influenceZoneScale, repulsiveGain);
+  this->pfKinematics = std::make_unique<PFKinematics>(this->urdfFileName, jointNames, influenceDistance, repulsiveGain);
 }
 
 void PotentialField::updateObstaclesFromKinematics(const std::vector<double>& jointAngles) {
@@ -171,10 +171,13 @@ Eigen::Vector3d PotentialField::computeRepulsiveForceLinear(const SpatialVector&
   for (const auto& obst : this->obstacles) {
     if (!obst.withinInfluenceZone(queryPose.getPosition())) continue;
     Eigen::Vector3d direction = queryPose.getPosition() - obst.getPosition();
-    const double distance = direction.norm();
+    // Clamp near-zero distances to avoid singularities while preserving the sign
+    const double distance = (std::abs(direction.norm()) < NEAR_ZERO_THRESHOLD) ?
+      (direction.norm() >= 0.0 ? NEAR_ZERO_THRESHOLD : -NEAR_ZERO_THRESHOLD) :
+      direction.norm();
     const double distanceReciprocal = 1.0 / distance;
-    const double distanceReciprocalSquared = 1.0 / (distance * distance);
-    const double influenceReciprocal = 1.0 / obst.getInfluenceZoneScale();
+    const double distanceReciprocalSquared = distanceReciprocal * distanceReciprocal;
+    const double influenceReciprocal = 1.0 / obst.getInfluenceDistance();
     const double magnitude = obst.getRepulsiveGain() * (distanceReciprocal - influenceReciprocal) * distanceReciprocalSquared;
     if (magnitude > 0.0) F += direction.normalized() * magnitude;
   }

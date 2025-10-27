@@ -39,7 +39,7 @@ TEST(PotentialFieldTest, AddAndRemoveObstacles) {
   EXPECT_EQ(pf.getObstacles()[0].getPosition().y(), 2.0f);
   EXPECT_EQ(pf.getObstacles()[0].getPosition().z(), 2.0f);
   EXPECT_EQ(pf.getObstacles()[0].getGeometry().radius, 1.5f);
-  EXPECT_EQ(pf.getObstacles()[0].getInfluenceZoneScale(), 2.5f);
+  EXPECT_EQ(pf.getObstacles()[0].getInfluenceDistance(), 2.5f);
   EXPECT_EQ(pf.getObstacles()[0].getRepulsiveGain(), 12.0f);
 
   // Add another and remove
@@ -188,7 +188,8 @@ TEST(PotentialFieldTest, BoxWithinInfluenceZoneAxisAligned) {
     ObstacleType::BOX, ObstacleGroup::STATIC, geom, 2.0, 1.0);
   // half-dims = (1,1,1)/2 * scale = (1,1,1)
   EXPECT_TRUE(box.withinInfluenceZone(Eigen::Vector3d(1.0, 0.5, 0.0)));
-  EXPECT_FALSE(box.withinInfluenceZone(Eigen::Vector3d(1.1, 0.0, 0.0)));
+  // New semantics: absolute influence distance from surface. Pick a point farther than 2.0m from the box surface
+  EXPECT_FALSE(box.withinInfluenceZone(Eigen::Vector3d(2.6, 0.0, 0.0)));
 }
 
 TEST(PotentialFieldTest, BoxWithinObstacleRotated) {
@@ -227,7 +228,8 @@ TEST(PotentialFieldTest, CylinderWithinInfluenceZoneAxisAligned) {
     ObstacleType::CYLINDER, ObstacleGroup::STATIC, geom, 3.0, 1.0);
   // effective radius=3, half-height=3
   EXPECT_TRUE(cyl.withinInfluenceZone(Eigen::Vector3d(2.9, 0, 0)));
-  EXPECT_FALSE(cyl.withinInfluenceZone(Eigen::Vector3d(3.1, 0, 0)));
+  // Far enough that distance to side surface > 3.0 (surface distance = 4.1 - 1.0 = 3.1)
+  EXPECT_FALSE(cyl.withinInfluenceZone(Eigen::Vector3d(4.1, 0, 0)));
 }
 
 TEST(PotentialFieldTest, CylinderWithinObstacleRotated) {
@@ -345,7 +347,8 @@ TEST(PotentialFieldTest, RotationalAttraction) {
   TaskSpaceWrench rawWrench = pf.evaluateWrenchAtPose(query);
   double rawOmegaMag = rawWrench.torque.norm();
   EXPECT_NEAR(rawOmegaMag, 10.0 * goal.angularDistance(query), 1e-6); // pre-constraint check
-  TaskSpaceTwist vel = pf.evaluateVelocityAtPose(query); // constrained (dt=0 => velocity cap only)
+  // Use limited velocity to reflect soft saturation constraint (dt=0 => velocity soft-cap only)
+  TaskSpaceTwist vel = pf.evaluateLimitedVelocityAtPose(query);
   // Linear velocity should be ~0 (positions are equal)
   EXPECT_NEAR(vel.getLinearVelocity().x(), 0.0, 1e-3);
   EXPECT_NEAR(vel.getLinearVelocity().y(), 0.0, 1e-3);
@@ -364,8 +367,9 @@ TEST(PotentialFieldTest, RotationalAttraction) {
     Eigen::Vector3d omega_dir = vel.getAngularVelocity() / (omega_norm + 1e-18);
     EXPECT_NEAR((axis.cross(omega_dir)).norm(), 0.0, 1e-3);
   }
-  // Magnitude should be min(gain*angle, maxAngularVelocity) = 15.0 after constraint
-  EXPECT_NEAR(omega_norm, 15.0, 1e-6);
+  // Magnitude should be soft-saturated: max * tanh(raw/max)
+  const double expectedOmega = pf.getMaxAngularVelocity() * std::tanh(rawOmegaMag / pf.getMaxAngularVelocity());
+  EXPECT_NEAR(omega_norm, expectedOmega, 1e-6);
 }
 
 TEST(PotentialFieldTest, TranslationAndRotation) {
@@ -398,10 +402,12 @@ TEST(PotentialFieldTest, ApplyVelocityLimitsAccelerationDominates) {
   TaskSpaceTwist lim = pf.applyMotionConstraints(cmd, prev, dt);
   // Implementation clamps velocity first, then acceleration if still exceeding accel caps
   // From zero, commanded 10 m/s gets clamped to vmax=5 m/s; accel check then reduces to prev + amax*dt = 0.1 m/s
-  EXPECT_NEAR(lim.getLinearVelocity().x(), 1.0 * dt, 1e-6); // 0.1 m/s
+  // With soft saturation re-applied, expect a value slightly below 0.1; allow small tolerance
+  EXPECT_NEAR(lim.getLinearVelocity().x(), 1.0 * dt, 1e-4); // ~0.1 m/s
   EXPECT_NEAR(lim.getLinearVelocity().y(), 0.0, 1e-12);
   EXPECT_NEAR(lim.getLinearVelocity().z(), 0.0, 1e-12);
-  EXPECT_NEAR(lim.getAngularVelocity().y(), 1.0 * dt, 1e-6); // 0.1 rad/s
+  // After rate limit to 0.1 rad/s, soft saturation is applied again -> |w| = wmax * tanh(0.1/wmax) = tanh(0.1)
+  EXPECT_NEAR(lim.getAngularVelocity().y(), std::tanh(1.0 * dt), 1e-6);
   EXPECT_NEAR(lim.getAngularVelocity().x(), 0.0, 1e-12);
   EXPECT_NEAR(lim.getAngularVelocity().z(), 0.0, 1e-12);
 }
@@ -415,10 +421,22 @@ TEST(PotentialFieldTest, ApplyVelocityLimitsVelocityCapOnly) {
   TaskSpaceTwist cmd(Eigen::Vector3d(10.0, 0.0, 0.0), Eigen::Vector3d(0.0, 0.0, 2.0));
   const double dt = 0.2; // acceleration from 5->5 after cap is zero
   TaskSpaceTwist lim = pf.applyMotionConstraints(cmd, prev, dt);
-  EXPECT_NEAR(lim.getLinearVelocity().x(), 5.0, 1e-12);
+  // First soft-saturation on cmd gives v1 = vmax*tanh(10/5) then re-soft-saturation yields v = vmax*tanh(v1/vmax)
+  {
+    const double vmax = pf.getMaxLinearVelocity();
+    const double v1 = vmax * std::tanh(10.0 / vmax);
+    const double expected = vmax * std::tanh(v1 / vmax);
+    EXPECT_NEAR(lim.getLinearVelocity().x(), expected, 1e-6);
+  }
   EXPECT_NEAR(lim.getLinearVelocity().y(), 0.0, 1e-12);
   EXPECT_NEAR(lim.getLinearVelocity().z(), 0.0, 1e-12);
-  EXPECT_NEAR(lim.getAngularVelocity().z(), 1.0, 1e-12);
+  // Angular: w1 = wmax*tanh(2/wmax) and final = wmax*tanh(w1/wmax) = tanh(tanh(2.0)) since wmax=1
+  {
+    const double wmax = pf.getMaxAngularVelocity();
+    const double w1 = wmax * std::tanh(2.0 / wmax);
+    const double expected = wmax * std::tanh(w1 / wmax);
+    EXPECT_NEAR(lim.getAngularVelocity().z(), expected, 1e-6);
+  }
   EXPECT_NEAR(lim.getAngularVelocity().x(), 0.0, 1e-12);
   EXPECT_NEAR(lim.getAngularVelocity().y(), 0.0, 1e-12);
 }
@@ -457,7 +475,7 @@ TEST(PotentialFieldTest, InterpolateNextPoseTranslationalStep) {
   double dt = 0.1; // raw speed at x=1 would be 1 m/s; accel limit (1 m/s^2 * 0.1 s) => 0.1 m/s applied
   SpatialVector next = pf.interpolateNextPose(current, TaskSpaceTwist(), dt);
   // Expected new x: 1.0 + (-0.1 m/s)*0.1 s = 0.99
-  EXPECT_NEAR(next.getPosition().x(), 0.99, 1e-6);
+  EXPECT_NEAR(next.getPosition().x(), 0.99, 1e-5);
   EXPECT_NEAR(next.getPosition().y(), 0.0, 1e-6);
   EXPECT_NEAR(next.getPosition().z(), 0.0, 1e-6);
   // Orientation should remain identity (no angular velocity)

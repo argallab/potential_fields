@@ -4,6 +4,7 @@
 #include <memory>
 #include <utility>
 #include <string>
+#include <vector>
 
 #include "rclcpp/clock.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
