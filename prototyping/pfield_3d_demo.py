@@ -694,8 +694,8 @@ def narrow_gap_corridor():
     res = pf.plan_path(start, goal, dt=dt, goal_tolerance=tol, max_steps=steps)
     print("[narrow_gap_corridor] Goal reached:",
           res["goal_reached"], "Duration:", float(res["t"][-1]))
-    plot_kinematics("Narrow Gap Corridor – Kinematics",
-                    res, show=True, save_path=None)
+    plot_kinematics("Narrow Gap Corridor - Kinematics",
+                    res, show=True, save_path="NarrowGapCorridor")
     pf.simulate(start, goal, dt=dt, goal_tolerance=tol, max_steps=steps)
 
 
@@ -733,8 +733,8 @@ def u_trap_local_minima():
     res = pf.plan_path(start, goal, dt=dt, goal_tolerance=tol, max_steps=steps)
     print("[u_trap_local_minima] Goal reached:",
           res["goal_reached"], "Duration:", float(res["t"][-1]))
-    plot_kinematics("U-Trap (Local Minima) – Kinematics",
-                    res, show=True, save_path=None)
+    plot_kinematics("U-Trap (Local Minima) - Kinematics",
+                    res, show=True, save_path="UTrapLocalMinima")
     pf.simulate(start, goal, dt=dt, goal_tolerance=tol, max_steps=steps)
 
 
@@ -775,8 +775,8 @@ def cluttered_spheres(seed: int = 7):
     res = pf.plan_path(start, goal, dt=dt, goal_tolerance=tol, max_steps=steps)
     print("[cluttered_spheres] Goal reached:",
           res["goal_reached"], "Duration:", float(res["t"][-1]))
-    plot_kinematics("Cluttered Spheres – Kinematics",
-                    res, show=True, save_path=None)
+    plot_kinematics("Cluttered Spheres - Kinematics",
+                    res, show=True, save_path="ClutteredSpheres")
     pf.simulate(start, goal, dt=dt, goal_tolerance=tol, max_steps=steps)
 
 
@@ -805,8 +805,8 @@ def start_inside_obstacle():
     res = pf.plan_path(start, goal, dt=dt, goal_tolerance=tol, max_steps=steps)
     print("[start_inside_obstacle] Goal reached:",
           res["goal_reached"], "Duration:", float(res["t"][-1]))
-    plot_kinematics("Start Inside Obstacle – Kinematics",
-                    res, show=True, save_path=None)
+    plot_kinematics("Start Inside Obstacle - Kinematics",
+                    res, show=True, save_path="StartInsideObstacle")
     pf.simulate(start, goal, dt=dt, goal_tolerance=tol, max_steps=steps)
 
 
@@ -834,16 +834,186 @@ def high_speed_low_accel():
     res = pf.plan_path(start, goal, dt=dt, goal_tolerance=tol, max_steps=steps)
     print("[high_speed_low_accel] Goal reached:",
           res["goal_reached"], "Duration:", float(res["t"][-1]))
-    plot_kinematics("High Speed, Low Accel – Kinematics",
-                    res, show=True, save_path=None)
+    plot_kinematics("High Speed, Low Accel - Kinematics",
+                    res, show=True, save_path="HighSpeedLowAccel")
     pf.simulate(start, goal, dt=dt, goal_tolerance=tol, max_steps=steps)
+
+
+def _min_path_clearance(pf: PotentialField3D, xs, ys, zs) -> float:
+    """Return the minimum signed clearance (distance from obstacle boundary) along the path."""
+    pts = np.vstack([xs, ys, zs]).T
+    min_d = +np.inf
+    # Measure against all obstacles using their signed distance helpers (positive outside, negative inside).
+    for p in pts:
+        dmin = +np.inf
+        for s in pf._spheres:
+            d, _ = s.distance_and_direction(p)
+            dmin = min(dmin, d)
+        for b in pf._obbs:
+            d, _ = b.distance_and_direction(p)
+            dmin = min(dmin, d)
+        min_d = min(min_d, dmin)
+    return float(min_d)
+
+
+def _draw_obstacles(ax, pf: PotentialField3D):
+    # Spheres + influence
+    u = np.linspace(0, 2*np.pi, 18)
+    v = np.linspace(0, np.pi, 10)
+    for s in pf._spheres:
+        xs = s.radius*np.outer(np.cos(u), np.sin(v)) + s.cx
+        ys = s.radius*np.outer(np.sin(u), np.sin(v)) + s.cy
+        zs = s.radius*np.outer(np.ones_like(u), np.cos(v)) + s.cz
+        ax.plot_wireframe(xs, ys, zs, linewidth=0.5)
+        Rinf = s.radius + s.influence_distance
+        xi = Rinf*np.outer(np.cos(u), np.sin(v)) + s.cx
+        yi = Rinf*np.outer(np.sin(u), np.sin(v)) + s.cy
+        zi = Rinf*np.outer(np.ones_like(u), np.cos(v)) + s.cz
+        ax.plot_wireframe(xi, yi, zi, linewidth=0.4, linestyle='--')
+
+    # OBBs + influence edges
+    def draw_obb(obb: OBBObstacle, inflate=0.0, ls='-'):
+        h = np.array([obb.half_x+inflate, obb.half_y +
+                     inflate, obb.half_z+inflate])
+        corners = np.array([[+h[0], +h[1], +h[2]],
+                            [+h[0], +h[1], -h[2]],
+                            [+h[0], -h[1], +h[2]],
+                            [+h[0], -h[1], -h[2]],
+                            [-h[0], +h[1], +h[2]],
+                            [-h[0], +h[1], -h[2]],
+                            [-h[0], -h[1], +h[2]],
+                            [-h[0], -h[1], -h[2]]])
+        R = obb.R()
+        W = (R @ corners.T).T + np.array([obb.cx, obb.cy, obb.cz])
+        edges = [(0, 1), (0, 2), (0, 4), (7, 6), (7, 5), (7, 3),
+                 (1, 3), (1, 5), (2, 3), (2, 6), (4, 5), (4, 6)]
+        for i, j in edges:
+            ax.plot([W[i, 0], W[j, 0]], [W[i, 1], W[j, 1]], [
+                    W[i, 2], W[j, 2]], linestyle=ls, linewidth=0.8)
+
+    for b in pf._obbs:
+        draw_obb(b, inflate=0.0, ls='-')
+        draw_obb(b, inflate=b.influence_distance, ls='--')
+
+
+def damping_and_constraints_prevent_collision():
+    """
+    Showcases how damping + motion constraints can prevent collisions in a tight turn
+    near an obstacle when acceleration limits would otherwise cause overshoot.
+    """
+    # --- Shared environment (one big sphere + a short wall) ---
+    env = PotentialField3D(
+        attractive_gain=1.2,   # same field gains both runs
+        repulsive_gain=0.25,
+        linear_gain=1.0,
+        max_speed=1.0,         # placeholders; per-run instances override these
+        max_accel=1.0,
+        damping=0.0,
+        beta_velocity=1.0,
+    )
+    # Obstacle layout
+    env.add_sphere(cx=0.5, cy=0.0, cz=0.0, radius=0.65, influence_distance=0.9)
+    # A short wall to “catch” the cut if the turn is too tight
+    env.add_box(cx=1.2, cy=-0.1, cz=0.0, sx=0.2, sy=1.2, sz=1.0,
+                yaw=np.deg2rad(10.0), influence_distance=0.6)
+
+    start = (-1.8, -0.8, 0.0)
+    goal = (2.0,  0.9, 0.0)
+
+    dt, tol, steps = 0.02, 0.06, 3500
+
+    # --- Run A: Risky — no damping, high speed limit, tight accel (hard to turn in time) ---
+    pf_risky = PotentialField3D(
+        attractive_gain=env.attractive_gain,
+        repulsive_gain=env.repulsive_gain,
+        linear_gain=env.linear_gain,
+        max_speed=3.5,          # fast
+        max_accel=0.5,          # sluggish acceleration
+        damping=0.0,            # no viscous damping
+        beta_velocity=1.0,
+    )
+    # Copy obstacles
+    pf_risky._spheres = env._spheres.copy()
+    pf_risky._obbs = env._obbs.copy()
+
+    resA = pf_risky.plan_path(
+        start, goal, dt=dt, goal_tolerance=tol, max_steps=steps)
+    clearanceA = _min_path_clearance(pf_risky, resA["x"], resA["y"], resA["z"])
+
+    # --- Run B: Safe — add damping, lower speed cap, higher accel (more responsive, smoother) ---
+    pf_safe = PotentialField3D(
+        attractive_gain=env.attractive_gain,
+        repulsive_gain=env.repulsive_gain,
+        linear_gain=env.linear_gain,
+        max_speed=1.2,          # slower top speed
+        max_accel=2.5,          # can turn/adjust faster
+        damping=0.35,           # viscous damping to quash overshoot
+        beta_velocity=1.0,
+    )
+    pf_safe._spheres = env._spheres.copy()
+    pf_safe._obbs = env._obbs.copy()
+
+    resB = pf_safe.plan_path(
+        start, goal, dt=dt, goal_tolerance=tol, max_steps=steps)
+    clearanceB = _min_path_clearance(pf_safe, resB["x"], resB["y"], resB["z"])
+
+    print("[damping/constraints demo]")
+    print(f"  Risky: goal_reached={resA['goal_reached']}, min_clearance={clearanceA:.3f} m "
+          f"({'COLLISION' if clearanceA < 0 else 'OK'})")
+    print(f"  Safe : goal_reached={resB['goal_reached']}, min_clearance={clearanceB:.3f} m "
+          f"({'COLLISION' if clearanceB < 0 else 'OK'})")
+
+    # --- Visualization: overlay both paths with the same obstacles ---
+    fig = plt.figure(figsize=(8, 8))
+    ax = fig.add_subplot(111, projection='3d')
+    ax.set_title("Damping & Motion Constraints Prevent Collisions")
+    ax.set_box_aspect([1, 1, 1])
+
+    # Bounds
+    xs = [start[0], goal[0]] + [s.cx for s in env._spheres] + \
+        [b.cx for b in env._obbs]
+    ys = [start[1], goal[1]] + [s.cy for s in env._spheres] + \
+        [b.cy for b in env._obbs]
+    zs = [start[2], goal[2]] + [s.cz for s in env._spheres] + \
+        [b.cz for b in env._obbs]
+    ax.set_xlim(min(xs)-2, max(xs)+2)
+    ax.set_ylim(min(ys)-2, max(ys)+2)
+    ax.set_zlim(min(zs)-2, max(zs)+2)
+    ax.grid(False)
+
+    # Obstacles
+    _draw_obstacles(ax, env)
+
+    # Paths
+    ax.plot(resA["x"], resA["y"], resA["z"], linewidth=2.0,
+            label=f"Risky (min d={clearanceA:.2f} m)")
+    ax.plot(resB["x"], resB["y"], resB["z"], linewidth=2.0,
+            linestyle="--", label=f"Safe (min d={clearanceB:.2f} m)")
+    ax.scatter([start[0]], [start[1]], [start[2]], marker='o')
+    ax.scatter([goal[0]],  [goal[1]],  [goal[2]],  marker='^')
+
+    ax.legend(loc="upper left")
+    plt.show()
+
+    # Optional: plot speed profiles to see limiter/damping effect
+    def _speed(res): return np.sqrt(res["vx"]**2 + res["vy"]**2 + res["vz"]**2)
+    fig2, ax2 = plt.subplots(figsize=(8, 3.5))
+    ax2.plot(resA["t"], _speed(resA), label="Risky speed")
+    ax2.plot(resB["t"], _speed(resB), label="Safe speed", linestyle="--")
+    ax2.set_title("Speed vs Time")
+    ax2.set_xlabel("Time [s]")
+    ax2.set_ylabel("|v| [m/s]")
+    ax2.grid(True, linestyle=':')
+    ax2.legend()
+    plt.show()
 
 
 if __name__ == "__main__":
     # obstacles_in_the_way()
     # no_obstacles()
-    narrow_gap_corridor()
-    u_trap_local_minima()
-    cluttered_spheres()
+    # narrow_gap_corridor()
+    # u_trap_local_minima()
+    # cluttered_spheres()
     # start_inside_obstacle()
-    high_speed_low_accel()
+    # high_speed_low_accel()
+    damping_and_constraints_prevent_collision()
