@@ -83,7 +83,7 @@ private:
   double maxAngularVelocity; // Maximum Angular Velocity [rad/s]
   double maxLinearAcceleration; // Maximum Linear Acceleration [m/s^2]
   double maxAngularAcceleration; // Maximum Angular Acceleration [rad/s^2]
-  double influenceZoneScale; // Influence zone scaling factor
+  double influenceDistance; // Influence distance for obstacle repulsion [m]
   double visualizerBufferArea; // Extra area around obstacles and goal to visualize the PF [m]
   double fieldResolution; // Resolution of the potential field grid [m]
   std::string fixedFrame; // RViz fixed frame for visualization and PF computation

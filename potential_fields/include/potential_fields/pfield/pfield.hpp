@@ -23,6 +23,7 @@
 #include <unordered_set>
 #include <unordered_map>
 #include <vector>
+#include <memory>
 
 #include <eigen3/Eigen/Core>
 #include <eigen3/Eigen/Geometry>
@@ -83,14 +84,6 @@ struct PlannedPath {
     }
   }
 };
-
-// Default values
-constexpr double DEFAULT_ATTRACTIVE_GAIN = 1.0; // Gain for attractive force [Ns/m]
-constexpr double DEFAULT_ROTATIONAL_ATTRACTIVE_GAIN = 0.7; // Gain for rotational attractive force [Ns/m]
-constexpr double DEFAULT_MAX_LINEAR_VELOCITY = 5.0; // [m/s]
-constexpr double DEFAULT_MAX_ANGULAR_VELOCITY = 1.0; // [rad/s]
-constexpr double DEFAULT_MAX_LINEAR_ACCELERATION = 1.0; // [m/s^2]
-constexpr double DEFAULT_MAX_ANGULAR_ACCELERATION = 1.0; // [rad/s^2]
 
 class PotentialField {
 public:
@@ -209,7 +202,7 @@ public:
   void initializeKinematics(
     const std::string& urdfFilePath,
     const std::vector<std::string>& jointNames,
-    const double influenceZoneScale, const double repulsiveGain);
+    const double influenceDistance, const double repulsiveGain);
 
   // ============ Getters and Setters ============
   void setAttractiveGain(double newAttractiveGain) { this->attractiveGain = newAttractiveGain; }

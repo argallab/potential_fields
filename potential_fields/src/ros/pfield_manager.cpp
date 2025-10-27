@@ -41,12 +41,12 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   this->maxAngularVelocity = this->declare_parameter("max_angular_velocity", 1.0); // [rad/s]
   this->maxLinearAcceleration = this->declare_parameter("max_linear_acceleration", 1.0); // [m/s^2]
   this->maxAngularAcceleration = this->declare_parameter("max_angular_acceleration", 1.0); // [rad/s^2]
-  this->influenceZoneScale = this->declare_parameter("influence_zone_scale", 2.0); // Influence zone scaling factor
+  this->influenceDistance = this->declare_parameter("influence_distance", 2.0); // Influence distance for obstacle repulsion
   this->fixedFrame = this->declare_parameter("fixed_frame", "world"); // RViz fixed frame
   this->visualizerBufferArea = this->declare_parameter("visualizer_buffer_area", 1.0); // Extra area to visualize the PF [m]
   this->fieldResolution = this->declare_parameter("field_resolution", 0.5); // Resolution of the potential field grid [m]
   this->urdfFileName = this->declare_parameter("urdf_file_path", std::string());
-  this->motionPluginType = this->declare_parameter("motion_plugin_type", std::string()); // Motion Plugin Type [e.g. "franka", etc.]
+  this->motionPluginType = this->declare_parameter("motion_plugin_type", std::string()); // Motion Plugin Type [e.g. "franka"]
   // Get parameters from yaml file
   this->visualizerFrequency = this->get_parameter("visualize_pf_frequency").as_double();
   this->attractiveGain = this->get_parameter("attractive_gain").as_double();
@@ -56,7 +56,7 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   this->maxAngularVelocity = this->get_parameter("max_angular_velocity").as_double();
   this->maxLinearAcceleration = this->get_parameter("max_linear_acceleration").as_double();
   this->maxAngularAcceleration = this->get_parameter("max_angular_acceleration").as_double();
-  this->influenceZoneScale = this->get_parameter("influence_zone_scale").as_double();
+  this->influenceDistance = this->get_parameter("influence_distance").as_double();
   this->fixedFrame = this->get_parameter("fixed_frame").as_string();
   this->visualizerBufferArea = this->get_parameter("visualizer_buffer_area").as_double();
   this->fieldResolution = this->get_parameter("field_resolution").as_double();
@@ -104,7 +104,7 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
     this->pField->initializeKinematics(
       this->urdfFileName,
       this->ikSolver->getJointNames(),
-      this->influenceZoneScale, this->repulsiveGain
+      this->influenceDistance, this->repulsiveGain
     );
     RCLCPP_INFO(this->get_logger(), "PF Kinematics initialized from URDF: %s", this->urdfFileName.c_str());
   }
@@ -153,7 +153,7 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
         stringToObstacleType(obst.type),
         stringToObstacleGroup(obst.group),
         ObstacleGeometry{obst.radius, obst.length, obst.width, obst.height},
-        this->influenceZoneScale,
+        this->influenceDistance,
         this->repulsiveGain,
         obst.mesh_resource,
         Eigen::Vector3d(obst.scale_x, obst.scale_y, obst.scale_z)
@@ -475,23 +475,23 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<Potenti
     switch (obstacle.getType()) {
     case ObstacleType::SPHERE: {
       influenceMarker.type = Marker::SPHERE;
-      influenceMarker.scale.x = obstacle.getInfluenceZoneScale() * obstacle.getGeometry().radius * 2.0f; // Diameter
-      influenceMarker.scale.y = obstacle.getInfluenceZoneScale() * obstacle.getGeometry().radius * 2.0f; // Diameter
-      influenceMarker.scale.z = obstacle.getInfluenceZoneScale() * obstacle.getGeometry().radius * 2.0f; // Diameter
+      influenceMarker.scale.x = obstacle.getInfluenceDistance() * obstacle.getGeometry().radius * 2.0f; // Diameter
+      influenceMarker.scale.y = obstacle.getInfluenceDistance() * obstacle.getGeometry().radius * 2.0f; // Diameter
+      influenceMarker.scale.z = obstacle.getInfluenceDistance() * obstacle.getGeometry().radius * 2.0f; // Diameter
       break;
     }
     case ObstacleType::BOX: {
       influenceMarker.type = Marker::CUBE;
-      influenceMarker.scale.x = obstacle.getInfluenceZoneScale() * obstacle.getGeometry().length;
-      influenceMarker.scale.y = obstacle.getInfluenceZoneScale() * obstacle.getGeometry().width;
-      influenceMarker.scale.z = obstacle.getInfluenceZoneScale() * obstacle.getGeometry().height;
+      influenceMarker.scale.x = obstacle.getInfluenceDistance() * obstacle.getGeometry().length;
+      influenceMarker.scale.y = obstacle.getInfluenceDistance() * obstacle.getGeometry().width;
+      influenceMarker.scale.z = obstacle.getInfluenceDistance() * obstacle.getGeometry().height;
       break;
     }
     case ObstacleType::CYLINDER: {
       influenceMarker.type = Marker::CYLINDER;
-      influenceMarker.scale.x = obstacle.getInfluenceZoneScale() * obstacle.getGeometry().radius * 2.0f; // Diameter
-      influenceMarker.scale.y = obstacle.getInfluenceZoneScale() * obstacle.getGeometry().radius * 2.0f; // Diameter
-      influenceMarker.scale.z = obstacle.getInfluenceZoneScale() * obstacle.getGeometry().height; // Height
+      influenceMarker.scale.x = obstacle.getInfluenceDistance() * obstacle.getGeometry().radius * 2.0f; // Diameter
+      influenceMarker.scale.y = obstacle.getInfluenceDistance() * obstacle.getGeometry().radius * 2.0f; // Diameter
+      influenceMarker.scale.z = obstacle.getInfluenceDistance() * obstacle.getGeometry().height; // Height
       break;
     }
     case ObstacleType::MESH: {
@@ -500,9 +500,9 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<Potenti
       influenceMarker.mesh_resource = obstacle.getMeshResource();
       influenceMarker.mesh_use_embedded_materials = false; // use our color/alpha below
       Eigen::Vector3d scale = obstacle.getMeshScale();
-      influenceMarker.scale.x = obstacle.getInfluenceZoneScale() * scale.x();
-      influenceMarker.scale.y = obstacle.getInfluenceZoneScale() * scale.y();
-      influenceMarker.scale.z = obstacle.getInfluenceZoneScale() * scale.z();
+      influenceMarker.scale.x = obstacle.getInfluenceDistance() * scale.x();
+      influenceMarker.scale.y = obstacle.getInfluenceDistance() * scale.y();
+      influenceMarker.scale.z = obstacle.getInfluenceDistance() * scale.z();
       break;
     }
     }
@@ -678,7 +678,7 @@ void PotentialFieldManager::exportFieldDataToCSV(std::shared_ptr<PotentialField>
       const Eigen::Vector3d& position = obstacle.getPosition();
       const ObstacleGeometry& g = obstacle.getGeometry();
       obstacles_file << position.x() << "," << position.y() << "," << position.z() << ","
-        << obstacleTypeToString(obstacle.getType()) << "," << obstacle.getInfluenceZoneScale() << ","
+        << obstacleTypeToString(obstacle.getType()) << "," << obstacle.getInfluenceDistance() << ","
         << obstacle.getRepulsiveGain() << ","
         << g.radius << "," << g.length << "," << g.width << "," << g.height
         << "\n";

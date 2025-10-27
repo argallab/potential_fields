@@ -7,7 +7,7 @@
 
 PFKinematics::PFKinematics(
   const std::string& urdfFileName, const std::vector<std::string>& jointNames,
-  const double influenceZoneScale, const double repulsiveGain) {
+  const double influenceDistance, const double repulsiveGain) {
   if (urdfFileName.empty()) {
     throw std::invalid_argument("PFKinematics: urdfFileName is empty; expected a path to a URDF file");
   }
@@ -19,7 +19,7 @@ PFKinematics::PFKinematics(
   }
   this->data = pinocchio::Data(this->model);
   this->robotModel.initFile(urdfFileName);
-  this->collisionCatalog = this->buildCollisionCatalog(this->robotModel, influenceZoneScale, repulsiveGain);
+  this->collisionCatalog = this->buildCollisionCatalog(this->robotModel, influenceDistance, repulsiveGain);
   this->initializeCaches(jointNames, this->collisionLinkNames);
 }
 
@@ -96,7 +96,7 @@ std::vector<Eigen::Affine3d> PFKinematics::computeLinkTransforms(const std::vect
 
 std::vector<CollisionCatalogEntry> PFKinematics::buildCollisionCatalog(
   urdf::Model& model,
-  const double influenceZoneScale,
+  const double influenceDistance,
   const double repulsiveGain) {
   std::vector<CollisionCatalogEntry> catalog;
   this->obstacleGeometryTemplates.clear();
@@ -116,7 +116,7 @@ std::vector<CollisionCatalogEntry> PFKinematics::buildCollisionCatalog(
       e.col = col_ptr;
       // Build cached obstacle geometry templates aligned to catalog entries
       PotentialFieldObstacle templateObstacle = this->obstacleFromCollisionObject(
-        e.id, influenceZoneScale, repulsiveGain, *e.col, Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity()
+        e.id, influenceDistance, repulsiveGain, *e.col, Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity()
       );
       this->obstacleGeometryTemplates.push_back(templateObstacle);
       catalog.push_back(std::move(e));
@@ -167,7 +167,7 @@ std::vector<PotentialFieldObstacle> PFKinematics::buildObstaclesFromTransforms(c
 }
 
 PotentialFieldObstacle PFKinematics::obstacleFromCollisionObject(
-  const std::string& frameID, const double influenceZoneScale, const double repulsiveGain,
+  const std::string& frameID, const double influenceDistance, const double repulsiveGain,
   const urdf::Collision& collisionObject,
   const Eigen::Vector3d& position, const Eigen::Quaterniond& orientation) {
   ObstacleType obstacleType;
@@ -208,7 +208,7 @@ PotentialFieldObstacle PFKinematics::obstacleFromCollisionObject(
   ObstacleGeometry obstacleGeom(radius, length, width, height);
   PotentialFieldObstacle obstacle(
     frameID, position, orientation, obstacleType, ObstacleGroup::ROBOT,
-    obstacleGeom, influenceZoneScale, repulsiveGain
+    obstacleGeom, influenceDistance, repulsiveGain
   );
   // If mesh, set mesh resource and scale
   if (isMesh) { obstacle.setMeshProperties(meshResource, Eigen::Vector3d(length, width, height)); }

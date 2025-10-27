@@ -131,7 +131,7 @@ public:
     std::string frameID,
     Eigen::Vector3d centerPosition, Eigen::Quaterniond orientation,
     ObstacleType type, ObstacleGroup group, ObstacleGeometry geometry,
-    double influenceZoneScale, double repulsiveGain,
+    double influenceDistance, double repulsiveGain,
     const std::string& meshResource = std::string(),
     const Eigen::Vector3d& meshScale = Eigen::Vector3d::Ones())
     : frameID(frameID),
@@ -141,16 +141,13 @@ public:
     type(type),
     group(group),
     geometry(geometry),
-    influenceZoneScale(influenceZoneScale),
+    influenceDistance(influenceDistance),
     repulsiveGain(repulsiveGain),
     meshResource(meshResource),
     meshScale(meshScale) {
     if (type == ObstacleType::MESH && !meshResource.empty()) {
       try {
         meshCollisionData = loadMesh(meshResource);
-        if (meshCollisionData) {
-          meshInfluenceMargin = (influenceZoneScale - 1.0) * 0.5 * meshCollisionData->maxExtent;
-        }
       }
       catch (const std::exception&) {
         meshCollisionData.reset();
@@ -166,13 +163,12 @@ public:
     type(other.type),
     group(other.group),
     geometry(other.geometry),
-    influenceZoneScale(other.influenceZoneScale),
+    influenceDistance(other.influenceDistance),
     repulsiveGain(other.repulsiveGain),
     meshResource(other.meshResource),
     meshScale(other.meshScale) {
     // Shallow copy of shared mesh data
     this->meshCollisionData = other.meshCollisionData;
-    this->meshInfluenceMargin = other.meshInfluenceMargin;
   }
 
   PotentialFieldObstacle(PotentialFieldObstacle&& other) noexcept :
@@ -183,12 +179,11 @@ public:
     type(other.type),
     group(other.group),
     geometry(std::move(other.geometry)),
-    influenceZoneScale(other.influenceZoneScale),
+    influenceDistance(other.influenceDistance),
     repulsiveGain(other.repulsiveGain),
     meshResource(std::move(other.meshResource)),
     meshScale(std::move(other.meshScale)) {
     this->meshCollisionData = std::move(other.meshCollisionData);
-    this->meshInfluenceMargin = other.meshInfluenceMargin;
   }
 
   PotentialFieldObstacle& operator=(const PotentialFieldObstacle& other) {
@@ -200,12 +195,11 @@ public:
       this->type = other.type;
       this->group = other.group;
       this->geometry = other.geometry;
-      this->influenceZoneScale = other.influenceZoneScale;
+      this->influenceDistance = other.influenceDistance;
       this->repulsiveGain = other.repulsiveGain;
       this->meshResource = other.meshResource;
       this->meshScale = other.meshScale;
       this->meshCollisionData = other.meshCollisionData; // share existing (may be null)
-      this->meshInfluenceMargin = other.meshInfluenceMargin;
     }
     return *this;
   }
@@ -216,7 +210,7 @@ public:
   Eigen::Quaterniond getOrientation() const { return this->orientation; }
   ObstacleType getType() const { return this->type; }
   ObstacleGeometry getGeometry() const { return this->geometry; }
-  double getInfluenceZoneScale() const { return this->influenceZoneScale; }
+  double getInfluenceDistance() const { return this->influenceDistance; }
   double getRepulsiveGain() const { return this->repulsiveGain; }
   const std::string& getMeshResource() const { return this->meshResource; }
   Eigen::Vector3d getMeshScale() const { return this->meshScale; }
@@ -238,9 +232,6 @@ public:
     if (type == ObstacleType::MESH && !meshResource.empty()) {
       try {
         meshCollisionData = loadMesh(meshResource);
-        if (meshCollisionData) {
-          meshInfluenceMargin = (influenceZoneScale - 1.0) * 0.5 * meshCollisionData->maxExtent;
-        }
       }
       catch (const std::exception&) {
         meshCollisionData.reset();
@@ -248,42 +239,25 @@ public:
     }
   }
 
-  bool withinInfluenceZone(Eigen::Vector3d pos) const;
+  void assignMeshCollisionData(const std::shared_ptr<MeshCollisionData>& meshData) { this->meshCollisionData = meshData; }
 
-  bool withinObstacle(Eigen::Vector3d pos) const;
+  bool withinInfluenceZone(Eigen::Vector3d worldPoint) const;
+  bool withinObstacle(Eigen::Vector3d worldPoint) const;
 
   bool operator==(const PotentialFieldObstacle& other) const {
-    return  this->position == other.position && this->geometry == other.geometry;
+    return this->position == other.position && this->geometry == other.geometry;
   }
-
-  bool operator!=(const PotentialFieldObstacle& other) const {
-    return !(*this == other);
-  }
-
-private:
-  std::string frameID; // Frame ID for the obstacle
-  Eigen::Vector3d position; // Center Position of the obstacle in 3D space
-  Eigen::Quaterniond orientation; // Orientation of the obstacle in 3D space
-  Eigen::Quaterniond orientationConjugate; // Cached conjugate of the orientation for efficiency
-  ObstacleType type; // Type of the obstacle
-  ObstacleGroup group; // Obstacle group/category
-  ObstacleGeometry geometry; // Geometry of the obstacle, containing relevant dimensions
-  double influenceZoneScale; // The scale value of the volume of the obstacle that becomes the influence zone for repulsive forces
-  double repulsiveGain; // Gain for the repulsive force
-  std::string meshResource; // URI or file path to the mesh resource (e.g., package://, file://)
-  Eigen::Vector3d meshScale; // Scale for mesh visualization if using MESH_RESOURCE
-  std::shared_ptr<MeshCollisionData> meshCollisionData; // populated when mesh resource loaded (shared to avoid deep copies)
-  double meshInfluenceMargin = 0.0; // Additional margin for mesh influence zone
+  bool operator!=(const PotentialFieldObstacle& other) const { return !(*this == other); }
 
   /**
    * @brief Rotate the given point to the obstacle's frame of reference
    *
    * @note Useful for computing distances and collision checks in the obstacle's local frame
    *
-   * @param point the point to transform into obstacle frame
+   * @param worldPoint the point to transform into obstacle frame
    * @return Eigen::Vector3d the point in the obstacle's local frame
    */
-  Eigen::Vector3d toObstacleFrame(const Eigen::Vector3d& point) const;
+  Eigen::Vector3d toObstacleFrame(const Eigen::Vector3d& worldPoint) const;
 
   /**
    * @brief Get the half dimensions of the obstacle
@@ -293,6 +267,29 @@ private:
    * @return Eigen::Vector3d Half dimensions [half_length, half_width, half_height]
    */
   Eigen::Vector3d halfDimensions() const;
+
+  /**
+   * @brief Computes the signed distance and normal from a world point to the obstacle surface
+   *
+   * @param[in] worldPoint The point in world coordinates
+   * @param[out] signedDistance The distance to the obstacle surface (negative if inside)
+   * @param[out] normal The outward normal vector at the closest point on the obstacle surface
+   */
+  void computeSignedDistanceAndNormal(const Eigen::Vector3d& worldPoint, double& signedDistance, Eigen::Vector3d& normal) const;
+
+private:
+  std::string frameID; // Frame ID for the obstacle
+  Eigen::Vector3d position; // Center Position of the obstacle in 3D space
+  Eigen::Quaterniond orientation; // Orientation of the obstacle in 3D space
+  Eigen::Quaterniond orientationConjugate; // Cached conjugate of the orientation for efficiency
+  ObstacleType type; // Type of the obstacle
+  ObstacleGroup group; // Obstacle group/category
+  ObstacleGeometry geometry; // Geometry of the obstacle, containing relevant dimensions
+  double influenceDistance; // Distance [m] from obstacle surface to influence zone boundary
+  double repulsiveGain; // Gain for the repulsive force
+  std::string meshResource; // URI or file path to the mesh resource (e.g., package://, file://)
+  Eigen::Vector3d meshScale; // Scale for mesh visualization if using MESH_RESOURCE
+  std::shared_ptr<MeshCollisionData> meshCollisionData; // populated when mesh resource loaded (shared to avoid deep copies)
 };
 
 struct PotentialFieldObstacleHash {
