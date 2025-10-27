@@ -43,13 +43,6 @@ def rate_limit_step(prev: np.ndarray, curr: np.ndarray, dmax: float) -> np.ndarr
     return prev + d * (dmax / dn)
 
 
-def _clip_norm(v: np.ndarray, max_norm: float) -> np.ndarray:
-    n = np.linalg.norm(v)
-    if n <= max_norm or max_norm <= 0:
-        return v
-    return v * (max_norm / (n + 1e-12))
-
-
 def _rotzxy(yaw: float, pitch: float, roll: float) -> np.ndarray:
     cz, sz = math.cos(yaw), math.sin(yaw)
     cy, sy = math.cos(pitch), math.sin(pitch)
