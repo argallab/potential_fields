@@ -5,10 +5,8 @@ import numpy as np
 import math
 from typing import List, Tuple, Dict, Any
 
-import matplotlib
 import matplotlib.pyplot as plt
 from matplotlib import animation
-from mpl_toolkits.mplot3d import Axes3D  # noqa: F401
 
 
 def _is_positive_finite(v: float) -> bool:

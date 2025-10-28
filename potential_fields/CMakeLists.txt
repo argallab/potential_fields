@@ -186,18 +186,24 @@ if(BUILD_TESTING)
   )
   target_link_libraries(test_mesh_obstacle pfield_lib)
 
+  ament_add_gtest(test_pf_obstacles
+    test/test_pf_obstacles.cpp
+  )
+  target_link_libraries(test_pf_obstacles pfield_lib)
   install(
     TARGETS test_spatial_vector
     DESTINATION lib/${PROJECT_NAME}
   )
-
   install(
     TARGETS test_pfields
     DESTINATION lib/${PROJECT_NAME}
   )
-
   install(
     TARGETS test_mesh_obstacle
+    DESTINATION lib/${PROJECT_NAME}
+  )
+  install(
+    TARGETS test_pf_obstacles
     DESTINATION lib/${PROJECT_NAME}
   )
 
