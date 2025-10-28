@@ -474,35 +474,67 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<Potenti
     influenceMarker.pose.orientation.w = orientation.w();
     switch (obstacle.getType()) {
     case ObstacleType::SPHERE: {
+      // Inflated sphere diameter = 2 * (radius + influenceDistance).
       influenceMarker.type = Marker::SPHERE;
-      influenceMarker.scale.x = obstacle.getInfluenceDistance() * obstacle.getGeometry().radius * 2.0f; // Diameter
-      influenceMarker.scale.y = obstacle.getInfluenceDistance() * obstacle.getGeometry().radius * 2.0f; // Diameter
-      influenceMarker.scale.z = obstacle.getInfluenceDistance() * obstacle.getGeometry().radius * 2.0f; // Diameter
+      const double influenceZoneDiameter = 2.0 * (obstacle.getGeometry().radius + obstacle.getInfluenceDistance());
+      influenceMarker.scale.x = influenceZoneDiameter;
+      influenceMarker.scale.y = influenceZoneDiameter;
+      influenceMarker.scale.z = influenceZoneDiameter;
       break;
     }
     case ObstacleType::BOX: {
+      // Inflated box dimensions = base dims + 2 * influenceDistance along each axis.
       influenceMarker.type = Marker::CUBE;
-      influenceMarker.scale.x = obstacle.getInfluenceDistance() * obstacle.getGeometry().length;
-      influenceMarker.scale.y = obstacle.getInfluenceDistance() * obstacle.getGeometry().width;
-      influenceMarker.scale.z = obstacle.getInfluenceDistance() * obstacle.getGeometry().height;
+      const double d = obstacle.getInfluenceDistance();
+      influenceMarker.scale.x = obstacle.getGeometry().length + 2.0 * d;
+      influenceMarker.scale.y = obstacle.getGeometry().width + 2.0 * d;
+      influenceMarker.scale.z = obstacle.getGeometry().height + 2.0 * d;
       break;
     }
     case ObstacleType::CYLINDER: {
+      // Inflated cylinder: diameter = 2 * (radius + d), height = height + 2 * d.
       influenceMarker.type = Marker::CYLINDER;
-      influenceMarker.scale.x = obstacle.getInfluenceDistance() * obstacle.getGeometry().radius * 2.0f; // Diameter
-      influenceMarker.scale.y = obstacle.getInfluenceDistance() * obstacle.getGeometry().radius * 2.0f; // Diameter
-      influenceMarker.scale.z = obstacle.getInfluenceDistance() * obstacle.getGeometry().height; // Height
+      const double d = obstacle.getInfluenceDistance();
+      const double r = obstacle.getGeometry().radius;
+      influenceMarker.scale.x = 2.0 * (r + d);
+      influenceMarker.scale.y = 2.0 * (r + d);
+      influenceMarker.scale.z = obstacle.getGeometry().height + 2.0 * d;
       break;
     }
     case ObstacleType::MESH: {
-      // Represent mesh influence by rendering the same mesh, uniformly scaled by the influence factor
-      influenceMarker.type = Marker::MESH_RESOURCE;
-      influenceMarker.mesh_resource = obstacle.getMeshResource();
-      influenceMarker.mesh_use_embedded_materials = false; // use our color/alpha below
-      Eigen::Vector3d scale = obstacle.getMeshScale();
-      influenceMarker.scale.x = obstacle.getInfluenceDistance() * scale.x();
-      influenceMarker.scale.y = obstacle.getInfluenceDistance() * scale.y();
-      influenceMarker.scale.z = obstacle.getInfluenceDistance() * scale.z();
+      // Visualize the influence zone as an "inflated" version of the original mesh.
+      // We approximate a Minkowski sum by scaling the mesh per-axis so its AABB grows by +2d.
+      // This preserves the silhouette and is a better visual cue than a plain inflated AABB cube.
+      const double d = obstacle.getInfluenceDistance();
+      if (!obstacle.getMeshResource().empty()) {
+        influenceMarker.type = Marker::MESH_RESOURCE;
+        influenceMarker.mesh_resource = obstacle.getMeshResource();
+        influenceMarker.mesh_use_embedded_materials = false; // keep our semi-transparent color
+        // Base axis-aligned dimensions for the mesh in obstacle frame
+        const Eigen::Vector3d baseHalf = obstacle.halfDimensions();
+        const Eigen::Vector3d baseDims = 2.0 * baseHalf; // L, W, H
+        const Eigen::Vector3d baseScale = obstacle.getMeshScale(); // current mesh scale used for the obstacle
+        auto inflateScale = [d](double baseDim, double baseScaleVal) -> double {
+          const double eps = 1e-9;
+          if (std::abs(baseDim) < eps) return baseScaleVal; // degenerate axis; leave as-is
+          // New scale multiplies existing mesh scale so that (scaledDim) = baseDim + 2d
+          // => scaleFactor = (baseDim + 2d) / baseDim
+          const double scaleFactor = (baseDim + 2.0 * d) / baseDim;
+          return baseScaleVal * scaleFactor;
+        };
+        influenceMarker.scale.x = inflateScale(baseDims.x(), baseScale.x());
+        influenceMarker.scale.y = inflateScale(baseDims.y(), baseScale.y());
+        influenceMarker.scale.z = inflateScale(baseDims.z(), baseScale.z());
+      }
+      else {
+        // Fallback: render an inflated AABB cube if no mesh resource provided
+        influenceMarker.type = Marker::CUBE;
+        const Eigen::Vector3d baseHalf = obstacle.halfDimensions();
+        const Eigen::Vector3d baseDims = 2.0 * baseHalf; // L, W, H
+        influenceMarker.scale.x = baseDims.x() + 2.0 * d;
+        influenceMarker.scale.y = baseDims.y() + 2.0 * d;
+        influenceMarker.scale.z = baseDims.z() + 2.0 * d;
+      }
       break;
     }
     }

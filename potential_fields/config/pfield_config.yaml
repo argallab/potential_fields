@@ -8,6 +8,6 @@ pfield_manager:
     max_angular_velocity: 0.4 # [rad/s]
     max_linear_acceleration: 0.25 # [m/s^2]
     max_angular_acceleration: 0.2 # [rad/s^2]
-    influence_distance: 1.0 # Influence distance for obstacle repulsion [m]
+    influence_distance: 0.5 # Influence distance for obstacle repulsion [m]
     visualizer_buffer_area: 0.5 # Extra area around obstacles and goal to visualize the PF [m]
     field_resolution: 0.5 # Resolution to show PF velocity arrows in RViz [m]
