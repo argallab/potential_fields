@@ -384,6 +384,7 @@ private:
   std::unordered_map<std::string, size_t> obstacleIndex; // Fast lookup for obstacle updates/removals by ID
   const double translationalTolerance = 1e-3; // Threshold for distances to the goal and obstacles [m]
   const double rotationalThreshold = 0.02; // Threshold for rotational geodesic distance [rad]
+  const double softSatBeta = 1.0; // Soft-saturation parameter, higher = more aggressive curve
   std::string urdfFileName; // URDF file path for kinematic model
   std::unique_ptr<PFKinematics> pfKinematics; // Kinematics helper for obstacle updates via joint angles
 

@@ -104,9 +104,8 @@ TaskSpaceTwist PotentialField::wrenchToTwist(const TaskSpaceWrench& wrench) cons
 TaskSpaceTwist PotentialField::applyMotionConstraints(
   const TaskSpaceTwist& twist, const TaskSpaceTwist& prevTwist, const double dt) const {
   // Soft-saturate velocities by norm
-  const double beta = 1.0; // Soft-saturation parameter, higher = more aggressive curve
-  Eigen::Vector3d limitedLinear = softSaturateNorm(twist.linearVelocity, this->maxLinearVelocity, beta);
-  Eigen::Vector3d limitedAngular = softSaturateNorm(twist.angularVelocity, this->maxAngularVelocity, beta);
+  Eigen::Vector3d limitedLinear = softSaturateNorm(twist.linearVelocity, this->maxLinearVelocity, this->softSatBeta);
+  Eigen::Vector3d limitedAngular = softSaturateNorm(twist.angularVelocity, this->maxAngularVelocity, this->softSatBeta);
 
   // If dt is valid, apply rate limits (acceleration limits)
   if (isPositiveFinite(dt)) {
@@ -116,8 +115,8 @@ TaskSpaceTwist PotentialField::applyMotionConstraints(
     limitedAngular = rateLimitStep(prevTwist.angularVelocity, limitedAngular, dVMaxAngular);
 
     // Re-apply soft-saturation to prevent velocity limits
-    limitedLinear = softSaturateNorm(limitedLinear, this->maxLinearVelocity, beta);
-    limitedAngular = softSaturateNorm(limitedAngular, this->maxAngularVelocity, beta);
+    limitedLinear = softSaturateNorm(limitedLinear, this->maxLinearVelocity, this->softSatBeta);
+    limitedAngular = softSaturateNorm(limitedAngular, this->maxAngularVelocity, this->softSatBeta);
   }
   return TaskSpaceTwist(limitedLinear, limitedAngular);
 }
@@ -169,17 +168,30 @@ Eigen::Vector3d PotentialField::computeAttractiveMoment(const SpatialVector& que
 Eigen::Vector3d PotentialField::computeRepulsiveForceLinear(const SpatialVector& queryPose) const {
   Eigen::Vector3d F = Eigen::Vector3d::Zero();
   for (const auto& obst : this->obstacles) {
-    if (!obst.withinInfluenceZone(queryPose.getPosition())) continue;
-    Eigen::Vector3d direction = queryPose.getPosition() - obst.getPosition();
-    // Clamp near-zero distances to avoid singularities while preserving the sign
-    const double distance = (std::abs(direction.norm()) < NEAR_ZERO_THRESHOLD) ?
-      (direction.norm() >= 0.0 ? NEAR_ZERO_THRESHOLD : -NEAR_ZERO_THRESHOLD) :
-      direction.norm();
-    const double distanceReciprocal = 1.0 / distance;
-    const double distanceReciprocalSquared = distanceReciprocal * distanceReciprocal;
-    const double influenceReciprocal = 1.0 / obst.getInfluenceDistance();
-    const double magnitude = obst.getRepulsiveGain() * (distanceReciprocal - influenceReciprocal) * distanceReciprocalSquared;
-    if (magnitude > 0.0) F += direction.normalized() * magnitude;
+    // if (!obst.withinInfluenceZone(queryPose.getPosition())) continue;
+    // Use true surface signed distance and outward normal for direction and magnitude
+    double signedDistance = 0.0; // signed distance: > 0 outside, < 0 inside
+    Eigen::Vector3d normalToObstSurface = Eigen::Vector3d::Zero(); // outward normal at closest surface point (world frame)
+    obst.computeSignedDistanceAndNormal(queryPose.getPosition(), signedDistance, normalToObstSurface);
+    // Ensure a valid normal; if degenerate, skip this obstacle
+    const double normalMagnitude = normalToObstSurface.norm();
+    if (normalMagnitude < NEAR_ZERO_THRESHOLD) continue;
+    normalToObstSurface /= normalMagnitude;
+    // Absolute influence semantics already enforced by withinInfluenceZone.
+    // Define an effective distance d for the classic repulsive potential:
+    //  - outside (sd >= 0): d = max(sd, eps)
+    //  - inside (sd < 0): treat as very close to surface to generate strong outward push
+    const double Q = std::max(obst.getInfluenceDistance(), NEAR_ZERO_THRESHOLD);
+    const double d = (signedDistance >= 0.0) ? std::max(signedDistance, NEAR_ZERO_THRESHOLD) : NEAR_ZERO_THRESHOLD;
+    // Only contribute if within the influence distance
+    if (d < Q) {
+      // Magnitude per Khatib potential: eta * (1/d - 1/Q) * (1/d^2)
+      const double inverseDistance = 1.0 / d;
+      const double inverseDistanceSquared = inverseDistance * inverseDistance;
+      const double inverseInfluenceDistance = 1.0 / Q;
+      const double magnitude = obst.getRepulsiveGain() * (inverseDistance - inverseInfluenceDistance) * inverseDistanceSquared;
+      if (magnitude > NEAR_ZERO_THRESHOLD) { F += normalToObstSurface * magnitude; }
+    }
   }
   return F;
 }

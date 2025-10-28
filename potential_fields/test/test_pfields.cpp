@@ -249,17 +249,17 @@ TEST(PotentialFieldTest, CylinderWithinObstacleRotated) {
 }
 
 TEST(PotentialFieldTest, NearZeroDistanceAttraction) {
-  PotentialField pf(SpatialVector(Eigen::Vector3d(1.0f, 1.0f, 1.0f)), 1.0f, 0.0f);
+  PotentialField pf(SpatialVector(Eigen::Vector3d(1.0, 1.0, 1.0)), 1.0, 0.0);
   // Use an offset slightly larger than translationalTolerance to avoid zeroing
-  SpatialVector nearGoal(Eigen::Vector3d(1 + 2e-3f, 1.0f, 1.0f));
+  SpatialVector nearGoal(Eigen::Vector3d(1 + 2e-3, 1.0, 1.0));
   TaskSpaceTwist vel = pf.evaluateVelocityAtPose(nearGoal);
-  EXPECT_GT(std::abs(vel.getLinearVelocity().x()), 1e-3f);  // Should be small but not zero
-  EXPECT_NEAR(vel.getLinearVelocity().y(), 0.0f, 1e-6f);
-  EXPECT_NEAR(vel.getLinearVelocity().z(), 0.0f, 1e-6f);
+  EXPECT_GT(std::abs(vel.getLinearVelocity().x()), 1e-3);  // Should be small but not zero
+  EXPECT_NEAR(vel.getLinearVelocity().y(), 0.0, 1e-6);
+  EXPECT_NEAR(vel.getLinearVelocity().z(), 0.0, 1e-6);
 }
 
 TEST(PotentialFieldTest, RepulsionAtSurfaceBoundary) {
-  PotentialField pf(SpatialVector(Eigen::Vector3d(10.0f, 10.0f, 10.0f)), 0.0f, 0.0f);
+  PotentialField pf(SpatialVector(Eigen::Vector3d(10.0, 10.0, 10.0)), 0.0, 0.0);
   PotentialFieldObstacle obs(
     "o1",
     Eigen::Vector3d::Zero(),
@@ -267,19 +267,20 @@ TEST(PotentialFieldTest, RepulsionAtSurfaceBoundary) {
     ObstacleType::SPHERE,
     ObstacleGroup::STATIC,
     ObstacleGeometry{1.0, 0.0, 0.0, 0.0},
-    2.0f,
-    10.0f
+    2.0,
+    10.0
   );
   pf.addObstacle(obs);
-  SpatialVector query(Eigen::Vector3d(2.0f, 0.0f, 0.0f));  // At influence radius
-  TaskSpaceTwist v = pf.evaluateVelocityAtPose(query);
-  EXPECT_NEAR(v.getLinearVelocity().x(), 0.0f, 1e-6f);  // At boundary, repulsive force should approach 0
-  SpatialVector query2(Eigen::Vector3d(2.1f, 0.0f, 0.0f));  // Outside influence radius
-  TaskSpaceTwist v2 = pf.evaluateVelocityAtPose(query2);
-  EXPECT_NEAR(v2.getLinearVelocity().x(), 0.0f, 1e-6f);
-  SpatialVector query3(Eigen::Vector3d(1.9f, 0.0f, 0.0f));  // Inside influence radius
-  TaskSpaceTwist v3 = pf.evaluateVelocityAtPose(query3);
-  EXPECT_GT(v3.getLinearVelocity().x(), 0.0f);  // Should be pushing away from obstacle
+  const double influenceZoneRadius = obs.getInfluenceDistance() + obs.getGeometry().radius;
+  SpatialVector onBoundary(Eigen::Vector3d(influenceZoneRadius, 0.0, 0.0));  // At influence radius
+  SpatialVector outsideBoundary(Eigen::Vector3d(influenceZoneRadius + 0.1, 0.0, 0.0));  // Outside influence radius
+  SpatialVector insideBoundary(Eigen::Vector3d(influenceZoneRadius - 0.1, 0.0, 0.0));  // Inside influence radius
+  TaskSpaceTwist vBoundary = pf.evaluateVelocityAtPose(onBoundary);
+  TaskSpaceTwist vOutside = pf.evaluateVelocityAtPose(outsideBoundary);
+  TaskSpaceTwist vInside = pf.evaluateVelocityAtPose(insideBoundary);
+  EXPECT_NEAR(vBoundary.getLinearVelocity().x(), 0.0, 1e-6);  // At boundary, repulsive force should approach 0
+  EXPECT_NEAR(vOutside.getLinearVelocity().x(), 0.0, 1e-6);
+  EXPECT_GT(vInside.getLinearVelocity().x(), 0.0);  // Should be pushing away from obstacle
 }
 
 TEST(PotentialFieldTest, RepulsionMonotonicity) {

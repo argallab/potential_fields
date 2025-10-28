@@ -632,7 +632,8 @@ MarkerArray PotentialFieldManager::createPotentialVectorMarkers(std::shared_ptr<
         Marker vectorMarker;
         SpatialVector position{point};
         TaskSpaceTwist velocity = pf->evaluateLimitedVelocityAtPose(position);
-        double magnitude = velocity.getLinearVelocity().norm();
+        const Eigen::Vector3d v = velocity.getLinearVelocity();
+        const double magnitude = v.norm();
         vectorMarker.header.frame_id = this->fixedFrame;
         vectorMarker.header.stamp = this->now();
         vectorMarker.ns = "potential_vectors";
@@ -642,20 +643,25 @@ MarkerArray PotentialFieldManager::createPotentialVectorMarkers(std::shared_ptr<
         vectorMarker.pose.position.x = position.getPosition().x();
         vectorMarker.pose.position.y = position.getPosition().y();
         vectorMarker.pose.position.z = position.getPosition().z();
-        // Set the orientation of the arrow to point in the direction of the velocity vector
-        const auto unitDirectionVector = velocity.getLinearVelocity().normalized();
-        double yaw = std::atan2(unitDirectionVector.y(), unitDirectionVector.x());
-        vectorMarker.pose.orientation = PotentialFieldManager::getQuaternionFromYaw(yaw);
+        // Set the orientation of the arrow to point in the 3D direction of the velocity vector
+        Eigen::Quaterniond forceOrientation = Eigen::Quaterniond::Identity();
+        if (v.norm() > 1e-9) {
+          // Arrow mesh assumes +X is forward. Rotate X-axis onto v.
+          forceOrientation = Eigen::Quaterniond::FromTwoVectors(Eigen::Vector3d::UnitX(), v.normalized());
+        }
+        vectorMarker.pose.orientation.x = forceOrientation.x();
+        vectorMarker.pose.orientation.y = forceOrientation.y();
+        vectorMarker.pose.orientation.z = forceOrientation.z();
+        vectorMarker.pose.orientation.w = forceOrientation.w();
         vectorMarker.scale.x = 0.15f; // Length of the arrow
         vectorMarker.scale.y = 0.05f; // Shaft diameter
         vectorMarker.scale.z = 0.1f; // Head diameter
-        // Color the arrows using a gradient depending on
-        // the magnitude of the velocity vector
+        // Color the arrows using a gradient depending on the magnitude of the velocity vector
         // max velocity is red and 0 is blue
         double colorScale = std::min<double>(magnitude / this->maxLinearVelocity, 1.0f);
-        vectorMarker.color.r = 1.0f - colorScale;
+        vectorMarker.color.r = colorScale;
         vectorMarker.color.g = 0.0f;
-        vectorMarker.color.b = colorScale;
+        vectorMarker.color.b = 1.0 - colorScale;
         vectorMarker.color.a = 0.75f; // Semi-transparent
         vectorMarker.lifetime = rclcpp::Duration(0, 0); // No lifetime
         markerArray.markers.push_back(vectorMarker);
