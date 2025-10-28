@@ -617,8 +617,9 @@ TEST(PotentialFieldTest, PlanPathTimeStampConsistency) {
   }
 }
 
-TEST(PotentialFieldTest, PlanPathTwistMatchesEvaluateVelocityAtPose) {
-  // Since planPath logs evaluateVelocityAtPose for each step, verify consistency
+TEST(PotentialFieldTest, PlanPathTwistMatchesConstrainedVelocityAtPose) {
+  // planPath records the velocity AFTER applying motion constraints.
+  // Verify that path.twists[i] equals applyMotionConstraints(evaluateVelocityAtPose(poses[i]), prev, dt)
   SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
   PotentialField pf(goal, 1.0, 0.0);
   SpatialVector start(Eigen::Vector3d(1.5, 0.0, 0.0), Eigen::Quaterniond::Identity());
@@ -629,10 +630,13 @@ TEST(PotentialFieldTest, PlanPathTwistMatchesEvaluateVelocityAtPose) {
   const size_t maxIters = 200;
   PlannedPath path = pf.planPath(start, dt, tol, ik, maxIters);
   ASSERT_EQ(path.poses.size(), path.twists.size());
+  TaskSpaceTwist prevLimited; // starts at zero
   for (size_t i = 0; i < path.poses.size(); ++i) {
-    TaskSpaceTwist expectedTwist = pf.evaluateVelocityAtPose(path.poses[i]);
+    TaskSpaceTwist raw = pf.evaluateVelocityAtPose(path.poses[i]);
+    TaskSpaceTwist expectedLimited = pf.applyMotionConstraints(raw, prevLimited, dt);
     // compare components
-    EXPECT_NEAR((expectedTwist.getLinearVelocity() - path.twists[i].getLinearVelocity()).norm(), 0.0, 1e-9);
-    EXPECT_NEAR((expectedTwist.getAngularVelocity() - path.twists[i].getAngularVelocity()).norm(), 0.0, 1e-9);
+    EXPECT_NEAR((expectedLimited.getLinearVelocity() - path.twists[i].getLinearVelocity()).norm(), 0.0, 1e-9);
+    EXPECT_NEAR((expectedLimited.getAngularVelocity() - path.twists[i].getAngularVelocity()).norm(), 0.0, 1e-9);
+    prevLimited = expectedLimited;
   }
 }

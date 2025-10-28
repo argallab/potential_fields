@@ -369,7 +369,8 @@ public:
    * @param maxIters The maximum number of iterations to perform for path planning, defaults to 30000.
    * @return PlannedPath The planned path containing poses, twists, joint angles, and timestamps.
    */
-  PlannedPath planPath(const SpatialVector& startPose, const double dt, const double goalTolerance,
+  PlannedPath planPath(const SpatialVector& startPose,
+    const double dt, const double goalTolerance,
     std::shared_ptr<IKSolver> ikSolver, const size_t maxIters = 30000);
 
 private:

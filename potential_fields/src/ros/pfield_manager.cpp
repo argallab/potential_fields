@@ -265,14 +265,19 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
     /*maxIterations=*/request->max_iterations
   );
 
-  // Create Path msg from EE Poses
+  // Establish a consistent time base for the planned trajectory
+  const double stepDt = (request->delta_time > 0.0) ? request->delta_time : 0.1;
+  const rclcpp::Time t0 = this->now();
+
+  // Create Path msg from EE Poses, stamp each pose at t0 + i*dt
   nav_msgs::msg::Path path;
   path.header.frame_id = this->fixedFrame;
-  path.header.stamp = this->now();
-  for (const auto& pose : planningResult.poses) {
+  path.header.stamp = t0;
+  for (size_t i = 0; i < planningResult.poses.size(); ++i) {
+    const auto& pose = planningResult.poses[i];
     geometry_msgs::msg::PoseStamped poseStamped;
     poseStamped.header.frame_id = this->fixedFrame;
-    poseStamped.header.stamp = this->now();
+    poseStamped.header.stamp = t0 + rclcpp::Duration::from_seconds(static_cast<double>(i) * stepDt);
     poseStamped.pose.position.x = pose.getPosition().x();
     poseStamped.pose.position.y = pose.getPosition().y();
     poseStamped.pose.position.z = pose.getPosition().z();
@@ -285,19 +290,23 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
 
   // Create JointTrajectory from vector of joint angles
   trajectory_msgs::msg::JointTrajectory jointTrajectory;
-  for (const auto& joints : planningResult.jointAngles) {
+  jointTrajectory.header.stamp = t0;
+  for (size_t i = 0; i < planningResult.jointAngles.size(); ++i) {
+    const auto& joints = planningResult.jointAngles[i];
     trajectory_msgs::msg::JointTrajectoryPoint jtp;
     jtp.positions = joints;
-    jtp.time_from_start = rclcpp::Duration::from_seconds(request->delta_time * jointTrajectory.points.size());
+    jtp.time_from_start = rclcpp::Duration::from_seconds(static_cast<double>(i) * stepDt);
     jointTrajectory.points.push_back(jtp);
   }
 
   // Create EE Velocity Trajectory
   std::vector<geometry_msgs::msg::TwistStamped> eeVelocityTrajectory;
-  for (const auto& twist : planningResult.twists) {
+  eeVelocityTrajectory.reserve(planningResult.twists.size());
+  for (size_t i = 0; i < planningResult.twists.size(); ++i) {
+    const auto& twist = planningResult.twists[i];
     geometry_msgs::msg::TwistStamped eeVel;
     eeVel.header.frame_id = this->fixedFrame;
-    eeVel.header.stamp = this->now();
+    eeVel.header.stamp = t0 + rclcpp::Duration::from_seconds(static_cast<double>(i) * stepDt);
     eeVel.twist.linear.x = twist.getLinearVelocity().x();
     eeVel.twist.linear.y = twist.getLinearVelocity().y();
     eeVel.twist.linear.z = twist.getLinearVelocity().z();

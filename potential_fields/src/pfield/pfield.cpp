@@ -243,7 +243,7 @@ PlannedPath PotentialField::planPath(
     TaskSpaceTwist limitedTwist = this->applyMotionConstraints(evalTwist, prevTwist, stepDt);
     // Record current state
     path.addPoint(
-      current, evalTwist,
+      current, limitedTwist,
       getJointAnglesAtPose(current),
       timeStamp
     );
