@@ -43,12 +43,12 @@ class Demo(ABC):
         )
         plot_kinematics(
             f"Kinematics vs Time [{self.name}]", result, show=True,
-            save_path=f"{self.name.replace(' ', '_')}",
+            save_path=f"demo_plots/{self.name.replace(' ', '_')}",
             description=self.description
         )
         self.PF.simulate(
             start, goal, dt=dt, goal_tolerance=tol, max_steps=steps,
-            # save_path=f"{self.name.replace(' ', '_')}_Simulation.gif", writer="pillow", fps=15, dpi=90, save_every=6, bitrate=1800
+            save_path=f"demo_gifs/{self.name.replace(' ', '_')}_Simulation.gif", writer="pillow", fps=35, dpi=90, save_every=10, bitrate=1800
         )
 
 
@@ -415,38 +415,30 @@ class CollisionPreventionDemo(Demo):
 
 
 if __name__ == "__main__":
-    # Example usage: instantiate a demo and run it
-    # 1) Obstacles in the way
     ObstaclesInTheWayDemo().run(
         start=(-2.0, -1.5, -0.5), goal=(4.0, 1.0, 0.6), dt=0.01, tol=0.1, steps=4000
     )
 
-    # 2) No obstacles
     NoObstaclesDemo().run(
         start=(-2.0, -1.5, -0.5), goal=(4.0, 1.0, 0.6), dt=0.01, tol=0.1, steps=3000
     )
 
-    # 3) Narrow gap corridor
     NarrowGapCorridorDemo().run(
         start=(-3.0, 0.0, 0.0), goal=(3.0, 0.0, 0.0), dt=0.02, tol=0.05, steps=3500
     )
 
-    # 4) U-trap local minima
     UTrapLocalMinimaDemo().run(
         start=(0.0, 0.0, 0.0), goal=(0.0, 2.5, 0.0), dt=0.02, tol=0.05, steps=4000
     )
 
-    # 5) Cluttered spheres
     ClutteredSpheresDemo(seed=7).run(
         start=(-2.0, 0.0, 0.0), goal=(3.0, 0.0, 0.0), dt=0.02, tol=0.06, steps=4000
     )
 
-    # 6) Start inside obstacle
     StartInsideObstacleDemo().run(
         start=(0.0, 0.0, 0.0), goal=(2.0, 0.0, 0.0), dt=0.02, tol=0.05, steps=3000
     )
 
-    # 7) High speed, low accel
     HighSpeedLowAccelDemo().run(
         start=(-3.0, 0.0, 0.0), goal=(3.0, 0.0, 0.0), dt=0.02, tol=0.05, steps=2500
     )
