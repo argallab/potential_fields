@@ -26,3 +26,4 @@
   - Improve interpolation and numerical integration methods
   - User should define motion constraints (velocity, acceleration, jerk) and planned path should respect those constraints
   - Somehow derive PF parameters from motion constraints and/or robot's extent (Repulsive Gain, Attractive Gain, Influence Zone Size, etc)
+- namespace pfield c++ library and externalize from ROS package
