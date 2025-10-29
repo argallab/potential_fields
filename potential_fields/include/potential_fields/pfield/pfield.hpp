@@ -65,10 +65,17 @@ struct PlannedPath {
   double dt; // Time difference between consecutive points [s]
   bool success = false; // Whether the path planning was successful
 
-  PlannedPath()
-    : numPoints(0), duration(0.0), dt(0.0) {}
+  PlannedPath() : numPoints(0), duration(0.0), dt(0.0) {}
 
-  void addPoint(const SpatialVector& pose, const TaskSpaceTwist& twist, std::vector<double> jointAngles, double timeStamp) {
+  /**
+   * @brief Records a path point with the given pose, twist, joint angles, and timestamp.
+   *
+   * @param pose The EE pose at the path point
+   * @param twist The EE twist at the path point
+   * @param jointAngles The joint angles at the path point [rad]
+   * @param timeStamp The time stamp for the path point [s]
+   */
+  void recordPathPoint(const SpatialVector& pose, const TaskSpaceTwist& twist, std::vector<double> jointAngles, double timeStamp) {
     this->poses.push_back(pose);
     this->twists.push_back(twist);
     this->jointAngles.push_back(jointAngles);
