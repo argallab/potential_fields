@@ -100,12 +100,17 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   }
 
   // Allow the user to not use a URDF
-  if (!this->urdfFileName.empty()) {
-    this->pField->initializeKinematics(
-      this->urdfFileName,
-      this->ikSolver->getJointNames(),
-      this->influenceDistance, this->repulsiveGain
-    );
+  if (!this->urdfFileName.empty() && this->urdfFileName.ends_with(".urdf")) {
+    try {
+      this->pField->initializeKinematics(
+        this->urdfFileName,
+        this->ikSolver->getJointNames(),
+        this->influenceDistance, this->repulsiveGain
+      );
+    }
+    catch (const std::exception& e) {
+      RCLCPP_ERROR(this->get_logger(), "Failed to initialize PF Kinematics from URDF: %s", e.what());
+    }
     RCLCPP_INFO(this->get_logger(), "PF Kinematics initialized from URDF: %s", this->urdfFileName.c_str());
   }
   else {
@@ -236,10 +241,10 @@ void PotentialFieldManager::handleComputeAutonomyVector(
 
 void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr request, PlanPath::Response::SharedPtr response) {
   RCLCPP_INFO(this->get_logger(),
-    "PlanPath request: start=(%.3f, %.3f, %.3f) goal=(%.3f, %.3f, %.3f) delta_time=%.4f goal_tolerance=%.6f",
+    "PlanPath request: start=(%.3f, %.3f, %.3f) goal=(%.3f, %.3f, %.3f) delta_time=%.4f goal_tolerance=%.6f max_steps=%d",
     request->start.pose.position.x, request->start.pose.position.y, request->start.pose.position.z,
     request->goal.pose.position.x, request->goal.pose.position.y, request->goal.pose.position.z,
-    request->delta_time, request->goal_tolerance
+    request->delta_time, request->goal_tolerance, request->max_iterations
   );
 
   auto startSV = SpatialVector(
@@ -329,6 +334,17 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
     response->joint_trajectory.points.size(),
     response->end_effector_velocity_trajectory.size()
   );
+  if (!response->success) {
+    // If planning failed, log final pose and distance to goal
+    const auto& finalPose = planningResult.poses.back();
+    const Eigen::Vector3d goalPos = this->pField->getGoalPose().getPosition();
+    const double distanceToGoal = (finalPose.getPosition() - goalPos).norm();
+    RCLCPP_WARN(this->get_logger(),
+      "Planning failed to reach goal. Final pose: pos=(%.3f, %.3f, %.3f), distance to goal=%.6f m",
+      finalPose.getPosition().x(), finalPose.getPosition().y(), finalPose.getPosition().z(),
+      distanceToGoal
+    );
+  }
 }
 
 PFLimits PotentialFieldManager::getPFLimits(std::shared_ptr<PotentialField> pf) {
@@ -404,7 +420,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<Potenti
     obstacleMarker.header.frame_id = this->fixedFrame;
     obstacleMarker.header.stamp = this->now();
     obstacleMarker.frame_locked = true;
-    obstacleMarker.ns = "obstacle_" + obstacleTypeToString(obstacle.getType());
+    obstacleMarker.ns = "obstacles";
     obstacleMarker.id = hashID;
     obstacleMarker.action = Marker::ADD;
     auto position = obstacle.getPosition();
@@ -471,7 +487,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<Potenti
     influenceMarker.header.frame_id = this->fixedFrame;
     influenceMarker.header.stamp = this->now();
     influenceMarker.frame_locked = true;
-    influenceMarker.ns = "obstacle_influence_" + obstacleTypeToString(obstacle.getType());
+    influenceMarker.ns = "influence_zones";
     influenceMarker.id = hashID; // mirror id for influence volume
     influenceMarker.action = Marker::ADD;
     influenceMarker.pose.position.x = position.x();
