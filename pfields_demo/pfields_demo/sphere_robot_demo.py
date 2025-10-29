@@ -167,7 +167,7 @@ class SphereRobotDemo(Node):
         req.goal = goal_pose
         req.delta_time = 0.01  # 10ms time step
         req.goal_tolerance = 0.1  # 10cm tolerance
-        req.max_iterations = 300000
+        req.max_iterations = 5000
 
         # call service asynchronously; handle response in done-callback
         self.get_logger().info('Sending plan_path request (async)...')
@@ -196,10 +196,10 @@ class SphereRobotDemo(Node):
             f'Received plan_path response: success={res.success}, Path Length={ee_path_len}')
         if not res.success:
             self.get_logger().warn('Plan path was not successful; skipping further processing.')
-            return
-        p = res.end_effector_path.poses[0].pose.position
-        self.get_logger().info(
-            f'First EE pose: ({p.x:.4f}, {p.y:.4f}, {p.z:.4f})')
+        if ee_path_len > 0:
+            p = res.end_effector_path.poses[0].pose.position
+            self.get_logger().info(
+                f'First EE pose: ({p.x:.4f}, {p.y:.4f}, {p.z:.4f})')
         if ee_vels > 0:
             v = res.end_effector_velocity_trajectory[0].twist.linear
             self.get_logger().info(
