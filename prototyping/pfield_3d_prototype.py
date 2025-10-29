@@ -1,4 +1,5 @@
 import math
+import os
 import numpy as np
 from dataclasses import dataclass
 import matplotlib.pyplot as plt
@@ -548,15 +549,23 @@ class PotentialField3D:
 
         if save_path:
             try:
+                # Ensure output directory exists
+                out_dir = os.path.dirname(save_path)
+                if out_dir:
+                    os.makedirs(out_dir, exist_ok=True)
+
                 if writer.lower() in ("ffmpeg", "ffmpeg_file", "ffmpeg_writer", "mp4", "h264"):
                     from matplotlib.animation import FFMpegWriter
                     w = FFMpegWriter(fps=fps, bitrate=bitrate)
+                    # When passing a MovieWriter instance, don't pass fps/bitrate to save()
                     anim.save(save_path, writer=w, dpi=dpi)
                 elif writer.lower() == "pillow":
                     from matplotlib.animation import PillowWriter
-                    anim.save(save_path, writer=PillowWriter(
-                        fps=fps), dpi=dpi, bitrate=bitrate)
+                    w = PillowWriter(fps=fps)
+                    # PillowWriter doesn't use bitrate; don't pass fps/bitrate to save() with an instance
+                    anim.save(save_path, writer=w, dpi=dpi)
                 else:
+                    # For string writer names (e.g., 'imagemagick'), passing fps is valid
                     anim.save(save_path, writer=writer, fps=fps, dpi=dpi)
                 print(f"Saved animation to {save_path}")
             except Exception as e:
