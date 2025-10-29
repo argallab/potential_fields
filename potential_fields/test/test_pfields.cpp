@@ -555,9 +555,10 @@ TEST(PotentialFieldTest, PlanPathSinglePointWhenAlreadyAtGoal) {
   // Provide a simple IK solver from the NullMotionPlugin
   NullMotionPlugin nullPlugin;
   auto ik = nullPlugin.getIKSolver();
+  pf.assignIKSolver(ik);
   const double dt = 0.05;
   const double tol = 1e-3; // matches translationalTolerance
-  PlannedPath path = pf.planPath(goal, dt, tol, ik); // startPose == goal
+  PlannedPath path = pf.planPath(goal, dt, tol); // startPose == goal
   ASSERT_EQ(path.numPoints, 1u);
   ASSERT_EQ(path.poses.size(), 1u);
   ASSERT_EQ(path.twists.size(), 1u);
@@ -575,10 +576,11 @@ TEST(PotentialFieldTest, PlanPathMonotonicConvergenceToGoal) {
   SpatialVector start(Eigen::Vector3d(2.0, 0.0, 0.0), Eigen::Quaterniond::Identity());
   NullMotionPlugin nullPlugin;
   auto ik = nullPlugin.getIKSolver();
+  pf.assignIKSolver(ik);
   const double dt = 0.1;
   const double tol = 1e-3;
   const size_t maxIters = 500;
-  PlannedPath path = pf.planPath(start, dt, tol, ik, maxIters);
+  PlannedPath path = pf.planPath(start, dt, tol, maxIters);
   ASSERT_GT(path.numPoints, 1u); // should have progressed
   // Distances should be non-increasing
   double prevDist = (path.poses.front().getPosition() - goal.getPosition()).norm();
@@ -602,10 +604,11 @@ TEST(PotentialFieldTest, PlanPathTimeStampConsistency) {
   SpatialVector start(Eigen::Vector3d(1.0, 0.0, 0.0), Eigen::Quaterniond::Identity());
   NullMotionPlugin nullPlugin;
   auto ik = nullPlugin.getIKSolver();
+  pf.assignIKSolver(ik);
   const double dt = 0.05;
   const double tol = 1e-3;
   const size_t maxIters = 400;
-  PlannedPath path = pf.planPath(start, dt, tol, ik, maxIters);
+  PlannedPath path = pf.planPath(start, dt, tol, maxIters);
   ASSERT_EQ(path.dt, dt); // stored dt
   // timeStamps[i] should be approximately i*dt
   for (size_t i = 0; i < path.timeStamps.size(); ++i) {
@@ -625,10 +628,11 @@ TEST(PotentialFieldTest, PlanPathTwistMatchesConstrainedVelocityAtPose) {
   SpatialVector start(Eigen::Vector3d(1.5, 0.0, 0.0), Eigen::Quaterniond::Identity());
   NullMotionPlugin nullPlugin;
   auto ik = nullPlugin.getIKSolver();
+  pf.assignIKSolver(ik);
   const double dt = 0.1;
   const double tol = 1e-3;
   const size_t maxIters = 200;
-  PlannedPath path = pf.planPath(start, dt, tol, ik, maxIters);
+  PlannedPath path = pf.planPath(start, dt, tol, maxIters);
   ASSERT_EQ(path.poses.size(), path.twists.size());
   TaskSpaceTwist prevLimited; // starts at zero
   for (size_t i = 0; i < path.poses.size(); ++i) {

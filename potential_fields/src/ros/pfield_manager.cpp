@@ -99,6 +99,9 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
     RCLCPP_INFO(this->get_logger(), "Using IKSolver: %s", this->ikSolver->getName().c_str());
   }
 
+  // Once IKSolver is initialized, assign it to the PF instance
+  this->pField->assignIKSolver(this->ikSolver);
+
   // Allow the user to not use a URDF
   if (!this->urdfFileName.empty() && this->urdfFileName.ends_with(".urdf")) {
     try {
@@ -266,7 +269,6 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
     /*startPose=*/startSV,
     /*dt=*/request->delta_time,
     /*goalTolerance=*/request->goal_tolerance,
-    /*ikSolver=*/this->ikSolver,
     /*maxIterations=*/request->max_iterations
   );
 
