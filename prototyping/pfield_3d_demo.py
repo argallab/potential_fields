@@ -197,14 +197,12 @@ class PotentialField3D:
                  linear_gain: float = 1.0,
                  max_speed: float = 1.0,
                  max_accel: float = 2.0,
-                 damping: float = 0.0,
                  beta_velocity: float = 1.0):
         self.attractive_gain = float(attractive_gain)
         self.repulsive_gain = float(repulsive_gain)
         self.linear_gain = float(linear_gain)
         self.max_speed = float(max_speed)
         self.max_accel = float(max_accel)
-        self.damping = float(damping)
         self.beta_velocity = float(beta_velocity)
         self._spheres: List[SphereObstacle] = []
         self._obbs: List[OBBObstacle] = []
@@ -257,8 +255,8 @@ class PotentialField3D:
                 total += coeff * n_hat
         return total
 
-    def total_force(self, p: np.ndarray, g: np.ndarray, v_curr: np.ndarray) -> np.ndarray:
-        return self.attractive_force(p, g) + self.repulsive_force(p) - self.damping * v_curr
+    def total_force(self, p: np.ndarray, g: np.ndarray) -> np.ndarray:
+        return self.attractive_force(p, g) + self.repulsive_force(p)
 
     def _apply_motion_limits(self, v_cmd: np.ndarray, v_prev: np.ndarray, dt: float) -> np.ndarray:
         """
@@ -585,7 +583,6 @@ def obstacles_in_the_way():
         linear_gain=1.0,
         max_speed=1.5,
         max_accel=3.2,
-        damping=0.0,
         beta_velocity=1.0
     )
     pf.add_sphere(cx=1.5, cy=1.0, cz=0.7, radius=0.7, influence_distance=1.0)
@@ -624,7 +621,6 @@ def no_obstacles():
         linear_gain=1.0,
         max_speed=2.0,
         max_accel=4.0,
-        damping=0.0,
         beta_velocity=1.0
     )
 
@@ -660,7 +656,6 @@ def narrow_gap_corridor():
         linear_gain=1.0,
         max_speed=1.2,
         max_accel=2.0,
-        damping=0.1,
         beta_velocity=1.0,
     )
 
@@ -701,7 +696,6 @@ def u_trap_local_minima():
         linear_gain=1.0,
         max_speed=1.0,
         max_accel=2.0,
-        damping=0.2,          # more damping can help
         beta_velocity=1.0,
     )
 
@@ -741,7 +735,6 @@ def cluttered_spheres(seed: int = 7):
         linear_gain=1.0,
         max_speed=1.3,
         max_accel=2.5,
-        damping=0.12,
         beta_velocity=1.2,
     )
 
@@ -782,7 +775,6 @@ def start_inside_obstacle():
         linear_gain=1.0,
         max_speed=1.2,
         max_accel=2.2,
-        damping=0.1,
         beta_velocity=1.0,
     )
     pf.add_sphere(cx=0.0, cy=0.0, cz=0.0, radius=0.7, influence_distance=1.0)
@@ -812,7 +804,6 @@ def high_speed_low_accel():
         linear_gain=1.2,
         max_speed=4.0,    # high speed ceiling
         max_accel=0.5,    # small accel
-        damping=0.05,
         beta_velocity=1.0,
     )
 
@@ -899,7 +890,6 @@ def damping_and_constraints_prevent_collision():
         linear_gain=1.0,
         max_speed=1.0,         # placeholders; per-run instances override these
         max_accel=1.0,
-        damping=0.0,
         beta_velocity=1.0,
     )
     # Obstacle layout
@@ -920,7 +910,6 @@ def damping_and_constraints_prevent_collision():
         linear_gain=env.linear_gain,
         max_speed=3.5,          # fast
         max_accel=0.5,          # sluggish acceleration
-        damping=0.0,            # no viscous damping
         beta_velocity=1.0,
     )
     # Copy obstacles
@@ -938,7 +927,6 @@ def damping_and_constraints_prevent_collision():
         linear_gain=env.linear_gain,
         max_speed=1.2,          # slower top speed
         max_accel=2.5,          # can turn/adjust faster
-        damping=0.35,           # viscous damping to quash overshoot
         beta_velocity=1.0,
     )
     pf_safe._spheres = env._spheres.copy()
