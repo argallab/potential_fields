@@ -25,7 +25,7 @@ class SphereRobotDemo(Node):
             ObstacleArray, '/pfield/obstacles', 10
         )
         self.query_pub = self.create_publisher(
-            PoseStamped, '/pfield/query_pose', 10
+            Pose, '/pfield/query_pose', 10
         )
         self.cli = self.create_client(PlanPath, 'pfield/plan_path')
         # Service to trigger demo
