@@ -3,6 +3,8 @@
 
 #include <eigen3/Eigen/Core>
 #include <eigen3/Eigen/Geometry>
+// URDF types used by common helpers (e.g., pose conversion)
+#include <urdf/model.h>
 
 inline static bool isPositiveFinite(double v) { return std::isfinite(v) && v > 1e-12; }
 
@@ -51,12 +53,29 @@ inline Eigen::Vector3d rateLimitStep(const Eigen::Vector3d& prev, const Eigen::V
  */
 static inline Eigen::Vector3d rotateVector(const Eigen::Quaterniond& q, const Eigen::Vector3d& v) { return q * v; }
 
+/**
+ * @brief Convert a urdf::Pose to an Eigen::Affine3d
+ *
+ * The URDF pose stores position (x,y,z) and a quaternion (x,y,z,w). This helper
+ * creates an Eigen isometry with the same translation and rotation.
+ */
+static inline Eigen::Affine3d urdfPoseToEigen(const urdf::Pose& p) {
+  const Eigen::Quaterniond q(p.rotation.w, p.rotation.x, p.rotation.y, p.rotation.z);
+  const Eigen::Translation3d t(p.position.x, p.position.y, p.position.z);
+  Eigen::Affine3d T = Eigen::Affine3d::Identity();
+  T.linear() = q.toRotationMatrix();
+  T.translation() = t.vector();
+  return T;
+}
+
 constexpr double DEFAULT_ATTRACTIVE_GAIN = 1.0; // Gain for attractive force [Ns/m]
 constexpr double DEFAULT_ROTATIONAL_ATTRACTIVE_GAIN = 0.7; // Gain for rotational attractive force [Ns/m]
 constexpr double DEFAULT_MAX_LINEAR_VELOCITY = 5.0; // [m/s]
 constexpr double DEFAULT_MAX_ANGULAR_VELOCITY = 1.0; // [rad/s]
 constexpr double DEFAULT_MAX_LINEAR_ACCELERATION = 1.0; // [m/s^2]
 constexpr double DEFAULT_MAX_ANGULAR_ACCELERATION = 1.0; // [rad/s^2]
+constexpr double DEFAULT_REPULSIVE_GAIN = 0.22; // [Ns/m] default repulsive gain
+constexpr double DEFAULT_INFLUENCE_DISTANCE = 1.0; // [m] default influence distance
 constexpr double NEAR_ZERO_THRESHOLD = 1e-9; // Threshold for floating point near-zero comparisons
 
 

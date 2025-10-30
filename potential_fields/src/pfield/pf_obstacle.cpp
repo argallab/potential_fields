@@ -3,11 +3,11 @@
 #include "pfield/pfield_common.hpp"
 
 
-bool PotentialFieldObstacle::withinInfluenceZone(Eigen::Vector3d worldPoint) const {
+bool PotentialFieldObstacle::withinInfluenceZone(Eigen::Vector3d worldPoint, double influenceDistance) const {
   double signedDistance;
   Eigen::Vector3d normal; // unused
   this->computeSignedDistanceAndNormal(worldPoint, signedDistance, normal);
-  return signedDistance <= this->influenceDistance;
+  return signedDistance <= influenceDistance;
 }
 
 bool PotentialFieldObstacle::withinObstacle(Eigen::Vector3d worldPoint) const {

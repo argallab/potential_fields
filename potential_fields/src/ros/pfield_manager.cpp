@@ -41,7 +41,7 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   this->maxAngularVelocity = this->declare_parameter("max_angular_velocity", 1.0); // [rad/s]
   this->maxLinearAcceleration = this->declare_parameter("max_linear_acceleration", 1.0); // [m/s^2]
   this->maxAngularAcceleration = this->declare_parameter("max_angular_acceleration", 1.0); // [rad/s^2]
-  this->influenceDistance = this->declare_parameter("influence_distance", 2.0); // Influence distance for obstacle repulsion
+  this->influenceDistance = this->declare_parameter("influence_distance", 1.0); // Influence distance for obstacle repulsion
   this->fixedFrame = this->declare_parameter("fixed_frame", "world"); // RViz fixed frame
   this->visualizerBufferArea = this->declare_parameter("visualizer_buffer_area", 1.0); // Extra area to visualize the PF [m]
   this->fieldResolution = this->declare_parameter("field_resolution", 0.5); // Resolution of the potential field grid [m]
@@ -65,9 +65,10 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
 
   // Initialize the potential fields
   this->pField = std::make_shared<PotentialField>(
-    this->attractiveGain, this->rotationalAttractiveGain,
+    this->attractiveGain, this->repulsiveGain, this->rotationalAttractiveGain,
     this->maxLinearVelocity, this->maxAngularVelocity,
-    this->maxLinearAcceleration, this->maxAngularAcceleration
+    this->maxLinearAcceleration, this->maxAngularAcceleration,
+    this->influenceDistance
   );
 
   // Initialize the motion plugin
@@ -105,11 +106,7 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   // Allow the user to not use a URDF
   if (!this->urdfFileName.empty() && this->urdfFileName.ends_with(".urdf")) {
     try {
-      this->pField->initializeKinematics(
-        this->urdfFileName,
-        this->ikSolver->getJointNames(),
-        this->influenceDistance, this->repulsiveGain
-      );
+      this->pField->initializeKinematics(this->urdfFileName, this->ikSolver->getJointNames());
     }
     catch (const std::exception& e) {
       RCLCPP_ERROR(this->get_logger(), "Failed to initialize PF Kinematics from URDF: %s", e.what());
@@ -161,8 +158,6 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
         stringToObstacleType(obst.type),
         stringToObstacleGroup(obst.group),
         ObstacleGeometry{obst.radius, obst.length, obst.width, obst.height},
-        this->influenceDistance,
-        this->repulsiveGain,
         obst.mesh_resource,
         Eigen::Vector3d(obst.scale_x, obst.scale_y, obst.scale_z)
       );
@@ -201,7 +196,7 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
 
 void PotentialFieldManager::timerCallback() {
   // Get updated obstacles from PFKinematics and update internal PF
-  this->pField->updateObstaclesFromKinematics(this->motionPlugin->getCurrentJointAngles());
+  // this->pField->updateObstaclesFromKinematics(this->motionPlugin->getCurrentJointAngles());
   MarkerArray pfieldMarkers = this->visualizePF(this->pField);
   this->pFieldMarkerPub->publish(pfieldMarkers);
 }
@@ -503,7 +498,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<Potenti
     case ObstacleType::SPHERE: {
       // Inflated sphere diameter = 2 * (radius + influenceDistance).
       influenceMarker.type = Marker::SPHERE;
-      const double influenceZoneDiameter = 2.0 * (obstacle.getGeometry().radius + obstacle.getInfluenceDistance());
+      const double influenceZoneDiameter = 2.0 * (obstacle.getGeometry().radius + pf->getInfluenceDistance());
       influenceMarker.scale.x = influenceZoneDiameter;
       influenceMarker.scale.y = influenceZoneDiameter;
       influenceMarker.scale.z = influenceZoneDiameter;
@@ -512,7 +507,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<Potenti
     case ObstacleType::BOX: {
       // Inflated box dimensions = base dims + 2 * influenceDistance along each axis.
       influenceMarker.type = Marker::CUBE;
-      const double d = obstacle.getInfluenceDistance();
+      const double d = pf->getInfluenceDistance();
       influenceMarker.scale.x = obstacle.getGeometry().length + 2.0 * d;
       influenceMarker.scale.y = obstacle.getGeometry().width + 2.0 * d;
       influenceMarker.scale.z = obstacle.getGeometry().height + 2.0 * d;
@@ -521,7 +516,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<Potenti
     case ObstacleType::CYLINDER: {
       // Inflated cylinder: diameter = 2 * (radius + d), height = height + 2 * d.
       influenceMarker.type = Marker::CYLINDER;
-      const double d = obstacle.getInfluenceDistance();
+      const double d = pf->getInfluenceDistance();
       const double r = obstacle.getGeometry().radius;
       influenceMarker.scale.x = 2.0 * (r + d);
       influenceMarker.scale.y = 2.0 * (r + d);
@@ -532,7 +527,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<Potenti
       // Visualize the influence zone as an "inflated" version of the original mesh.
       // We approximate a Minkowski sum by scaling the mesh per-axis so its AABB grows by +2d.
       // This preserves the silhouette and is a better visual cue than a plain inflated AABB cube.
-      const double d = obstacle.getInfluenceDistance();
+      const double d = pf->getInfluenceDistance();
       if (!obstacle.getMeshResource().empty()) {
         influenceMarker.type = Marker::MESH_RESOURCE;
         influenceMarker.mesh_resource = obstacle.getMeshResource();
@@ -743,8 +738,8 @@ void PotentialFieldManager::exportFieldDataToCSV(std::shared_ptr<PotentialField>
       const Eigen::Vector3d& position = obstacle.getPosition();
       const ObstacleGeometry& g = obstacle.getGeometry();
       obstacles_file << position.x() << "," << position.y() << "," << position.z() << ","
-        << obstacleTypeToString(obstacle.getType()) << "," << obstacle.getInfluenceDistance() << ","
-        << obstacle.getRepulsiveGain() << ","
+        << obstacleTypeToString(obstacle.getType()) << "," << this->pField->getInfluenceDistance() << ","
+        << this->pField->getRepulsiveGain() << ","
         << g.radius << "," << g.length << "," << g.width << "," << g.height
         << "\n";
     }

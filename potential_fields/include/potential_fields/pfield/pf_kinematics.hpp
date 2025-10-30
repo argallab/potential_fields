@@ -23,9 +23,7 @@ struct CollisionCatalogEntry {
 class PFKinematics {
 public:
   PFKinematics() = default;
-  PFKinematics(
-    const std::string& urdfFileName, const std::vector<std::string>& jointNames,
-    const double influenceDistance, const double repulsiveGain);
+  PFKinematics(const std::string& urdfFileName, const std::vector<std::string>& jointNames);
   ~PFKinematics() = default;
 
   pinocchio::Model& getModel() { return this->model; }
@@ -52,18 +50,15 @@ public:
    *        each collision object's link, name, and Collision pointer.
    *
    * @param model The URDF model
-   * @param influenceDistance The distance from the obstacle surface to the edge of the influence zone
    * @param repulsiveGain The repulsive gain for the robot obstacles
    * @return std::vector<CollisionCatalogEntry> The built collision catalog
    */
-  std::vector<CollisionCatalogEntry> buildCollisionCatalog(urdf::Model& model,
-    const double influenceDistance, const double repulsiveGain);
+  std::vector<CollisionCatalogEntry> buildCollisionCatalog(urdf::Model& model);
 
   /**
    * @brief Builds an Obstacle message from a URDF Collision object and given pose
    *
    * @param frameID The frame ID for the obstacle's pose to be defined in
-   * @param influenceDistance The influence distance for the obstacle
    * @param collisionObject The URDF Collision object, defining geometry and type
    * @param position The position of the obstacle
    * @param orientation The orientation of the obstacle
@@ -71,7 +66,6 @@ public:
    */
   PotentialFieldObstacle obstacleFromCollisionObject(
     const std::string& frameID,
-    const double influenceDistance, const double repulsiveGain,
     const urdf::Collision& collisionObject,
     const Eigen::Vector3d& position, const Eigen::Quaterniond& orientation);
 
@@ -80,6 +74,25 @@ public:
   bool areCachesInitialized() const { return this->cachesReady; }
   const std::vector<std::string>& cachedJointNames() const { return this->jointNamesCache; }
   const std::vector<std::string>& cachedLinkNames() const { return this->linkNamesCache; }
+
+  /**
+   * @brief Estimate a conservative bounding-sphere radius of the robot from its URDF
+   *        using collision geometry. The radius is computed as the maximum of
+   *        ||p_base|| + r_local across all collision objects, where p_base is the
+   *        collision origin expressed in the base frame (at nominal zero joint values)
+   *        and r_local is the local bounding-sphere radius of the collision geometry.
+   *
+   * Geometry handling:
+   *  - Box(l,w,h): r_local = 0.5 * sqrt(l^2 + w^2 + h^2)
+   *  - Sphere(r): r_local = r
+   *  - Cylinder(r,len): r_local = sqrt(r^2 + (len/2)^2)
+   *  - Mesh(file,scale): if mesh extents are unavailable, uses a conservative heuristic:
+   *      r_local ≈ meshFallbackRadius * max(scale.x, scale.y, scale.z)
+   *
+   * @return double Estimated robot radius in meters. Returns 0.0 if no collision
+   *         geometry is found or the URDF model is not initialized.
+   */
+  double estimateRobotExtentRadius();
 
 private:
   pinocchio::Model model;

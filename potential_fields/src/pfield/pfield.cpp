@@ -4,10 +4,12 @@
 
 void PotentialField::initializeKinematics(
   const std::string& urdfFilePath,
-  const std::vector<std::string>& jointNames,
-  const double influenceDistance, const double repulsiveGain) {
+  const std::vector<std::string>& jointNames) {
   this->urdfFileName = urdfFilePath;
-  this->pfKinematics = std::make_unique<PFKinematics>(this->urdfFileName, jointNames, influenceDistance, repulsiveGain);
+  this->pfKinematics = std::make_unique<PFKinematics>(this->urdfFileName, jointNames);
+  const double maxExtent = this->pfKinematics->estimateRobotExtentRadius();
+  // Assign influence distance using maximum robot extent or the default, whichever is more generous
+  this->influenceDistance = std::max(this->influenceDistance, maxExtent);
 }
 
 void PotentialField::updateObstaclesFromKinematics(const std::vector<double>& jointAngles) {
@@ -69,7 +71,7 @@ bool PotentialField::isPointInsideObstacle(Eigen::Vector3d point) const {
 
 bool PotentialField::isPointWithinInfluenceZone(Eigen::Vector3d point) const {
   for (const auto& obst : this->obstacles) {
-    if (obst.withinInfluenceZone(point)) { return true; }
+    if (obst.withinInfluenceZone(point, this->influenceDistance)) { return true; }
   }
   return false;
 }
@@ -205,7 +207,7 @@ Eigen::Vector3d PotentialField::computeRepulsiveForceLinear(const SpatialVector&
     // Define an effective distance d for the classic repulsive potential:
     //  - outside (sd >= 0): d = max(sd, eps)
     //  - inside (sd < 0): treat as very close to surface to generate strong outward push
-    const double Q = std::max(obst.getInfluenceDistance(), NEAR_ZERO_THRESHOLD);
+    const double Q = std::max(this->influenceDistance, NEAR_ZERO_THRESHOLD);
     const double d = (signedDistance >= 0.0) ? std::max(signedDistance, NEAR_ZERO_THRESHOLD) : NEAR_ZERO_THRESHOLD;
     // Only contribute if within the influence distance
     if (d < Q) {
@@ -213,7 +215,7 @@ Eigen::Vector3d PotentialField::computeRepulsiveForceLinear(const SpatialVector&
       const double inverseDistance = 1.0 / d;
       const double inverseDistanceSquared = inverseDistance * inverseDistance;
       const double inverseInfluenceDistance = 1.0 / Q;
-      const double magnitude = obst.getRepulsiveGain() * (inverseDistance - inverseInfluenceDistance) * inverseDistanceSquared;
+      const double magnitude = this->repulsiveGain * (inverseDistance - inverseInfluenceDistance) * inverseDistanceSquared;
       if (magnitude > NEAR_ZERO_THRESHOLD) { F += normalToObstSurface * magnitude; }
     }
   }

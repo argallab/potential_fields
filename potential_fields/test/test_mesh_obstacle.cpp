@@ -290,8 +290,7 @@ TEST(PFObstacle, SignedDistanceAndNormal_Sphere) {
     "world",
     Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity(),
     ObstacleType::SPHERE, ObstacleGroup::STATIC,
-    ObstacleGeometry(/*radius*/1.0, /*L*/0.0, /*W*/0.0, /*H*/0.0),
-    /*influenceDistance*/ 0.5, /*repulsiveGain*/ 1.0);
+    ObstacleGeometry(/*radius*/1.0, /*L*/0.0, /*W*/0.0, /*H*/0.0));
 
   double sd; Eigen::Vector3d n;
   sphere.computeSignedDistanceAndNormal(Eigen::Vector3d(2.0, 0.0, 0.0), sd, n);
@@ -313,8 +312,7 @@ TEST(PFObstacle, SignedDistanceAndNormal_Box_AxisAligned) {
     "world",
     Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity(),
     ObstacleType::BOX, ObstacleGroup::STATIC,
-    ObstacleGeometry(/*r*/0.0, /*L*/2.0, /*W*/2.0, /*H*/2.0),
-    /*influenceDistance*/ 0.5, /*repulsiveGain*/ 1.0);
+    ObstacleGeometry(/*r*/0.0, /*L*/2.0, /*W*/2.0, /*H*/2.0));
 
   double sd; Eigen::Vector3d n;
   // Outside along +X
@@ -338,8 +336,7 @@ TEST(PFObstacle, SignedDistanceAndNormal_Cylinder) {
     "world",
     Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity(),
     ObstacleType::CYLINDER, ObstacleGroup::STATIC,
-    ObstacleGeometry(/*r*/1.0, /*L*/0.0, /*W*/0.0, /*H*/2.0),
-    /*influenceDistance*/ 0.5, /*repulsiveGain*/ 1.0);
+    ObstacleGeometry(/*r*/1.0, /*L*/0.0, /*W*/0.0, /*H*/2.0));
 
   double sd; Eigen::Vector3d n;
   // Outside on the side within height
@@ -370,8 +367,7 @@ TEST(PFObstacle, SignedDistanceAndNormal_MeshCube) {
     "world",
     Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity(),
     ObstacleType::MESH, ObstacleGroup::STATIC,
-    ObstacleGeometry(/*r*/0.0, /*L*/1.0, /*W*/1.0, /*H*/1.0),
-    /*influenceDistance*/ 0.2, /*repulsiveGain*/ 1.0);
+    ObstacleGeometry(/*r*/0.0, /*L*/1.0, /*W*/1.0, /*H*/1.0));
   auto cubePtr = std::make_shared<MeshCollisionData>(buildUnitCubeMesh());
   // Assign the synthetic mesh directly (allowed by private->public hack at include)
   meshObs.assignMeshCollisionData(cubePtr);

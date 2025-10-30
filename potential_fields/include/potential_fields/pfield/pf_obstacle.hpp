@@ -131,7 +131,6 @@ public:
     std::string frameID,
     Eigen::Vector3d centerPosition, Eigen::Quaterniond orientation,
     ObstacleType type, ObstacleGroup group, ObstacleGeometry geometry,
-    double influenceDistance, double repulsiveGain,
     const std::string& meshResource = std::string(),
     const Eigen::Vector3d& meshScale = Eigen::Vector3d::Ones())
     : frameID(frameID),
@@ -141,8 +140,6 @@ public:
     type(type),
     group(group),
     geometry(geometry),
-    influenceDistance(influenceDistance),
-    repulsiveGain(repulsiveGain),
     meshResource(meshResource),
     meshScale(meshScale) {
     if (type == ObstacleType::MESH && !meshResource.empty()) {
@@ -163,8 +160,6 @@ public:
     type(other.type),
     group(other.group),
     geometry(other.geometry),
-    influenceDistance(other.influenceDistance),
-    repulsiveGain(other.repulsiveGain),
     meshResource(other.meshResource),
     meshScale(other.meshScale) {
     // Shallow copy of shared mesh data
@@ -179,8 +174,6 @@ public:
     type(other.type),
     group(other.group),
     geometry(std::move(other.geometry)),
-    influenceDistance(other.influenceDistance),
-    repulsiveGain(other.repulsiveGain),
     meshResource(std::move(other.meshResource)),
     meshScale(std::move(other.meshScale)) {
     this->meshCollisionData = std::move(other.meshCollisionData);
@@ -195,8 +188,6 @@ public:
       this->type = other.type;
       this->group = other.group;
       this->geometry = other.geometry;
-      this->influenceDistance = other.influenceDistance;
-      this->repulsiveGain = other.repulsiveGain;
       this->meshResource = other.meshResource;
       this->meshScale = other.meshScale;
       this->meshCollisionData = other.meshCollisionData; // share existing (may be null)
@@ -210,8 +201,7 @@ public:
   Eigen::Quaterniond getOrientation() const { return this->orientation; }
   ObstacleType getType() const { return this->type; }
   ObstacleGeometry getGeometry() const { return this->geometry; }
-  double getInfluenceDistance() const { return this->influenceDistance; }
-  double getRepulsiveGain() const { return this->repulsiveGain; }
+
   const std::string& getMeshResource() const { return this->meshResource; }
   Eigen::Vector3d getMeshScale() const { return this->meshScale; }
 
@@ -241,7 +231,7 @@ public:
 
   void assignMeshCollisionData(const std::shared_ptr<MeshCollisionData>& meshData) { this->meshCollisionData = meshData; }
 
-  bool withinInfluenceZone(Eigen::Vector3d worldPoint) const;
+  bool withinInfluenceZone(Eigen::Vector3d worldPoint, double influenceDistance) const;
   bool withinObstacle(Eigen::Vector3d worldPoint) const;
 
   bool operator==(const PotentialFieldObstacle& other) const {
@@ -285,8 +275,7 @@ private:
   ObstacleType type; // Type of the obstacle
   ObstacleGroup group; // Obstacle group/category
   ObstacleGeometry geometry; // Geometry of the obstacle, containing relevant dimensions
-  double influenceDistance; // Distance [m] from obstacle surface to influence zone boundary
-  double repulsiveGain; // Gain for the repulsive force
+
   std::string meshResource; // URI or file path to the mesh resource (e.g., package://, file://)
   Eigen::Vector3d meshScale; // Scale for mesh visualization if using MESH_RESOURCE
   std::shared_ptr<MeshCollisionData> meshCollisionData; // populated when mesh resource loaded (shared to avoid deep copies)

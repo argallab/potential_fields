@@ -97,21 +97,25 @@ public:
   // =========== Constructors and Operators ===========
   PotentialField()
     : attractiveGain(DEFAULT_ATTRACTIVE_GAIN),
+    repulsiveGain(DEFAULT_REPULSIVE_GAIN),
     rotationalAttractiveGain(DEFAULT_ROTATIONAL_ATTRACTIVE_GAIN),
     maxLinearVelocity(DEFAULT_MAX_LINEAR_VELOCITY),
     maxAngularVelocity(DEFAULT_MAX_ANGULAR_VELOCITY),
     maxLinearAcceleration(DEFAULT_MAX_LINEAR_ACCELERATION),
     maxAngularAcceleration(DEFAULT_MAX_ANGULAR_ACCELERATION),
+    influenceDistance(DEFAULT_INFLUENCE_DISTANCE),
     goalPose(SpatialVector(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity())) {}
   ~PotentialField() = default;
 
   PotentialField(const PotentialField& other) :
     attractiveGain(other.attractiveGain),
+    repulsiveGain(other.repulsiveGain),
     rotationalAttractiveGain(other.rotationalAttractiveGain),
     maxLinearVelocity(other.maxLinearVelocity),
     maxAngularVelocity(other.maxAngularVelocity),
     maxLinearAcceleration(other.maxLinearAcceleration),
     maxAngularAcceleration(other.maxAngularAcceleration),
+    influenceDistance(other.influenceDistance),
     goalPose(other.goalPose),
     obstacles(other.obstacles) {}
 
@@ -122,63 +126,88 @@ public:
    * @param goalPose The pose in 3D space that will generate an attractive force.
    */
   explicit PotentialField(SpatialVector goalPose) :
-    attractiveGain(1.0),
-    rotationalAttractiveGain(0.7),
+    attractiveGain(DEFAULT_ATTRACTIVE_GAIN),
+    repulsiveGain(DEFAULT_REPULSIVE_GAIN),
+    rotationalAttractiveGain(DEFAULT_ROTATIONAL_ATTRACTIVE_GAIN),
     maxLinearVelocity(DEFAULT_MAX_LINEAR_VELOCITY),
     maxAngularVelocity(DEFAULT_MAX_ANGULAR_VELOCITY),
     maxLinearAcceleration(DEFAULT_MAX_LINEAR_ACCELERATION),
     maxAngularAcceleration(DEFAULT_MAX_ANGULAR_ACCELERATION),
+    influenceDistance(DEFAULT_INFLUENCE_DISTANCE),
     goalPose(goalPose) {}
 
-  PotentialField(SpatialVector goalPose, double attractiveGain, double rotationalAttractiveGain) :
+  PotentialField(SpatialVector goalPose, double attractiveGain, double repulsiveGain, double rotationalAttractiveGain) :
     attractiveGain(attractiveGain),
+    repulsiveGain(repulsiveGain),
     rotationalAttractiveGain(rotationalAttractiveGain),
     maxLinearVelocity(DEFAULT_MAX_LINEAR_VELOCITY),
     maxAngularVelocity(DEFAULT_MAX_ANGULAR_VELOCITY),
     maxLinearAcceleration(DEFAULT_MAX_LINEAR_ACCELERATION),
     maxAngularAcceleration(DEFAULT_MAX_ANGULAR_ACCELERATION),
+    influenceDistance(DEFAULT_INFLUENCE_DISTANCE),
     goalPose(goalPose) {}
 
-  PotentialField(
-    double attractiveGain, double rotationalAttractiveGain,
-    double maxLinearVelocity, double maxAngularVelocity) :
+  PotentialField(double attractiveGain, double repulsiveGain, double rotationalAttractiveGain) :
     attractiveGain(attractiveGain),
+    repulsiveGain(repulsiveGain),
+    rotationalAttractiveGain(rotationalAttractiveGain),
+    maxLinearVelocity(DEFAULT_MAX_LINEAR_VELOCITY),
+    maxAngularVelocity(DEFAULT_MAX_ANGULAR_VELOCITY),
+    maxLinearAcceleration(DEFAULT_MAX_LINEAR_ACCELERATION),
+    maxAngularAcceleration(DEFAULT_MAX_ANGULAR_ACCELERATION),
+    influenceDistance(DEFAULT_INFLUENCE_DISTANCE),
+    goalPose(SpatialVector(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity())) {}
+
+  PotentialField(
+    double attractiveGain, double repulsiveGain, double rotationalAttractiveGain,
+    double maxLinearVelocity, double maxAngularVelocity,
+    double influenceDistance) :
+    attractiveGain(attractiveGain),
+    repulsiveGain(repulsiveGain),
     rotationalAttractiveGain(rotationalAttractiveGain),
     maxLinearVelocity(maxLinearVelocity),
     maxAngularVelocity(maxAngularVelocity),
     maxLinearAcceleration(DEFAULT_MAX_LINEAR_ACCELERATION),
     maxAngularAcceleration(DEFAULT_MAX_ANGULAR_ACCELERATION),
+    influenceDistance(influenceDistance),
     goalPose(SpatialVector(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity())) {}
 
   PotentialField(
-    double attractiveGain, double rotationalAttractiveGain,
+    double attractiveGain, double repulsiveGain, double rotationalAttractiveGain,
     double maxLinearVelocity, double maxAngularVelocity,
-    double maxLinearAcceleration, double maxAngularAcceleration) :
+    double maxLinearAcceleration, double maxAngularAcceleration,
+    double influenceDistance) :
     attractiveGain(attractiveGain),
+    repulsiveGain(repulsiveGain),
     rotationalAttractiveGain(rotationalAttractiveGain),
     maxLinearVelocity(maxLinearVelocity),
     maxAngularVelocity(maxAngularVelocity),
     maxLinearAcceleration(maxLinearAcceleration),
     maxAngularAcceleration(maxAngularAcceleration),
+    influenceDistance(influenceDistance),
     goalPose(SpatialVector(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity())) {}
 
   PotentialField(
     SpatialVector goalPose,
-    double attractiveGain, double rotationalAttractiveGain,
+    double attractiveGain, double repulsiveGain, double rotationalAttractiveGain,
     double maxLinearVelocity, double maxAngularVelocity,
-    double maxLinearAcceleration, double maxAngularAcceleration) :
+    double maxLinearAcceleration, double maxAngularAcceleration,
+    double influenceDistance) :
     attractiveGain(attractiveGain),
+    repulsiveGain(repulsiveGain),
     rotationalAttractiveGain(rotationalAttractiveGain),
     maxLinearVelocity(maxLinearVelocity),
     maxAngularVelocity(maxAngularVelocity),
     maxLinearAcceleration(maxLinearAcceleration),
     maxAngularAcceleration(maxAngularAcceleration),
+    influenceDistance(influenceDistance),
     goalPose(goalPose) {}
 
 
   PotentialField& operator=(const PotentialField& other) {
     if (this != &other) {
       this->attractiveGain = other.attractiveGain;
+      this->repulsiveGain = other.repulsiveGain;
       this->rotationalAttractiveGain = other.rotationalAttractiveGain;
       this->goalPose = other.goalPose;
       this->obstacles = other.obstacles;
@@ -203,18 +232,14 @@ public:
       this->goalPose == other.goalPose &&
       obstaclesEqual;
   }
-
   bool operator!=(const PotentialField& other) const { return !(*this == other); }
 
-  void initializeKinematics(
-    const std::string& urdfFilePath,
-    const std::vector<std::string>& jointNames,
-    const double influenceDistance, const double repulsiveGain);
-
+  void initializeKinematics(const std::string& urdfFilePath, const std::vector<std::string>& jointNames);
   void assignIKSolver(std::shared_ptr<IKSolver> ikSolver) { this->ikSolver = ikSolver; }
 
   // ============ Getters and Setters ============
   void setAttractiveGain(double newAttractiveGain) { this->attractiveGain = newAttractiveGain; }
+  void setRepulsiveGain(double newRepulsiveGain) { this->repulsiveGain = newRepulsiveGain; }
   void setRotationalAttractiveGain(double newRotationalAttractiveGain) {
     this->rotationalAttractiveGain = newRotationalAttractiveGain;
   }
@@ -222,13 +247,16 @@ public:
   void setMaxAngularVelocity(double newMaxAngularVelocity) { this->maxAngularVelocity = newMaxAngularVelocity; }
   void setMaxLinearAcceleration(double newMaxLinearAcceleration) { this->maxLinearAcceleration = newMaxLinearAcceleration; }
   void setMaxAngularAcceleration(double newMaxAngularAcceleration) { this->maxAngularAcceleration = newMaxAngularAcceleration; }
+  void setInfluenceDistance(double newInfluenceDistance) { this->influenceDistance = newInfluenceDistance; }
   void setGoalPose(SpatialVector newGoalPose) { this->goalPose = newGoalPose; }
   double getAttractiveGain() const { return this->attractiveGain; }
+  double getRepulsiveGain() const { return this->repulsiveGain; }
   double getRotationalAttractiveGain() const { return this->rotationalAttractiveGain; }
   double getMaxLinearVelocity() const { return this->maxLinearVelocity; }
   double getMaxAngularVelocity() const { return this->maxAngularVelocity; }
   double getMaxLinearAcceleration() const { return this->maxLinearAcceleration; }
   double getMaxAngularAcceleration() const { return this->maxAngularAcceleration; }
+  double getInfluenceDistance() const { return this->influenceDistance; }
   SpatialVector getGoalPose() const { return this->goalPose; }
   std::vector<PotentialFieldObstacle> getObstacles() const { return this->obstacles; }
 
@@ -458,11 +486,13 @@ public:
 
 private:
   double attractiveGain; // Gain for attractive force
+  double repulsiveGain; // Gain for repulsive force
   double rotationalAttractiveGain; // Gain for rotational attractive force
   double maxLinearVelocity; // [m/s]
   double maxAngularVelocity; // [rad/s]
   double maxLinearAcceleration; // [m/s^2]
   double maxAngularAcceleration; // [rad/s^2]
+  double influenceDistance; // [m] global influence distance
   SpatialVector goalPose; // Current GoalPose
   std::vector<PotentialFieldObstacle> obstacles; // Obstacle list
   std::unordered_map<std::string, size_t> obstacleIndex; // Fast lookup for obstacle updates/removals by ID
