@@ -120,7 +120,8 @@ TaskSpaceTwist PotentialField::applyMotionConstraints(
   return TaskSpaceTwist(limitedLinear, limitedAngular);
 }
 
-Eigen::Vector3d PotentialField::removeOpposingForce(const Eigen::Vector3d& attractionForce, const Eigen::Vector3d& repulsiveForce) const {
+Eigen::Vector3d PotentialField::removeOpposingForce(const Eigen::Vector3d& attractionForce,
+  const Eigen::Vector3d& repulsiveForce) const {
   // Default to returning the original repulsive force unchanged
   Eigen::Vector3d resultantForce = repulsiveForce;
   // Use the direction of the attractive force to determine opposing (parallel) components
@@ -230,7 +231,6 @@ PlannedPath PotentialField::planPath(
   const double dt,
   const double goalTolerance,
   const size_t maxIterations) {
-
   // Helper function to get joint angles at a given pose
   auto getJointAnglesAtPose = [&](const SpatialVector& sv) -> std::vector<double> {
     std::vector<double> jointAngles;

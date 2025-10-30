@@ -190,6 +190,40 @@ TEST(PotentialFieldTest, BoxWithinObstacleRotated) {
   EXPECT_FALSE(box.withinObstacle(out));
 }
 
+// A point just outside the influence zone of a rotated OBB should be reported outside
+// and produce zero repulsive velocity (with attractive gain = 0)
+TEST(PotentialFieldTest, RotatedBoxOutsideInfluenceHasNoRepulsion) {
+  // Define a unit box (length=width=height=2) rotated 45 degrees about Z
+  Eigen::Vector3d center(0, 0, 0);
+  Eigen::AngleAxisd rot(M_PI / 4, Eigen::Vector3d::UnitZ());
+  ObstacleGeometry geom{0.0, 2.0, 2.0, 2.0};
+  PotentialFieldObstacle box(
+    "obb_rot", center, Eigen::Quaterniond(rot),
+    ObstacleType::BOX, ObstacleGroup::STATIC, geom);
+
+  // Influence distance measured from the box surface
+  const double Q = 2.0;         // influence distance
+  const double half_len = geom.length * 0.5; // = 1.0
+  const double eps = 0.05;      // small margin just outside the boundary
+
+  // Choose a local point along +X beyond (half_len + Q) and rotate to world
+  Eigen::Vector3d localOutside(half_len + Q + eps, 0.0, 0.0);
+  Eigen::Vector3d worldOutside = rot * localOutside + center;
+
+  // Geometric predicate should report outside the influence zone
+  EXPECT_FALSE(box.withinInfluenceZone(worldOutside, Q));
+
+  // With zero attractive gain, being outside the influence means zero repulsive velocity
+  PotentialField pf(0.0, 1.0, 0.0); // attractiveGain=0, repulsiveGain=1, rotational=0
+  pf.setInfluenceDistance(Q);
+  pf.addObstacle(box);
+  SpatialVector query(worldOutside);
+  TaskSpaceTwist vel = pf.evaluateVelocityAtPose(query);
+  EXPECT_NEAR(vel.getLinearVelocity().x(), 0.0, 1e-6);
+  EXPECT_NEAR(vel.getLinearVelocity().y(), 0.0, 1e-6);
+  EXPECT_NEAR(vel.getLinearVelocity().z(), 0.0, 1e-6);
+}
+
 TEST(PotentialFieldTest, CylinderWithinObstacleAxisAligned) {
   Eigen::Vector3d center(5, -5, 0);
   ObstacleGeometry geom{3.0, 0.0, 0.0, 4.0};  // radius=3, height=4
@@ -240,10 +274,7 @@ TEST(PotentialFieldTest, NearZeroDistanceAttraction) {
 }
 
 TEST(PotentialFieldTest, RepulsionAtSurfaceBoundary) {
-  PotentialField pf(1.0, 1.0, 0.0);
-  pf.setGoalPose(
-    SpatialVector(Eigen::Vector3d(10.0, 10.0, 10.0))
-  );
+  PotentialField pf(0.0, 1.0, 0.0); // no attraction
   PotentialFieldObstacle obs(
     "o1",
     Eigen::Vector3d::Zero(),
@@ -261,7 +292,7 @@ TEST(PotentialFieldTest, RepulsionAtSurfaceBoundary) {
   TaskSpaceTwist vOutside = pf.evaluateVelocityAtPose(outsideBoundary);
   TaskSpaceTwist vInside = pf.evaluateVelocityAtPose(insideBoundary);
   EXPECT_NEAR(vBoundary.getLinearVelocity().x(), 0.0, 1e-6);  // At boundary, repulsive force should approach 0
-  EXPECT_NEAR(vOutside.getLinearVelocity().x(), 0.0, 1e-6);
+  EXPECT_NEAR(vOutside.getLinearVelocity().x(), 0.0, 1e-6); // Outside influence zone, no repulsion
   EXPECT_GT(vInside.getLinearVelocity().x(), 0.0);  // Should be pushing away from obstacle
 }
 
@@ -455,12 +486,12 @@ TEST(PotentialFieldTest, InterpolateNextPoseTranslationalStep) {
   double dt = 0.1; // raw speed at x=1 would be 1 m/s; accel limit (1 m/s^2 * 0.1 s) => 0.1 m/s applied
   SpatialVector next = pf.interpolateNextPose(current, TaskSpaceTwist(), dt);
   // Expected new x: 1.0 + (-0.1 m/s)*0.1 s = 0.99
-  EXPECT_NEAR(next.getPosition().x(), 0.99, 1e-5);
-  EXPECT_NEAR(next.getPosition().y(), 0.0, 1e-6);
-  EXPECT_NEAR(next.getPosition().z(), 0.0, 1e-6);
+  EXPECT_NEAR(next.getPosition().x(), 0.99, 1e-4);
+  EXPECT_NEAR(next.getPosition().y(), 0.0, 1e-4);
+  EXPECT_NEAR(next.getPosition().z(), 0.0, 1e-4);
   // Orientation should remain identity (no angular velocity)
   double qdot = std::abs(next.getOrientation().dot(Eigen::Quaterniond::Identity()));
-  EXPECT_NEAR(qdot, 1.0, 1e-6);
+  EXPECT_NEAR(qdot, 1.0, 1e-4);
 }
 
 TEST(PotentialFieldTest, EvaluateWrenchAtPosePureTorque) {

@@ -75,7 +75,8 @@ struct PlannedPath {
    * @param jointAngles The joint angles at the path point [rad]
    * @param timeStamp The time stamp for the path point [s]
    */
-  void recordPathPoint(const SpatialVector& pose, const TaskSpaceTwist& twist, std::vector<double> jointAngles, double timeStamp) {
+  void recordPathPoint(const SpatialVector& pose, const TaskSpaceTwist& twist,
+    std::vector<double> jointAngles, double timeStamp) {
     this->poses.push_back(pose);
     this->twists.push_back(twist);
     this->jointAngles.push_back(jointAngles);
