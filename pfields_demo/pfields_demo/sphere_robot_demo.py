@@ -24,6 +24,9 @@ class SphereRobotDemo(Node):
         self.obstacle_pub = self.create_publisher(
             ObstacleArray, '/pfield/obstacles', 10
         )
+        self.query_pub = self.create_publisher(
+            PoseStamped, '/pfield/query_pose', 10
+        )
         self.cli = self.create_client(PlanPath, 'pfield/plan_path')
         # Service to trigger demo
         self.create_service(
@@ -52,6 +55,20 @@ class SphereRobotDemo(Node):
         # Wait for the plan path service
         while not self.cli.wait_for_service(timeout_sec=2.0):
             self.get_logger().info('Service not available, waiting again...')
+
+        # Publish initial query pose at start
+        query_pose = PoseStamped()
+        query_pose.header.frame_id = self.fixed_frame
+        query_pose.header.stamp = self.get_clock().now().to_msg()
+        query_pose.pose.position.x = self.start[0]
+        query_pose.pose.position.y = self.start[1]
+        query_pose.pose.position.z = self.start[2]
+        query_pose.pose.orientation.x = 0.0
+        query_pose.pose.orientation.y = 0.0
+        query_pose.pose.orientation.z = 0.0
+        query_pose.pose.orientation.w = 1.0
+        self.query_pub.publish(query_pose)
+        self.get_logger().info('Published initial query pose.')
 
     def create_obstacles(self):
         obstacles_msg = ObstacleArray()

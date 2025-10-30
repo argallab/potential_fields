@@ -141,8 +141,10 @@ TaskSpaceWrench PotentialField::evaluateWrenchAtPoseWithOpposingForceRemoval(con
   // Compute attractive and repulsive forces
   Eigen::Vector3d attractiveForce = this->computeAttractiveForceLinear(queryPose);
   Eigen::Vector3d repulsiveForce = this->computeRepulsiveForceLinear(queryPose);
-  // Remove opposing components
-  Eigen::Vector3d resultantForce = this->removeOpposingForce(attractiveForce, repulsiveForce);
+  // Remove only the component of the repulsive force that opposes attraction,
+  // then combine with the attractive force to form the final resultant force
+  Eigen::Vector3d filteredRepulsive = this->removeOpposingForce(attractiveForce, repulsiveForce);
+  Eigen::Vector3d resultantForce = attractiveForce + filteredRepulsive;
   Eigen::Vector3d resultantTorque = this->computeAttractiveMoment(queryPose);
   return TaskSpaceWrench(resultantForce, resultantTorque);
 }

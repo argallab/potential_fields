@@ -169,6 +169,28 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   }
   );
 
+  // Setup query pose subscriber (for visualizing paths in "real-time")
+  auto queryPoseQos = rclcpp::QoS(rclcpp::KeepLast(10)).reliable();
+  this->queryPoseSub = this->create_subscription<geometry_msgs::msg::PoseStamped>("pfield/query_pose",
+    queryPoseQos,
+    [this](const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
+    const SpatialVector queryPose(
+      Eigen::Vector3d(
+        msg->pose.position.x,
+        msg->pose.position.y,
+        msg->pose.position.z
+      ),
+      Eigen::Quaterniond(
+        msg->pose.orientation.w,
+        msg->pose.orientation.x,
+        msg->pose.orientation.y,
+        msg->pose.orientation.z
+      )
+    );
+    this->queryPose = queryPose;
+  }
+  );
+
   // Setup planned end-effector path publisher
   this->plannedEndEffectorPathPub = this->create_publisher<Path>("pfield/planned_path", 10);
   RCLCPP_INFO(this->get_logger(), "Planned EE path publishing on: %s", this->plannedEndEffectorPathPub->get_topic_name());
@@ -199,6 +221,20 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
 void PotentialFieldManager::timerCallback() {
   // Get updated obstacles from PFKinematics and update internal PF
   // this->pField->updateObstaclesFromKinematics(this->motionPlugin->getCurrentJointAngles());
+  // Update the query pose position based on integrating the PF velocity
+  // Advance pose using constrained interpolation (acceleration limits applied internally)
+  const double dt = this->now().seconds() - this->lastQueryUpdate.seconds();
+  this->lastQueryUpdate = this->now();
+  TaskSpaceWrench wrench = this->pField->evaluateWrenchAtPoseWithOpposingForceRemoval(this->queryPose);
+  TaskSpaceTwist twist = this->pField->applyMotionConstraints(this->pField->wrenchToTwist(wrench), this->prevQueryTwist, dt);
+  Eigen::Vector3d nextPosition = this->pField->integrateLinearVelocity(
+    this->queryPose.getPosition(), twist.linearVelocity, dt);
+  Eigen::Quaterniond nextOrientation = this->pField->integrateAngularVelocity(
+    this->queryPose.getOrientation(), twist.angularVelocity, dt);
+  this->queryPose = SpatialVector(nextPosition, nextOrientation);
+  this->prevQueryTwist = twist; // supply velocity-limited twist as previous for next acceleration limiting
+
+
   MarkerArray pfieldMarkers = this->visualizePF(this->pField);
   this->pFieldMarkerPub->publish(pfieldMarkers);
 }
@@ -348,17 +384,18 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
 
 PFLimits PotentialFieldManager::getPFLimits(std::shared_ptr<PotentialField> pf) {
   PFLimits limits;
-  // Determine the limits of the potential field based on obstacle positions and goal position
+  // Determine the limits of the potential field based on obstacle positions, goal position, and query pose
   auto obstacles = pf->getObstacles();
   Eigen::Vector3d goalPos = pf->getGoalPose().getPosition();
+  Eigen::Vector3d queryPos = this->queryPose.getPosition();
   if (obstacles.empty()) {
-    // If no obstacles, set limits around the goal position
-    limits.minX = goalPos.x();
-    limits.maxX = goalPos.x();
-    limits.minY = goalPos.y();
-    limits.maxY = goalPos.y();
-    limits.minZ = goalPos.z();
-    limits.maxZ = goalPos.z();
+    // If no obstacles, set limits around the goal position and query pose
+    limits.minX = std::min(goalPos.x(), queryPos.x());
+    limits.maxX = std::max(goalPos.x(), queryPos.x());
+    limits.minY = std::min(goalPos.y(), queryPos.y());
+    limits.maxY = std::max(goalPos.y(), queryPos.y());
+    limits.minZ = std::min(goalPos.z(), queryPos.z());
+    limits.maxZ = std::max(goalPos.z(), queryPos.z());
   }
   else {
     // Initialize limits based on the first obstacle
@@ -386,6 +423,13 @@ PFLimits PotentialFieldManager::getPFLimits(std::shared_ptr<PotentialField> pf) 
     if (goalPos.y() > limits.maxY) limits.maxY = goalPos.y();
     if (goalPos.z() < limits.minZ) limits.minZ = goalPos.z();
     if (goalPos.z() > limits.maxZ) limits.maxZ = goalPos.z();
+    // Expand limits to include the query pose if outside current bounds
+    if (queryPos.x() < limits.minX) limits.minX = queryPos.x();
+    if (queryPos.x() > limits.maxX) limits.maxX = queryPos.x();
+    if (queryPos.y() < limits.minY) limits.minY = queryPos.y();
+    if (queryPos.y() > limits.maxY) limits.maxY = queryPos.y();
+    if (queryPos.z() < limits.minZ) limits.minZ = queryPos.z();
+    if (queryPos.z() > limits.maxZ) limits.maxZ = queryPos.z();
   }
   // Increase the limits by a buffer area for better visualization
   limits.minX -= this->visualizerBufferArea;
@@ -401,12 +445,42 @@ MarkerArray PotentialFieldManager::visualizePF(std::shared_ptr<PotentialField> p
   MarkerArray markerArray;
   MarkerArray goalMarkerArray = this->createGoalMarker(pf);
   markerArray.markers.insert(markerArray.markers.cend(), goalMarkerArray.markers.cbegin(), goalMarkerArray.markers.cend());
-  auto obstacleMarkers = this->createObstacleMarkers(pf);
+  MarkerArray obstacleMarkers = this->createObstacleMarkers(pf);
   markerArray.markers.insert(markerArray.markers.cend(), obstacleMarkers.markers.cbegin(),
     obstacleMarkers.markers.cend());
-  auto potentialVectorMarkers = this->createPotentialVectorMarkers(pf);
+  MarkerArray potentialVectorMarkers = this->createPotentialVectorMarkers(pf);
   markerArray.markers.insert(markerArray.markers.cend(), potentialVectorMarkers.markers.cbegin(),
     potentialVectorMarkers.markers.cend());
+  MarkerArray queryPoseMarkerArray = this->createQueryPoseMarker();
+  markerArray.markers.insert(markerArray.markers.cend(), queryPoseMarkerArray.markers.cbegin(),
+    queryPoseMarkerArray.markers.cend());
+  return markerArray;
+}
+
+MarkerArray PotentialFieldManager::createQueryPoseMarker() {
+  MarkerArray markerArray;
+  Marker queryPoseMarker;
+  queryPoseMarker.header.frame_id = this->fixedFrame;
+  queryPoseMarker.header.stamp = this->now();
+  queryPoseMarker.ns = "query_pose";
+  queryPoseMarker.id = 0;
+  queryPoseMarker.type = Marker::ARROW;
+  queryPoseMarker.action = Marker::ADD;
+  queryPoseMarker.pose.position.x = this->queryPose.getPosition().x();
+  queryPoseMarker.pose.position.y = this->queryPose.getPosition().y();
+  queryPoseMarker.pose.position.z = this->queryPose.getPosition().z();
+  queryPoseMarker.pose.orientation.x = this->queryPose.getOrientation().x();
+  queryPoseMarker.pose.orientation.y = this->queryPose.getOrientation().y();
+  queryPoseMarker.pose.orientation.z = this->queryPose.getOrientation().z();
+  queryPoseMarker.pose.orientation.w = this->queryPose.getOrientation().w();
+  queryPoseMarker.scale.x = 0.15; // Shaft length
+  queryPoseMarker.scale.y = 0.1; // Shaft diameter
+  queryPoseMarker.scale.z = 0.3; // Head diameter
+  queryPoseMarker.color.r = 0.0;
+  queryPoseMarker.color.g = 1.0;
+  queryPoseMarker.color.b = 0.0;
+  queryPoseMarker.color.a = 1.0;
+  markerArray.markers.push_back(queryPoseMarker);
   return markerArray;
 }
 
