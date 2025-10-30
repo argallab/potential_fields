@@ -3,11 +3,11 @@
 #include "pfield/pfield_common.hpp"
 
 
-bool PotentialFieldObstacle::withinInfluenceZone(Eigen::Vector3d worldPoint) const {
+bool PotentialFieldObstacle::withinInfluenceZone(Eigen::Vector3d worldPoint, double influenceDistance) const {
   double signedDistance;
   Eigen::Vector3d normal; // unused
   this->computeSignedDistanceAndNormal(worldPoint, signedDistance, normal);
-  return signedDistance <= this->influenceDistance;
+  return signedDistance <= influenceDistance;
 }
 
 bool PotentialFieldObstacle::withinObstacle(Eigen::Vector3d worldPoint) const {
@@ -141,8 +141,6 @@ void PotentialFieldObstacle::computeSignedDistanceAndNormal(
     break;
   }
   case ObstacleType::MESH: {
-    //TODO(Sharwin24): Implement distance and norm computation for mesh obstacles
-    // We have access to MeshCollision object via this->meshCollisionData
     if (!this->meshCollisionData) {
       throw std::runtime_error("Mesh collision data not available for obstacle");
     }
@@ -168,8 +166,8 @@ void PotentialFieldObstacle::computeSignedDistanceAndNormal(
     }
     else {
       // Fallback: use AABB gradient direction
-      const Eigen::Vector3d c = 0.5 * (this->meshCollisionData->aabbMax + this->meshCollisionData->aabbMin);
-      normalLocal = localPoint - c;
+      const Eigen::Vector3d midpointAABB = 0.5 * (this->meshCollisionData->aabbMax + this->meshCollisionData->aabbMin);
+      normalLocal = localPoint - midpointAABB;
       const double normalLocalNorm = normalLocal.norm();
       if (normalLocalNorm > NEAR_ZERO_THRESHOLD) { normalLocal /= normalLocalNorm; }
     }

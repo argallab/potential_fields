@@ -5,3 +5,4 @@ install/
 .copilot/
 .prompts/
 .venv/
+__pycache__/

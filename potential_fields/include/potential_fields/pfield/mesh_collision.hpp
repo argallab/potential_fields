@@ -15,14 +15,31 @@
 #include <coal/shape/geometric_shape_to_BVH_model.h>
 #include <coal/data_types.h>
 
+/**
+ * @brief Contains the collision data for a mesh, including its BVH representation and AABB.
+ *
+ * @note AABB is axis-aligned bounding box, useful for quick rejection tests
+ * @note BVH is bounding volume hierarchy used for efficient collision detection and distance queries
+ *
+ */
 struct MeshCollisionData {
+  // The BVH model of the mesh for collision queries
   std::shared_ptr<coal::BVHModel<coal::OBBRSS>> bvh;
+  // Pre-created collision object for distance queries
   std::shared_ptr<coal::CollisionObject> meshObj;
-  Eigen::Vector3d aabbMin, aabbMax;
+  // Axis-aligned bounding box (AABB) of the mesh (minimum corner)
+  Eigen::Vector3d aabbMin;
+  // Axis-aligned bounding box (AABB) of the mesh (maximum corner)
+  Eigen::Vector3d aabbMax;
+  // Centroid of the mesh vertices
   Eigen::Vector3d centroid{Eigen::Vector3d::Zero()};
+  // Maximum radius from centroid to any vertex
   double radius{0.0};
+  // Maximum extent of the mesh along any axis
   double maxExtent{0.0};
+  // Vertices of the mesh
   std::vector<Eigen::Vector3d> vertices;
+  // Triangles of the mesh (indices into vertices)
   std::vector<Eigen::Vector3i> triangles;
 };
 
@@ -49,7 +66,7 @@ bool pointInsideMesh(const MeshCollisionData& meshData, const Eigen::Vector3d& p
  *
  * @param meshData The mesh collision data
  * @param pointInMeshFrame The point to compute the distance to, expressed in the mesh's local frame
- * @return double The signed distance from the point to the mesh
+ * @return double The unsigned distance from the point to the mesh
  */
 double computeUnsignedDistanceToMesh(const MeshCollisionData& meshData, const Eigen::Vector3d& pointInMeshFrame);
 
@@ -61,8 +78,7 @@ double computeUnsignedDistanceToMesh(const MeshCollisionData& meshData, const Ei
  * @param[in] meshData The mesh collision data
  * @param[in] pointInMeshFrame The point to find the closest point to, expressed in the mesh's local frame
  * @param[out] closestPoint Output parameter to hold the closest point on the mesh
- * @return true
- * @return false
+ * @return true if closest point was successfully found
  */
 bool getClosestPointOnMesh(const MeshCollisionData& meshData, const Eigen::Vector3d& pointInMeshFrame,
   Eigen::Vector3d& closestPoint);

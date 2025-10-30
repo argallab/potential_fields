@@ -41,7 +41,7 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   this->maxAngularVelocity = this->declare_parameter("max_angular_velocity", 1.0); // [rad/s]
   this->maxLinearAcceleration = this->declare_parameter("max_linear_acceleration", 1.0); // [m/s^2]
   this->maxAngularAcceleration = this->declare_parameter("max_angular_acceleration", 1.0); // [rad/s^2]
-  this->influenceDistance = this->declare_parameter("influence_distance", 2.0); // Influence distance for obstacle repulsion
+  this->influenceDistance = this->declare_parameter("influence_distance", 1.0); // Influence distance for obstacle repulsion
   this->fixedFrame = this->declare_parameter("fixed_frame", "world"); // RViz fixed frame
   this->visualizerBufferArea = this->declare_parameter("visualizer_buffer_area", 1.0); // Extra area to visualize the PF [m]
   this->fieldResolution = this->declare_parameter("field_resolution", 0.5); // Resolution of the potential field grid [m]
@@ -65,9 +65,10 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
 
   // Initialize the potential fields
   this->pField = std::make_shared<PotentialField>(
-    this->attractiveGain, this->rotationalAttractiveGain,
+    this->attractiveGain, this->repulsiveGain, this->rotationalAttractiveGain,
     this->maxLinearVelocity, this->maxAngularVelocity,
-    this->maxLinearAcceleration, this->maxAngularAcceleration
+    this->maxLinearAcceleration, this->maxAngularAcceleration,
+    this->influenceDistance
   );
 
   // Initialize the motion plugin
@@ -99,14 +100,20 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
     RCLCPP_INFO(this->get_logger(), "Using IKSolver: %s", this->ikSolver->getName().c_str());
   }
 
+  // Once IKSolver is initialized, assign it to the PF instance
+  this->pField->assignIKSolver(this->ikSolver);
+
   // Allow the user to not use a URDF
-  if (!this->urdfFileName.empty()) {
-    this->pField->initializeKinematics(
-      this->urdfFileName,
-      this->ikSolver->getJointNames(),
-      this->influenceDistance, this->repulsiveGain
-    );
-    RCLCPP_INFO(this->get_logger(), "PF Kinematics initialized from URDF: %s", this->urdfFileName.c_str());
+  if (!this->urdfFileName.empty() && this->urdfFileName.ends_with(".urdf")) {
+    try {
+      this->pField->initializeKinematics(this->urdfFileName, this->ikSolver->getJointNames());
+      RCLCPP_INFO(this->get_logger(), "PF Kinematics initialized from URDF: %s", this->urdfFileName.c_str());
+      RCLCPP_INFO(this->get_logger(),
+        "PF Kinematics estimated influence distance from robot extend to be: %f", this->pField->getInfluenceDistance());
+    }
+    catch (const std::exception& e) {
+      RCLCPP_ERROR(this->get_logger(), "Failed to initialize PF Kinematics from URDF: %s", e.what());
+    }
   }
   else {
     RCLCPP_WARN(this->get_logger(), "URDF file path is empty. Kinematics not initialized.");
@@ -153,14 +160,34 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
         stringToObstacleType(obst.type),
         stringToObstacleGroup(obst.group),
         ObstacleGeometry{obst.radius, obst.length, obst.width, obst.height},
-        this->influenceDistance,
-        this->repulsiveGain,
         obst.mesh_resource,
         Eigen::Vector3d(obst.scale_x, obst.scale_y, obst.scale_z)
       );
       RCLCPP_DEBUG(this->get_logger(), "Added/Updated obstacle: %s", obst.frame_id.c_str());
       this->pField->addObstacle(obstacle);
     }
+  }
+  );
+
+  // Setup query pose subscriber (for visualizing paths in "real-time")
+  auto queryPoseQos = rclcpp::QoS(rclcpp::KeepLast(10)).reliable();
+  this->queryPoseSub = this->create_subscription<geometry_msgs::msg::Pose>("pfield/query_pose",
+    queryPoseQos,
+    [this](const geometry_msgs::msg::Pose::SharedPtr msg) {
+    const SpatialVector queryPose(
+      Eigen::Vector3d(
+        msg->position.x,
+        msg->position.y,
+        msg->position.z
+      ),
+      Eigen::Quaterniond(
+        msg->orientation.w,
+        msg->orientation.x,
+        msg->orientation.y,
+        msg->orientation.z
+      )
+    );
+    this->queryPose = queryPose;
   }
   );
 
@@ -193,7 +220,21 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
 
 void PotentialFieldManager::timerCallback() {
   // Get updated obstacles from PFKinematics and update internal PF
-  this->pField->updateObstaclesFromKinematics(this->motionPlugin->getCurrentJointAngles());
+  // this->pField->updateObstaclesFromKinematics(this->motionPlugin->getCurrentJointAngles());
+  // Update the query pose position based on integrating the PF velocity
+  // Advance pose using constrained interpolation (acceleration limits applied internally)
+  const double dt = this->now().seconds() - this->lastQueryUpdate.seconds();
+  this->lastQueryUpdate = this->now();
+  TaskSpaceWrench wrench = this->pField->evaluateWrenchAtPoseWithOpposingForceRemoval(this->queryPose);
+  TaskSpaceTwist twist = this->pField->applyMotionConstraints(this->pField->wrenchToTwist(wrench), this->prevQueryTwist, dt);
+  Eigen::Vector3d nextPosition = this->pField->integrateLinearVelocity(
+    this->queryPose.getPosition(), twist.linearVelocity, dt);
+  Eigen::Quaterniond nextOrientation = this->pField->integrateAngularVelocity(
+    this->queryPose.getOrientation(), twist.angularVelocity, dt);
+  this->queryPose = SpatialVector(nextPosition, nextOrientation);
+  this->prevQueryTwist = twist; // supply velocity-limited twist as previous for next acceleration limiting
+
+
   MarkerArray pfieldMarkers = this->visualizePF(this->pField);
   this->pFieldMarkerPub->publish(pfieldMarkers);
 }
@@ -236,10 +277,10 @@ void PotentialFieldManager::handleComputeAutonomyVector(
 
 void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr request, PlanPath::Response::SharedPtr response) {
   RCLCPP_INFO(this->get_logger(),
-    "PlanPath request: start=(%.3f, %.3f, %.3f) goal=(%.3f, %.3f, %.3f) delta_time=%.4f goal_tolerance=%.6f",
+    "PlanPath request: start=(%.3f, %.3f, %.3f) goal=(%.3f, %.3f, %.3f) delta_time=%.4f goal_tolerance=%.6f max_steps=%d",
     request->start.pose.position.x, request->start.pose.position.y, request->start.pose.position.z,
     request->goal.pose.position.x, request->goal.pose.position.y, request->goal.pose.position.z,
-    request->delta_time, request->goal_tolerance
+    request->delta_time, request->goal_tolerance, request->max_iterations
   );
 
   auto startSV = SpatialVector(
@@ -261,18 +302,22 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
     /*startPose=*/startSV,
     /*dt=*/request->delta_time,
     /*goalTolerance=*/request->goal_tolerance,
-    /*ikSolver=*/this->ikSolver,
     /*maxIterations=*/request->max_iterations
   );
 
-  // Create Path msg from EE Poses
+  // Establish a consistent time base for the planned trajectory
+  const double stepDt = (request->delta_time > 0.0) ? request->delta_time : 0.1;
+  const rclcpp::Time t0 = this->now();
+
+  // Create Path msg from EE Poses, stamp each pose at t0 + i*dt
   nav_msgs::msg::Path path;
   path.header.frame_id = this->fixedFrame;
-  path.header.stamp = this->now();
-  for (const auto& pose : planningResult.poses) {
+  path.header.stamp = t0;
+  for (size_t i = 0; i < planningResult.poses.size(); ++i) {
+    const auto& pose = planningResult.poses[i];
     geometry_msgs::msg::PoseStamped poseStamped;
     poseStamped.header.frame_id = this->fixedFrame;
-    poseStamped.header.stamp = this->now();
+    poseStamped.header.stamp = t0 + rclcpp::Duration::from_seconds(static_cast<double>(i) * stepDt);
     poseStamped.pose.position.x = pose.getPosition().x();
     poseStamped.pose.position.y = pose.getPosition().y();
     poseStamped.pose.position.z = pose.getPosition().z();
@@ -285,19 +330,23 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
 
   // Create JointTrajectory from vector of joint angles
   trajectory_msgs::msg::JointTrajectory jointTrajectory;
-  for (const auto& joints : planningResult.jointAngles) {
+  jointTrajectory.header.stamp = t0;
+  for (size_t i = 0; i < planningResult.jointAngles.size(); ++i) {
+    const auto& joints = planningResult.jointAngles[i];
     trajectory_msgs::msg::JointTrajectoryPoint jtp;
     jtp.positions = joints;
-    jtp.time_from_start = rclcpp::Duration::from_seconds(request->delta_time * jointTrajectory.points.size());
+    jtp.time_from_start = rclcpp::Duration::from_seconds(static_cast<double>(i) * stepDt);
     jointTrajectory.points.push_back(jtp);
   }
 
   // Create EE Velocity Trajectory
   std::vector<geometry_msgs::msg::TwistStamped> eeVelocityTrajectory;
-  for (const auto& twist : planningResult.twists) {
+  eeVelocityTrajectory.reserve(planningResult.twists.size());
+  for (size_t i = 0; i < planningResult.twists.size(); ++i) {
+    const auto& twist = planningResult.twists[i];
     geometry_msgs::msg::TwistStamped eeVel;
     eeVel.header.frame_id = this->fixedFrame;
-    eeVel.header.stamp = this->now();
+    eeVel.header.stamp = t0 + rclcpp::Duration::from_seconds(static_cast<double>(i) * stepDt);
     eeVel.twist.linear.x = twist.getLinearVelocity().x();
     eeVel.twist.linear.y = twist.getLinearVelocity().y();
     eeVel.twist.linear.z = twist.getLinearVelocity().z();
@@ -320,21 +369,33 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
     response->joint_trajectory.points.size(),
     response->end_effector_velocity_trajectory.size()
   );
+  if (!response->success) {
+    // If planning failed, log final pose and distance to goal
+    const auto& finalPose = planningResult.poses.back();
+    const Eigen::Vector3d goalPos = this->pField->getGoalPose().getPosition();
+    const double distanceToGoal = (finalPose.getPosition() - goalPos).norm();
+    RCLCPP_WARN(this->get_logger(),
+      "Planning failed to reach goal. Final pose: pos=(%.3f, %.3f, %.3f), distance to goal=%.6f m",
+      finalPose.getPosition().x(), finalPose.getPosition().y(), finalPose.getPosition().z(),
+      distanceToGoal
+    );
+  }
 }
 
 PFLimits PotentialFieldManager::getPFLimits(std::shared_ptr<PotentialField> pf) {
   PFLimits limits;
-  // Determine the limits of the potential field based on obstacle positions and goal position
+  // Determine the limits of the potential field based on obstacle positions, goal position, and query pose
   auto obstacles = pf->getObstacles();
   Eigen::Vector3d goalPos = pf->getGoalPose().getPosition();
+  Eigen::Vector3d queryPos = this->queryPose.getPosition();
   if (obstacles.empty()) {
-    // If no obstacles, set limits around the goal position
-    limits.minX = goalPos.x();
-    limits.maxX = goalPos.x();
-    limits.minY = goalPos.y();
-    limits.maxY = goalPos.y();
-    limits.minZ = goalPos.z();
-    limits.maxZ = goalPos.z();
+    // If no obstacles, set limits around the goal position and query pose
+    limits.minX = std::min(goalPos.x(), queryPos.x());
+    limits.maxX = std::max(goalPos.x(), queryPos.x());
+    limits.minY = std::min(goalPos.y(), queryPos.y());
+    limits.maxY = std::max(goalPos.y(), queryPos.y());
+    limits.minZ = std::min(goalPos.z(), queryPos.z());
+    limits.maxZ = std::max(goalPos.z(), queryPos.z());
   }
   else {
     // Initialize limits based on the first obstacle
@@ -362,6 +423,13 @@ PFLimits PotentialFieldManager::getPFLimits(std::shared_ptr<PotentialField> pf) 
     if (goalPos.y() > limits.maxY) limits.maxY = goalPos.y();
     if (goalPos.z() < limits.minZ) limits.minZ = goalPos.z();
     if (goalPos.z() > limits.maxZ) limits.maxZ = goalPos.z();
+    // Expand limits to include the query pose if outside current bounds
+    if (queryPos.x() < limits.minX) limits.minX = queryPos.x();
+    if (queryPos.x() > limits.maxX) limits.maxX = queryPos.x();
+    if (queryPos.y() < limits.minY) limits.minY = queryPos.y();
+    if (queryPos.y() > limits.maxY) limits.maxY = queryPos.y();
+    if (queryPos.z() < limits.minZ) limits.minZ = queryPos.z();
+    if (queryPos.z() > limits.maxZ) limits.maxZ = queryPos.z();
   }
   // Increase the limits by a buffer area for better visualization
   limits.minX -= this->visualizerBufferArea;
@@ -377,12 +445,42 @@ MarkerArray PotentialFieldManager::visualizePF(std::shared_ptr<PotentialField> p
   MarkerArray markerArray;
   MarkerArray goalMarkerArray = this->createGoalMarker(pf);
   markerArray.markers.insert(markerArray.markers.cend(), goalMarkerArray.markers.cbegin(), goalMarkerArray.markers.cend());
-  auto obstacleMarkers = this->createObstacleMarkers(pf);
+  MarkerArray obstacleMarkers = this->createObstacleMarkers(pf);
   markerArray.markers.insert(markerArray.markers.cend(), obstacleMarkers.markers.cbegin(),
     obstacleMarkers.markers.cend());
-  auto potentialVectorMarkers = this->createPotentialVectorMarkers(pf);
+  MarkerArray potentialVectorMarkers = this->createPotentialVectorMarkers(pf);
   markerArray.markers.insert(markerArray.markers.cend(), potentialVectorMarkers.markers.cbegin(),
     potentialVectorMarkers.markers.cend());
+  MarkerArray queryPoseMarkerArray = this->createQueryPoseMarker();
+  markerArray.markers.insert(markerArray.markers.cend(), queryPoseMarkerArray.markers.cbegin(),
+    queryPoseMarkerArray.markers.cend());
+  return markerArray;
+}
+
+MarkerArray PotentialFieldManager::createQueryPoseMarker() {
+  MarkerArray markerArray;
+  Marker queryPoseMarker;
+  queryPoseMarker.header.frame_id = this->fixedFrame;
+  queryPoseMarker.header.stamp = this->now();
+  queryPoseMarker.ns = "query_pose";
+  queryPoseMarker.id = 0;
+  queryPoseMarker.type = Marker::ARROW;
+  queryPoseMarker.action = Marker::ADD;
+  queryPoseMarker.pose.position.x = this->queryPose.getPosition().x();
+  queryPoseMarker.pose.position.y = this->queryPose.getPosition().y();
+  queryPoseMarker.pose.position.z = this->queryPose.getPosition().z();
+  queryPoseMarker.pose.orientation.x = this->queryPose.getOrientation().x();
+  queryPoseMarker.pose.orientation.y = this->queryPose.getOrientation().y();
+  queryPoseMarker.pose.orientation.z = this->queryPose.getOrientation().z();
+  queryPoseMarker.pose.orientation.w = this->queryPose.getOrientation().w();
+  queryPoseMarker.scale.x = 0.15; // Shaft length
+  queryPoseMarker.scale.y = 0.1; // Shaft diameter
+  queryPoseMarker.scale.z = 0.3; // Head diameter
+  queryPoseMarker.color.r = 0.0;
+  queryPoseMarker.color.g = 1.0;
+  queryPoseMarker.color.b = 0.0;
+  queryPoseMarker.color.a = 1.0;
+  markerArray.markers.push_back(queryPoseMarker);
   return markerArray;
 }
 
@@ -395,7 +493,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<Potenti
     obstacleMarker.header.frame_id = this->fixedFrame;
     obstacleMarker.header.stamp = this->now();
     obstacleMarker.frame_locked = true;
-    obstacleMarker.ns = "obstacle_" + obstacleTypeToString(obstacle.getType());
+    obstacleMarker.ns = "obstacles";
     obstacleMarker.id = hashID;
     obstacleMarker.action = Marker::ADD;
     auto position = obstacle.getPosition();
@@ -462,7 +560,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<Potenti
     influenceMarker.header.frame_id = this->fixedFrame;
     influenceMarker.header.stamp = this->now();
     influenceMarker.frame_locked = true;
-    influenceMarker.ns = "obstacle_influence_" + obstacleTypeToString(obstacle.getType());
+    influenceMarker.ns = "influence_zones";
     influenceMarker.id = hashID; // mirror id for influence volume
     influenceMarker.action = Marker::ADD;
     influenceMarker.pose.position.x = position.x();
@@ -472,37 +570,67 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<Potenti
     influenceMarker.pose.orientation.y = orientation.y();
     influenceMarker.pose.orientation.z = orientation.z();
     influenceMarker.pose.orientation.w = orientation.w();
+    const double influenceDistance = pf->getInfluenceDistance();
     switch (obstacle.getType()) {
     case ObstacleType::SPHERE: {
+      // Inflated sphere diameter = 2 * (radius + influenceDistance).
       influenceMarker.type = Marker::SPHERE;
-      influenceMarker.scale.x = obstacle.getInfluenceDistance() * obstacle.getGeometry().radius * 2.0f; // Diameter
-      influenceMarker.scale.y = obstacle.getInfluenceDistance() * obstacle.getGeometry().radius * 2.0f; // Diameter
-      influenceMarker.scale.z = obstacle.getInfluenceDistance() * obstacle.getGeometry().radius * 2.0f; // Diameter
+      const double influenceZoneDiameter = 2.0 * (obstacle.getGeometry().radius + influenceDistance);
+      influenceMarker.scale.x = influenceZoneDiameter;
+      influenceMarker.scale.y = influenceZoneDiameter;
+      influenceMarker.scale.z = influenceZoneDiameter;
       break;
     }
     case ObstacleType::BOX: {
+      // Inflated box dimensions = base dims + 2 * influenceDistance along each axis.
       influenceMarker.type = Marker::CUBE;
-      influenceMarker.scale.x = obstacle.getInfluenceDistance() * obstacle.getGeometry().length;
-      influenceMarker.scale.y = obstacle.getInfluenceDistance() * obstacle.getGeometry().width;
-      influenceMarker.scale.z = obstacle.getInfluenceDistance() * obstacle.getGeometry().height;
+      influenceMarker.scale.x = obstacle.getGeometry().length + 2.0 * influenceDistance;
+      influenceMarker.scale.y = obstacle.getGeometry().width + 2.0 * influenceDistance;
+      influenceMarker.scale.z = obstacle.getGeometry().height + 2.0 * influenceDistance;
       break;
     }
     case ObstacleType::CYLINDER: {
+      // Inflated cylinder: diameter = 2 * (radius + d), height = height + 2 * d.
       influenceMarker.type = Marker::CYLINDER;
-      influenceMarker.scale.x = obstacle.getInfluenceDistance() * obstacle.getGeometry().radius * 2.0f; // Diameter
-      influenceMarker.scale.y = obstacle.getInfluenceDistance() * obstacle.getGeometry().radius * 2.0f; // Diameter
-      influenceMarker.scale.z = obstacle.getInfluenceDistance() * obstacle.getGeometry().height; // Height
+      const double r = obstacle.getGeometry().radius;
+      influenceMarker.scale.x = 2.0 * (r + influenceDistance);
+      influenceMarker.scale.y = 2.0 * (r + influenceDistance);
+      influenceMarker.scale.z = obstacle.getGeometry().height + 2.0 * influenceDistance;
       break;
     }
     case ObstacleType::MESH: {
-      // Represent mesh influence by rendering the same mesh, uniformly scaled by the influence factor
-      influenceMarker.type = Marker::MESH_RESOURCE;
-      influenceMarker.mesh_resource = obstacle.getMeshResource();
-      influenceMarker.mesh_use_embedded_materials = false; // use our color/alpha below
-      Eigen::Vector3d scale = obstacle.getMeshScale();
-      influenceMarker.scale.x = obstacle.getInfluenceDistance() * scale.x();
-      influenceMarker.scale.y = obstacle.getInfluenceDistance() * scale.y();
-      influenceMarker.scale.z = obstacle.getInfluenceDistance() * scale.z();
+      // Visualize the influence zone as an "inflated" version of the original mesh.
+      // We approximate a Minkowski sum by scaling the mesh per-axis so its AABB grows by +2d.
+      // This preserves the silhouette and is a better visual cue than a plain inflated AABB cube.
+      if (!obstacle.getMeshResource().empty()) {
+        influenceMarker.type = Marker::MESH_RESOURCE;
+        influenceMarker.mesh_resource = obstacle.getMeshResource();
+        influenceMarker.mesh_use_embedded_materials = false; // keep our semi-transparent color
+        // Base axis-aligned dimensions for the mesh in obstacle frame
+        const Eigen::Vector3d baseHalf = obstacle.halfDimensions();
+        const Eigen::Vector3d baseDims = 2.0 * baseHalf; // L, W, H
+        const Eigen::Vector3d baseScale = obstacle.getMeshScale(); // current mesh scale used for the obstacle
+        auto inflateScale = [influenceDistance](double baseDim, double baseScaleVal) -> double {
+          const double eps = 1e-9;
+          if (std::abs(baseDim) < eps) return baseScaleVal; // degenerate axis; leave as-is
+          // New scale multiplies existing mesh scale so that (scaledDim) = baseDim + 2d
+          // => scaleFactor = (baseDim + 2d) / baseDim
+          const double scaleFactor = (baseDim + 2.0 * influenceDistance) / baseDim;
+          return baseScaleVal * scaleFactor;
+        };
+        influenceMarker.scale.x = inflateScale(baseDims.x(), baseScale.x());
+        influenceMarker.scale.y = inflateScale(baseDims.y(), baseScale.y());
+        influenceMarker.scale.z = inflateScale(baseDims.z(), baseScale.z());
+      }
+      else {
+        // Fallback: render an inflated AABB cube if no mesh resource provided
+        influenceMarker.type = Marker::CUBE;
+        const Eigen::Vector3d baseHalf = obstacle.halfDimensions();
+        const Eigen::Vector3d baseDims = 2.0 * baseHalf; // L, W, H
+        influenceMarker.scale.x = baseDims.x() + 2.0 * influenceDistance;
+        influenceMarker.scale.y = baseDims.y() + 2.0 * influenceDistance;
+        influenceMarker.scale.z = baseDims.z() + 2.0 * influenceDistance;
+      }
       break;
     }
     }
@@ -600,7 +728,8 @@ MarkerArray PotentialFieldManager::createPotentialVectorMarkers(std::shared_ptr<
         Marker vectorMarker;
         SpatialVector position{point};
         TaskSpaceTwist velocity = pf->evaluateLimitedVelocityAtPose(position);
-        double magnitude = velocity.getLinearVelocity().norm();
+        const Eigen::Vector3d v = velocity.getLinearVelocity();
+        const double magnitude = v.norm();
         vectorMarker.header.frame_id = this->fixedFrame;
         vectorMarker.header.stamp = this->now();
         vectorMarker.ns = "potential_vectors";
@@ -610,20 +739,25 @@ MarkerArray PotentialFieldManager::createPotentialVectorMarkers(std::shared_ptr<
         vectorMarker.pose.position.x = position.getPosition().x();
         vectorMarker.pose.position.y = position.getPosition().y();
         vectorMarker.pose.position.z = position.getPosition().z();
-        // Set the orientation of the arrow to point in the direction of the velocity vector
-        const auto unitDirectionVector = velocity.getLinearVelocity().normalized();
-        double yaw = std::atan2(unitDirectionVector.y(), unitDirectionVector.x());
-        vectorMarker.pose.orientation = PotentialFieldManager::getQuaternionFromYaw(yaw);
+        // Set the orientation of the arrow to point in the 3D direction of the velocity vector
+        Eigen::Quaterniond forceOrientation = Eigen::Quaterniond::Identity();
+        if (v.norm() > 1e-9) {
+          // Arrow mesh assumes +X is forward. Rotate X-axis onto v.
+          forceOrientation = Eigen::Quaterniond::FromTwoVectors(Eigen::Vector3d::UnitX(), v.normalized());
+        }
+        vectorMarker.pose.orientation.x = forceOrientation.x();
+        vectorMarker.pose.orientation.y = forceOrientation.y();
+        vectorMarker.pose.orientation.z = forceOrientation.z();
+        vectorMarker.pose.orientation.w = forceOrientation.w();
         vectorMarker.scale.x = 0.15f; // Length of the arrow
         vectorMarker.scale.y = 0.05f; // Shaft diameter
         vectorMarker.scale.z = 0.1f; // Head diameter
-        // Color the arrows using a gradient depending on
-        // the magnitude of the velocity vector
+        // Color the arrows using a gradient depending on the magnitude of the velocity vector
         // max velocity is red and 0 is blue
         double colorScale = std::min<double>(magnitude / this->maxLinearVelocity, 1.0f);
-        vectorMarker.color.r = 1.0f - colorScale;
+        vectorMarker.color.r = colorScale;
         vectorMarker.color.g = 0.0f;
-        vectorMarker.color.b = colorScale;
+        vectorMarker.color.b = 1.0 - colorScale;
         vectorMarker.color.a = 0.75f; // Semi-transparent
         vectorMarker.lifetime = rclcpp::Duration(0, 0); // No lifetime
         markerArray.markers.push_back(vectorMarker);
@@ -678,8 +812,8 @@ void PotentialFieldManager::exportFieldDataToCSV(std::shared_ptr<PotentialField>
       const Eigen::Vector3d& position = obstacle.getPosition();
       const ObstacleGeometry& g = obstacle.getGeometry();
       obstacles_file << position.x() << "," << position.y() << "," << position.z() << ","
-        << obstacleTypeToString(obstacle.getType()) << "," << obstacle.getInfluenceDistance() << ","
-        << obstacle.getRepulsiveGain() << ","
+        << obstacleTypeToString(obstacle.getType()) << "," << this->pField->getInfluenceDistance() << ","
+        << this->pField->getRepulsiveGain() << ","
         << g.radius << "," << g.length << "," << g.width << "," << g.height
         << "\n";
     }

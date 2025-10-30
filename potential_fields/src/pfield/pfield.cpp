@@ -4,10 +4,12 @@
 
 void PotentialField::initializeKinematics(
   const std::string& urdfFilePath,
-  const std::vector<std::string>& jointNames,
-  const double influenceDistance, const double repulsiveGain) {
+  const std::vector<std::string>& jointNames) {
   this->urdfFileName = urdfFilePath;
-  this->pfKinematics = std::make_unique<PFKinematics>(this->urdfFileName, jointNames, influenceDistance, repulsiveGain);
+  this->pfKinematics = std::make_unique<PFKinematics>(this->urdfFileName, jointNames);
+  const double maxExtent = this->pfKinematics->estimateRobotExtentRadius();
+  // Assign influence distance using maximum robot extent or the default, whichever is more generous
+  this->influenceDistance = std::max(this->influenceDistance, maxExtent);
 }
 
 void PotentialField::updateObstaclesFromKinematics(const std::vector<double>& jointAngles) {
@@ -69,7 +71,7 @@ bool PotentialField::isPointInsideObstacle(Eigen::Vector3d point) const {
 
 bool PotentialField::isPointWithinInfluenceZone(Eigen::Vector3d point) const {
   for (const auto& obst : this->obstacles) {
-    if (obst.withinInfluenceZone(point)) { return true; }
+    if (obst.withinInfluenceZone(point, this->influenceDistance)) { return true; }
   }
   return false;
 }
@@ -86,12 +88,9 @@ TaskSpaceTwist PotentialField::evaluateVelocityAtPose(const SpatialVector& query
   return this->wrenchToTwist(this->evaluateWrenchAtPose(queryPose));
 }
 
-TaskSpaceTwist PotentialField::evaluateLimitedVelocityAtPose(const SpatialVector& queryPose) const {
-  return this->applyMotionConstraints(
-    this->wrenchToTwist(this->evaluateWrenchAtPose(queryPose)),
-    TaskSpaceTwist(Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero()),
-    0.0
-  );
+TaskSpaceTwist PotentialField::evaluateLimitedVelocityAtPose(
+  const SpatialVector& queryPose, const TaskSpaceTwist& prevTwist, double dt) const {
+  return this->applyMotionConstraints(this->wrenchToTwist(this->evaluateWrenchAtPose(queryPose)), prevTwist, dt);
 }
 
 TaskSpaceTwist PotentialField::wrenchToTwist(const TaskSpaceWrench& wrench) const {
@@ -104,9 +103,8 @@ TaskSpaceTwist PotentialField::wrenchToTwist(const TaskSpaceWrench& wrench) cons
 TaskSpaceTwist PotentialField::applyMotionConstraints(
   const TaskSpaceTwist& twist, const TaskSpaceTwist& prevTwist, const double dt) const {
   // Soft-saturate velocities by norm
-  const double beta = 1.0; // Soft-saturation parameter, higher = more aggressive curve
-  Eigen::Vector3d limitedLinear = softSaturateNorm(twist.linearVelocity, this->maxLinearVelocity, beta);
-  Eigen::Vector3d limitedAngular = softSaturateNorm(twist.angularVelocity, this->maxAngularVelocity, beta);
+  Eigen::Vector3d limitedLinear = softSaturateNorm(twist.linearVelocity, this->maxLinearVelocity, this->softSatBeta);
+  Eigen::Vector3d limitedAngular = softSaturateNorm(twist.angularVelocity, this->maxAngularVelocity, this->softSatBeta);
 
   // If dt is valid, apply rate limits (acceleration limits)
   if (isPositiveFinite(dt)) {
@@ -116,10 +114,39 @@ TaskSpaceTwist PotentialField::applyMotionConstraints(
     limitedAngular = rateLimitStep(prevTwist.angularVelocity, limitedAngular, dVMaxAngular);
 
     // Re-apply soft-saturation to prevent velocity limits
-    limitedLinear = softSaturateNorm(limitedLinear, this->maxLinearVelocity, beta);
-    limitedAngular = softSaturateNorm(limitedAngular, this->maxAngularVelocity, beta);
+    limitedLinear = softSaturateNorm(limitedLinear, this->maxLinearVelocity, this->softSatBeta);
+    limitedAngular = softSaturateNorm(limitedAngular, this->maxAngularVelocity, this->softSatBeta);
   }
   return TaskSpaceTwist(limitedLinear, limitedAngular);
+}
+
+Eigen::Vector3d PotentialField::removeOpposingForce(const Eigen::Vector3d& attractionForce, const Eigen::Vector3d& repulsiveForce) const {
+  // Default to returning the original repulsive force unchanged
+  Eigen::Vector3d resultantForce = repulsiveForce;
+  // Use the direction of the attractive force to determine opposing (parallel) components
+  const double attractiveNorm = attractionForce.norm();
+  if (attractiveNorm > NEAR_ZERO_THRESHOLD) {
+    const Eigen::Vector3d u_att = attractionForce / attractiveNorm;
+    const double dot = repulsiveForce.dot(u_att);
+    // If repulsion has a component opposite to attraction (dot < 0),
+    // subtract the opposing component along u_att
+    if (dot < 0.0) {
+      resultantForce = repulsiveForce - (dot * u_att);
+    }
+  }
+  return resultantForce;
+}
+
+TaskSpaceWrench PotentialField::evaluateWrenchAtPoseWithOpposingForceRemoval(const SpatialVector& queryPose) const {
+  // Compute attractive and repulsive forces
+  Eigen::Vector3d attractiveForce = this->computeAttractiveForceLinear(queryPose);
+  Eigen::Vector3d repulsiveForce = this->computeRepulsiveForceLinear(queryPose);
+  // Remove only the component of the repulsive force that opposes attraction,
+  // then combine with the attractive force to form the final resultant force
+  Eigen::Vector3d filteredRepulsive = this->removeOpposingForce(attractiveForce, repulsiveForce);
+  Eigen::Vector3d resultantForce = attractiveForce + filteredRepulsive;
+  Eigen::Vector3d resultantTorque = this->computeAttractiveMoment(queryPose);
+  return TaskSpaceWrench(resultantForce, resultantTorque);
 }
 
 SpatialVector PotentialField::interpolateNextPose(
@@ -169,17 +196,30 @@ Eigen::Vector3d PotentialField::computeAttractiveMoment(const SpatialVector& que
 Eigen::Vector3d PotentialField::computeRepulsiveForceLinear(const SpatialVector& queryPose) const {
   Eigen::Vector3d F = Eigen::Vector3d::Zero();
   for (const auto& obst : this->obstacles) {
-    if (!obst.withinInfluenceZone(queryPose.getPosition())) continue;
-    Eigen::Vector3d direction = queryPose.getPosition() - obst.getPosition();
-    // Clamp near-zero distances to avoid singularities while preserving the sign
-    const double distance = (std::abs(direction.norm()) < NEAR_ZERO_THRESHOLD) ?
-      (direction.norm() >= 0.0 ? NEAR_ZERO_THRESHOLD : -NEAR_ZERO_THRESHOLD) :
-      direction.norm();
-    const double distanceReciprocal = 1.0 / distance;
-    const double distanceReciprocalSquared = distanceReciprocal * distanceReciprocal;
-    const double influenceReciprocal = 1.0 / obst.getInfluenceDistance();
-    const double magnitude = obst.getRepulsiveGain() * (distanceReciprocal - influenceReciprocal) * distanceReciprocalSquared;
-    if (magnitude > 0.0) F += direction.normalized() * magnitude;
+    // if (!obst.withinInfluenceZone(queryPose.getPosition())) continue;
+    // Use true surface signed distance and outward normal for direction and magnitude
+    double signedDistance = 0.0; // signed distance: > 0 outside, < 0 inside
+    Eigen::Vector3d normalToObstSurface = Eigen::Vector3d::Zero(); // outward normal at closest surface point (world frame)
+    obst.computeSignedDistanceAndNormal(queryPose.getPosition(), signedDistance, normalToObstSurface);
+    // Ensure a valid normal; if degenerate, skip this obstacle
+    const double normalMagnitude = normalToObstSurface.norm();
+    if (normalMagnitude < NEAR_ZERO_THRESHOLD) continue;
+    normalToObstSurface /= normalMagnitude;
+    // Absolute influence semantics already enforced by withinInfluenceZone.
+    // Define an effective distance d for the classic repulsive potential:
+    //  - outside (sd >= 0): d = max(sd, eps)
+    //  - inside (sd < 0): treat as very close to surface to generate strong outward push
+    const double Q = std::max(this->influenceDistance, NEAR_ZERO_THRESHOLD);
+    const double d = (signedDistance >= 0.0) ? std::max(signedDistance, NEAR_ZERO_THRESHOLD) : NEAR_ZERO_THRESHOLD;
+    // Only contribute if within the influence distance
+    if (d < Q) {
+      // Magnitude per Khatib potential: eta * (1/d - 1/Q) * (1/d^2)
+      const double inverseDistance = 1.0 / d;
+      const double inverseDistanceSquared = inverseDistance * inverseDistance;
+      const double inverseInfluenceDistance = 1.0 / Q;
+      const double magnitude = this->repulsiveGain * (inverseDistance - inverseInfluenceDistance) * inverseDistanceSquared;
+      if (magnitude > NEAR_ZERO_THRESHOLD) { F += normalToObstSurface * magnitude; }
+    }
   }
   return F;
 }
@@ -189,21 +229,19 @@ PlannedPath PotentialField::planPath(
   const SpatialVector& startPose,
   const double dt,
   const double goalTolerance,
-  std::shared_ptr<IKSolver> ikSolver,
   const size_t maxIterations) {
-  PlannedPath path;
-  const double stepDt = (dt > 0.0) ? dt : 0.1;
 
+  // Helper function to get joint angles at a given pose
   auto getJointAnglesAtPose = [&](const SpatialVector& sv) -> std::vector<double> {
     std::vector<double> jointAngles;
-    if (ikSolver) {
+    if (this->ikSolver) {
       Eigen::Isometry3d targetPose = Eigen::Isometry3d::Identity();
       targetPose.translate(sv.getPosition());
       targetPose.rotate(sv.getOrientation());
-      std::vector<double> seed = ikSolver->getHomeConfiguration();
+      std::vector<double> seed = this->ikSolver->getHomeConfiguration();
       std::string errorMsg;
       Eigen::Matrix<double, 6, Eigen::Dynamic> J;
-      bool success = ikSolver->solve(targetPose, seed, jointAngles, J, errorMsg);
+      bool success = this->ikSolver->solve(targetPose, seed, jointAngles, J, errorMsg);
       if (!success) {
         jointAngles = std::vector<double>{}; // Return empty on failure
       }
@@ -211,27 +249,22 @@ PlannedPath PotentialField::planPath(
     return jointAngles;
   };
 
-  // Already at goal? Single point path.
-  const Eigen::Vector3d startDiff = startPose.getPosition() - this->goalPose.getPosition();
-  if (startDiff.norm() <= goalTolerance) {
-    path.addPoint(startPose, TaskSpaceTwist(), getJointAnglesAtPose(startPose), 0.0);
-    path.dt = stepDt;
-    path.duration = 0.0;
-    path.numPoints = 1;
-    return path;
-  }
-
+  // Create path and initialize loop variables
+  PlannedPath path;
+  const double stepDt = (dt > 0.0) ? dt : 0.1;
   SpatialVector current = startPose;
   TaskSpaceTwist prevTwist; // previous applied twist (starts zero)
   double timeStamp = 0.0;
 
   for (size_t iter = 0; iter < maxIterations; ++iter) {
-    // Evaluate (velocity-limited) twist at current pose for logging
-    TaskSpaceTwist evalTwist = this->evaluateVelocityAtPose(current);
-    TaskSpaceTwist limitedTwist = this->applyMotionConstraints(evalTwist, prevTwist, stepDt);
+    // Evaluate wrench at current pose after removing opposing repulsive force components
+    // to prevent pinning and stagnation in local minima
+    TaskSpaceWrench wrench = this->evaluateWrenchAtPoseWithOpposingForceRemoval(current);
+    TaskSpaceTwist constrainedTwist = this->applyMotionConstraints(this->wrenchToTwist(wrench), prevTwist, stepDt);
+
     // Record current state
-    path.addPoint(
-      current, evalTwist,
+    path.recordPathPoint(
+      current, constrainedTwist,
       getJointAnglesAtPose(current),
       timeStamp
     );
@@ -246,16 +279,16 @@ PlannedPath PotentialField::planPath(
 
     // Advance pose using constrained interpolation (acceleration limits applied internally)
     Eigen::Vector3d nextPosition = this->integrateLinearVelocity(
-      current.getPosition(), limitedTwist.linearVelocity, stepDt);
+      current.getPosition(), constrainedTwist.linearVelocity, stepDt);
     Eigen::Quaterniond nextOrientation = this->integrateAngularVelocity(
-      current.getOrientation(), limitedTwist.angularVelocity, stepDt);
+      current.getOrientation(), constrainedTwist.angularVelocity, stepDt);
     // Update obstacles from new JointAngles
     auto jointAngles = path.jointAngles.back();
     this->updateObstaclesFromKinematics(jointAngles);
 
     // Update loop variables
     current = SpatialVector(nextPosition, nextOrientation);
-    prevTwist = limitedTwist; // supply velocity-limited twist as previous for next acceleration limiting
+    prevTwist = constrainedTwist; // supply velocity-limited twist as previous for next acceleration limiting
     timeStamp += stepDt;
   }
 
@@ -268,4 +301,43 @@ PlannedPath PotentialField::planPath(
     path.duration = 0.0;
   }
   return path;
+}
+
+bool PotentialField::isPathStagnated(const PlannedPath& path) {
+  const size_t N = path.poses.size();
+  if (N < static_cast<size_t>(this->stagnationWindowMinPoints)) return false;
+
+  // Analyze the last N points in the path
+  const size_t windowSize = this->stagnationWindowMinPoints;
+  const size_t startIdx = N - windowSize;
+
+  // Save time difference
+  const double t0 = path.timeStamps[startIdx];
+  const double t1 = path.timeStamps.back();
+  const double timeDiff = std::max(t1 - t0, 1e-6);
+
+  // Compute distances to goal at start and end of window
+  const Eigen::Vector3d goalPos = this->goalPose.getPosition();
+  const double d0 = (path.poses[startIdx].getPosition() - goalPos).norm();
+  const double d1 = (path.poses.back().getPosition() - goalPos).norm();
+
+  // Progress rate toward goal (positive if getting closer)
+  const double progressRate = (d0 - d1) / timeDiff;
+
+  // RMS linear speed over the window
+  double sumSq = 0.0;
+  int count = 0;
+  for (size_t i = startIdx; i < N - 1; ++i) {
+    const Eigen::Vector3d v = path.twists[i].getLinearVelocity();
+    sumSq += v.squaredNorm();
+    ++count;
+  }
+  const double speedRms = std::sqrt(sumSq / std::max(count, 1));
+
+  const bool farFromGoal = (d1 > this->translationalTolerance);
+
+  // Determine stagnation based on thresholds
+  return farFromGoal &&
+    (progressRate < this->stagnationProgressRateThreshold) &&
+    (speedRms < this->stagnationSpeedRmsThreshold);
 }

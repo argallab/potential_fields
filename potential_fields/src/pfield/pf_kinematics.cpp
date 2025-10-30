@@ -1,13 +1,12 @@
 #include "pfield/pf_kinematics.hpp"
+#include "pfield/pfield_common.hpp"
 #include <pinocchio/fwd.hpp>
 #include <pinocchio/algorithm/frames.hpp>
 #include <pinocchio/algorithm/joint-configuration.hpp>
 #include <pinocchio/algorithm/kinematics.hpp>
 #include <Eigen/Geometry>
 
-PFKinematics::PFKinematics(
-  const std::string& urdfFileName, const std::vector<std::string>& jointNames,
-  const double influenceDistance, const double repulsiveGain) {
+PFKinematics::PFKinematics(const std::string& urdfFileName, const std::vector<std::string>& jointNames) {
   if (urdfFileName.empty()) {
     throw std::invalid_argument("PFKinematics: urdfFileName is empty; expected a path to a URDF file");
   }
@@ -19,7 +18,7 @@ PFKinematics::PFKinematics(
   }
   this->data = pinocchio::Data(this->model);
   this->robotModel.initFile(urdfFileName);
-  this->collisionCatalog = this->buildCollisionCatalog(this->robotModel, influenceDistance, repulsiveGain);
+  this->collisionCatalog = this->buildCollisionCatalog(this->robotModel);
   this->initializeCaches(jointNames, this->collisionLinkNames);
 }
 
@@ -94,10 +93,7 @@ std::vector<Eigen::Affine3d> PFKinematics::computeLinkTransforms(const std::vect
   return out;
 }
 
-std::vector<CollisionCatalogEntry> PFKinematics::buildCollisionCatalog(
-  urdf::Model& model,
-  const double influenceDistance,
-  const double repulsiveGain) {
+std::vector<CollisionCatalogEntry> PFKinematics::buildCollisionCatalog(urdf::Model& model) {
   std::vector<CollisionCatalogEntry> catalog;
   this->obstacleGeometryTemplates.clear();
   for (const auto& [link_name, link] : model.links_) {
@@ -116,7 +112,7 @@ std::vector<CollisionCatalogEntry> PFKinematics::buildCollisionCatalog(
       e.col = col_ptr;
       // Build cached obstacle geometry templates aligned to catalog entries
       PotentialFieldObstacle templateObstacle = this->obstacleFromCollisionObject(
-        e.id, influenceDistance, repulsiveGain, *e.col, Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity()
+        e.id, *e.col, Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity()
       );
       this->obstacleGeometryTemplates.push_back(templateObstacle);
       catalog.push_back(std::move(e));
@@ -167,7 +163,7 @@ std::vector<PotentialFieldObstacle> PFKinematics::buildObstaclesFromTransforms(c
 }
 
 PotentialFieldObstacle PFKinematics::obstacleFromCollisionObject(
-  const std::string& frameID, const double influenceDistance, const double repulsiveGain,
+  const std::string& frameID,
   const urdf::Collision& collisionObject,
   const Eigen::Vector3d& position, const Eigen::Quaterniond& orientation) {
   ObstacleType obstacleType;
@@ -208,7 +204,7 @@ PotentialFieldObstacle PFKinematics::obstacleFromCollisionObject(
   ObstacleGeometry obstacleGeom(radius, length, width, height);
   PotentialFieldObstacle obstacle(
     frameID, position, orientation, obstacleType, ObstacleGroup::ROBOT,
-    obstacleGeom, influenceDistance, repulsiveGain
+    obstacleGeom
   );
   // If mesh, set mesh resource and scale
   if (isMesh) { obstacle.setMeshProperties(meshResource, Eigen::Vector3d(length, width, height)); }
@@ -217,4 +213,74 @@ PotentialFieldObstacle PFKinematics::obstacleFromCollisionObject(
 
 std::vector<PotentialFieldObstacle> PFKinematics::updateObstaclesFromJointAngles(const std::vector<double>& jointAngles) {
   return this->buildObstaclesFromTransforms(this->computeLinkTransforms(jointAngles));
+}
+
+double PFKinematics::estimateRobotExtentRadius() {
+  // Require a valid URDF model
+  if (this->robotModel.links_.empty()) { return 0.0; }
+
+  // Prepare transforms for links that have collision geometry. Use nominal zero joint values.
+  std::vector<double> q_zero;
+  if (!this->jointNamesCache.empty()) {
+    q_zero.assign(this->jointNamesCache.size(), 0.0);
+  }
+  else {
+    // If caches are not initialized, we can still rely on Pinocchio model dimensions
+    // but computeLinkTransforms requires caches. In that edge case, return 0.0 gracefully.
+    return 0.0;
+  }
+
+  std::vector<Eigen::Affine3d> world_T_link;
+  try {
+    world_T_link = this->computeLinkTransforms(q_zero);
+  }
+  catch (...) {
+    return 0.0;
+  }
+
+  // The collision catalog and collisionLinkNames align with the templates/order used
+  const size_t N = std::min(world_T_link.size(), this->collisionCatalog.size());
+  double max_extent = 0.0;
+
+  for (size_t i = 0; i < N; ++i) {
+    const auto& entry = this->collisionCatalog[i];
+    if (!entry.col || !entry.col->geometry) { continue; }
+
+    // Link pose in world/base frame and collision origin in link frame
+    const Eigen::Affine3d& T_world_link = world_T_link[i];
+    const Eigen::Affine3d T_link_col = urdfPoseToEigen(entry.col->origin);
+    const Eigen::Affine3d T_world_col = T_world_link * T_link_col;
+    const Eigen::Vector3d p_world = T_world_col.translation();
+
+    // Compute local bounding-sphere radius r_local from geometry
+    double r_local = 0.0;
+    if (auto box = std::dynamic_pointer_cast<urdf::Box>(entry.col->geometry)) {
+      const double l = box->dim.x, w = box->dim.y, h = box->dim.z;
+      r_local = 0.5 * std::sqrt(l * l + w * w + h * h);
+    }
+    else if (auto sph = std::dynamic_pointer_cast<urdf::Sphere>(entry.col->geometry)) {
+      r_local = sph->radius;
+    }
+    else if (auto cyl = std::dynamic_pointer_cast<urdf::Cylinder>(entry.col->geometry)) {
+      r_local = std::sqrt(cyl->radius * cyl->radius + 0.25 * cyl->length * cyl->length);
+    }
+    else if (auto mesh = std::dynamic_pointer_cast<urdf::Mesh>(entry.col->geometry)) {
+      const double sx = mesh->scale.x > 0.0 ? mesh->scale.x : 1.0;
+      const double sy = mesh->scale.y > 0.0 ? mesh->scale.y : 1.0;
+      const double sz = mesh->scale.z > 0.0 ? mesh->scale.z : 1.0;
+      const double smax = std::max(sx, std::max(sy, sz));
+      // TODO(Sharwin24): Load mesh and compute real extents if possible
+      const double meshRadius = 0.30; // default fallback radius in meters
+      r_local = meshRadius * smax; // conservative heuristic without loading mesh
+    }
+    else {
+      // Unsupported type; skip
+      continue;
+    }
+
+    const double extent = p_world.norm() + r_local;
+    if (extent > max_extent) { max_extent = extent; }
+  }
+
+  return max_extent; // 0.0 if nothing found
 }

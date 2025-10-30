@@ -14,7 +14,6 @@
 
 constexpr double POINT_SPHERE_RADIUS = 1e-9;
 
-
 // Simple cache so identical mesh resources share BVH + triangles
 std::shared_ptr<MeshCollisionData> loadMesh(const std::string& uri) {
   if (uri.empty()) return nullptr;
@@ -97,6 +96,7 @@ bool pointInsideMesh(const MeshCollisionData& meshData,
     (pointInMeshFrame.array() > meshData.aabbMax.array()).any()) {
     return false;
   }
+
   // EPS is tolerance for ray-triangle intersection tests
   const double EPS = 1e-9;
 
@@ -105,10 +105,6 @@ bool pointInsideMesh(const MeshCollisionData& meshData,
   if (r2 > meshData.radius * meshData.radius + 1e-12) {
     return false;
   }
-
-  // Optional: treat near-surface as inside to avoid flicker with signed distance logic.
-  // If you have computeSignedDistanceToMesh available here, you can:
-  // if (std::abs(computeSignedDistanceToMesh(meshData, pointInMeshFrame)) <= 1e-9) return true;
 
   // --- Ray cast parity test ---
   // Slightly perturbed +X ray to reduce degeneracy at edges/vertices.
@@ -150,7 +146,7 @@ bool pointInsideMesh(const MeshCollisionData& meshData,
       ++crossings;
     }
   }
-  // Odd → inside
+  // Odd -> inside
   return (crossings & 1) == 1;
 }
 
@@ -175,7 +171,6 @@ double computeUnsignedDistanceToMesh(const MeshCollisionData& meshData, const Ei
   return res.min_distance;
 }
 
-// Return false if COAL couldn't compute nearest points; 'closestOut' is mesh-frame.
 bool getClosestPointOnMesh(const MeshCollisionData& meshData, const Eigen::Vector3d& pointInMeshFrame,
   Eigen::Vector3d& closestPoint) {
   if (!meshData.meshObj) return false;
@@ -192,8 +187,10 @@ bool getClosestPointOnMesh(const MeshCollisionData& meshData, const Eigen::Vecto
     static_cast<float>(pointInMeshFrame.z())));
 
   // Build a temporary collision object for the sphere
-  coal::CollisionObject sphereObj(std::shared_ptr<coal::CollisionGeometry>(&sphere, [](coal::CollisionGeometry*) {}),
-    Ts);
+  coal::CollisionObject sphereObj(
+    std::shared_ptr<coal::CollisionGeometry>(&sphere, [](coal::CollisionGeometry*) {}),
+    Ts
+  );
 
   // Distance query setup
   coal::DistanceRequest req;
@@ -202,11 +199,6 @@ bool getClosestPointOnMesh(const MeshCollisionData& meshData, const Eigen::Vecto
   req.abs_err = 0.0f;
 
   coal::DistanceResult res;
-
-  // Both objects (sphere, mesh) are already expressed in the same mesh frame.
-  // NOTE: meshData.meshObj may have its own transform set; if your meshObj is not identity,
-  // it's still OK: COAL uses each object's internal transform consistently and returns nearest
-  // points in the WORLD frame derived from those. We will map back to mesh frame if needed.
   const coal::CollisionObject* meshObj = meshData.meshObj.get();
 
   // Perform the distance query

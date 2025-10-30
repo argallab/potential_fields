@@ -3,7 +3,7 @@ import csv
 import math
 import os
 
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, Pose
 from potential_fields_interfaces.srv import PlanPath
 from potential_fields_interfaces.msg import ObstacleArray, Obstacle
 import rclpy
@@ -24,23 +24,31 @@ class SphereRobotDemo(Node):
         self.obstacle_pub = self.create_publisher(
             ObstacleArray, '/pfield/obstacles', 10
         )
+        self.query_pub = self.create_publisher(
+            PoseStamped, '/pfield/query_pose', 10
+        )
         self.cli = self.create_client(PlanPath, 'pfield/plan_path')
         # Service to trigger demo
         self.create_service(
             Empty, '/run_sphere_demo', self.run_demo_callback
         )
         self.get_logger().info('Ready to run plan path demo via service call.')
-        self.start = (0.0, 0.0, 0.5)
-        self.goal = (7.0, 5.0, 3.5)
+        self.start = (-2.0, -1.5, -0.5)
+        self.goal = (4.0,  1.0,  0.6)
         # Publish static obstacles
-        self.obstacle_pub.publish(self.create_obstacles(self.start, self.goal))
-        # Publish the goal pose
+        obstacles = self.create_obstacles()
+        self.obstacle_pub.publish(obstacles)
+        # Publish the goal pose (ensure a valid identity orientation)
         goal_pose = PoseStamped()
         goal_pose.header.frame_id = self.fixed_frame
         goal_pose.header.stamp = self.get_clock().now().to_msg()
         goal_pose.pose.position.x = self.goal[0]
         goal_pose.pose.position.y = self.goal[1]
         goal_pose.pose.position.z = self.goal[2]
+        goal_pose.pose.orientation.x = 0.0
+        goal_pose.pose.orientation.y = 0.0
+        goal_pose.pose.orientation.z = 0.0
+        goal_pose.pose.orientation.w = 1.0
         self.goal_pub.publish(goal_pose)
         self.get_logger().info('Published goal pose.')
 
@@ -48,28 +56,99 @@ class SphereRobotDemo(Node):
         while not self.cli.wait_for_service(timeout_sec=2.0):
             self.get_logger().info('Service not available, waiting again...')
 
-    def create_obstacles(self, start: tuple[float, float, float], goal: tuple[float, float, float]):
+        # Publish initial query pose at start
+        query_pose = Pose()
+        query_pose.position.x = self.start[0]
+        query_pose.position.y = self.start[1]
+        query_pose.position.z = self.start[2]
+        query_pose.orientation.x = 0.0
+        query_pose.orientation.y = 0.0
+        query_pose.orientation.z = 0.0
+        query_pose.orientation.w = 1.0
+        self.query_pub.publish(query_pose)
+        self.get_logger().info('Published initial query pose.')
+
+    def create_obstacles(self):
         obstacles_msg = ObstacleArray()
-        # This demo will have a sphere start at the origin and move to some goal point
-        # I want to create several (primitive) obstacles in the area that will influence the sphere's path
-        # and demonstrate the path avoidance
-        # The sphere has a diameter of 1.0m, so obstacles should be sized appropriately
+        # Replicate the obstacles from prototyping/pfield_3d_demo.py: obstacles_in_the_way()
+        #   - Sphere at (1.5, 1.0, 0.7), radius 0.7
+        #   - Box at (3.0, -0.5, 0.0), size (1.2, 2.0, 1.0), yaw=25°, pitch=10°, roll=-5° (ZYX)
+        #   - Cylinder at (1.0, -1.0, 0.3), radius 0.45, height 1.2, yaw=15° (ZYX)
 
-        # Create a sphere directly in the path (halfway between the straight line)
-        midpoint = (
-            (start[0] + goal[0]) / 2.0,
-            (start[1] + goal[1]) / 2.0,
-            (start[2] + goal[2]) / 2.0,
-        )
-        sphere_obstacle = Obstacle()
-        sphere_obstacle.type = "Sphere"
-        sphere_obstacle.group = "Static"
-        sphere_obstacle.pose.position.x = midpoint[0]
-        sphere_obstacle.pose.position.y = midpoint[1]
-        sphere_obstacle.pose.position.z = midpoint[2]
-        sphere_obstacle.radius = 1.0
-        obstacles_msg.obstacles.append(sphere_obstacle)
+        def quat_from_euler_zyx(roll: float, pitch: float, yaw: float):
+            """Return (x, y, z, w) quaternion for ZYX Euler (roll=X, pitch=Y, yaw=Z)."""
+            cr, sr = math.cos(roll * 0.5), math.sin(roll * 0.5)
+            cp, sp = math.cos(pitch * 0.5), math.sin(pitch * 0.5)
+            cy, sy = math.cos(yaw * 0.5), math.sin(yaw * 0.5)
+            qw = cr * cp * cy + sr * sp * sy
+            qx = sr * cp * cy - cr * sp * sy
+            qy = cr * sp * cy + sr * cp * sy
+            qz = cr * cp * sy - sr * sp * cy
+            return qx, qy, qz, qw
 
+        # Sphere obstacle
+        sph = Obstacle()
+        # frame_id acts as a unique obstacle identifier in the PF manager
+        sph.frame_id = "obstacle/sphere/1"
+        sph.type = "Sphere"
+        sph.group = "Static"
+        sph.pose.position.x = 1.5
+        sph.pose.position.y = 1.0
+        sph.pose.position.z = 0.7
+        # Identity orientation
+        sph.pose.orientation.x = 0.0
+        sph.pose.orientation.y = 0.0
+        sph.pose.orientation.z = 0.0
+        sph.pose.orientation.w = 1.0
+        sph.radius = 0.7
+        obstacles_msg.obstacles.append(sph)
+
+        # Box obstacle (OBB)
+        box = Obstacle()
+        # frame_id acts as a unique obstacle identifier in the PF manager
+        box.frame_id = "obstacle/box/1"
+        box.type = "Box"
+        box.group = "Static"
+        box.pose.position.x = 3.0
+        box.pose.position.y = -0.5
+        box.pose.position.z = 0.0
+        # Apply ZYX euler: roll=-5°, pitch=10°, yaw=25°
+        roll = math.radians(-5.0)
+        pitch = math.radians(10.0)
+        yaw = math.radians(25.0)
+        qx, qy, qz, qw = quat_from_euler_zyx(roll, pitch, yaw)
+        box.pose.orientation.x = qx
+        box.pose.orientation.y = qy
+        box.pose.orientation.z = qz
+        box.pose.orientation.w = qw
+        box.length = 1.2  # X size
+        box.width = 2.0   # Y size
+        box.height = 1.0  # Z size
+        obstacles_msg.obstacles.append(box)
+
+        # Cylinder obstacle
+        cyl = Obstacle()
+        # frame_id acts as a unique obstacle identifier in the PF manager
+        cyl.frame_id = "obstacle/cylinder/1"
+        cyl.type = "Cylinder"
+        cyl.group = "Static"
+        cyl.pose.position.x = 1.0
+        cyl.pose.position.y = -1.0
+        cyl.pose.position.z = 0.3
+        # yaw=15°, pitch=0°, roll=0°
+        roll_c = math.radians(0.0)
+        pitch_c = math.radians(0.0)
+        yaw_c = math.radians(15.0)
+        qx, qy, qz, qw = quat_from_euler_zyx(roll_c, pitch_c, yaw_c)
+        cyl.pose.orientation.x = qx
+        cyl.pose.orientation.y = qy
+        cyl.pose.orientation.z = qz
+        cyl.pose.orientation.w = qw
+        cyl.radius = 0.45
+        cyl.height = 1.2
+        obstacles_msg.obstacles.append(cyl)
+        self.get_logger().info(
+            f'Created {len(obstacles_msg.obstacles)} obstacles for the demo.')
         return obstacles_msg
 
     def run_demo_callback(self, request, response):
@@ -82,6 +161,10 @@ class SphereRobotDemo(Node):
         start_pose.pose.position.x = self.start[0]
         start_pose.pose.position.y = self.start[1]
         start_pose.pose.position.z = self.start[2]
+        start_pose.pose.orientation.x = 0.0
+        start_pose.pose.orientation.y = 0.0
+        start_pose.pose.orientation.z = 0.0
+        start_pose.pose.orientation.w = 1.0
 
         goal_pose = PoseStamped()
         goal_pose.header.frame_id = self.fixed_frame
@@ -89,13 +172,17 @@ class SphereRobotDemo(Node):
         goal_pose.pose.position.x = self.goal[0]
         goal_pose.pose.position.y = self.goal[1]
         goal_pose.pose.position.z = self.goal[2]
+        goal_pose.pose.orientation.x = 0.0
+        goal_pose.pose.orientation.y = 0.0
+        goal_pose.pose.orientation.z = 0.0
+        goal_pose.pose.orientation.w = 1.0
 
         req = PlanPath.Request()
         req.start = start_pose
         req.goal = goal_pose
-        req.delta_time = 0.05  # 50ms time step
+        req.delta_time = 0.01  # 10ms time step
         req.goal_tolerance = 0.1  # 10cm tolerance
-        req.max_iterations = 100000
+        req.max_iterations = 5000
 
         # call service asynchronously; handle response in done-callback
         self.get_logger().info('Sending plan_path request (async)...')
@@ -124,10 +211,10 @@ class SphereRobotDemo(Node):
             f'Received plan_path response: success={res.success}, Path Length={ee_path_len}')
         if not res.success:
             self.get_logger().warn('Plan path was not successful; skipping further processing.')
-            return
-        p = res.end_effector_path.poses[0].pose.position
-        self.get_logger().info(
-            f'First EE pose: ({p.x:.4f}, {p.y:.4f}, {p.z:.4f})')
+        if ee_path_len > 0:
+            p = res.end_effector_path.poses[0].pose.position
+            self.get_logger().info(
+                f'First EE pose: ({p.x:.4f}, {p.y:.4f}, {p.z:.4f})')
         if ee_vels > 0:
             v = res.end_effector_velocity_trajectory[0].twist.linear
             self.get_logger().info(

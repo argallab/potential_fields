@@ -92,6 +92,10 @@ private:
   std::shared_ptr<PotentialField> pField; // Potential Field Instance containing main PF functionality
   std::unique_ptr<MotionPlugin> motionPlugin; // The MotionPlugin containing robot-specific functions like IK and state reading
   std::shared_ptr<IKSolver> ikSolver; // The IKSolver obtained from the MotionPlugin
+  SpatialVector queryPose; // Current Query Pose for autonomy vector computation
+  TaskSpaceTwist prevQueryTwist; // Previous query twist for acceleration limiting
+  rclcpp::Time lastQueryUpdate;  // Timestamp of last query pose integration step
+  TaskSpaceTwist prevTwist; // Previous twist for acceleration limiting
 
   rclcpp::TimerBase::SharedPtr timer; // Timer to periodically update the potential field
   rclcpp::Publisher<MarkerArray>::SharedPtr pFieldMarkerPub; // Publisher for PF Markers
@@ -99,6 +103,7 @@ private:
   rclcpp::Publisher<Path>::SharedPtr plannedEndEffectorPathPub; // Publisher for planned end-effector path
   rclcpp::Subscription<PoseStamped>::SharedPtr goalPoseSub; // Subscriber for the goal pose
   rclcpp::Subscription<ObstacleArray>::SharedPtr obstacleSub; // Subscriber for obstacles
+  rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr queryPoseSub; // Subscriber for query poses
   rclcpp::Service<PlanPath>::SharedPtr pathPlanningService; // Now hosted here
   rclcpp::Service<ComputeAutonomyVector>::SharedPtr autonomyVectorService; // Service to compute velocity vector at a given pose
 
@@ -127,6 +132,8 @@ private:
    * @return MarkerArray The marker array containing all visualization markers
    */
   MarkerArray visualizePF(std::shared_ptr<PotentialField> pf);
+
+  MarkerArray createQueryPoseMarker();
 
   /**
    * @brief Get Obstacle and Obstacle Influence Zone markers from a potential field
