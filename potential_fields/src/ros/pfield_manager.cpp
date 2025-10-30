@@ -171,20 +171,20 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
 
   // Setup query pose subscriber (for visualizing paths in "real-time")
   auto queryPoseQos = rclcpp::QoS(rclcpp::KeepLast(10)).reliable();
-  this->queryPoseSub = this->create_subscription<geometry_msgs::msg::PoseStamped>("pfield/query_pose",
+  this->queryPoseSub = this->create_subscription<geometry_msgs::msg::Pose>("pfield/query_pose",
     queryPoseQos,
-    [this](const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
+    [this](const geometry_msgs::msg::Pose::SharedPtr msg) {
     const SpatialVector queryPose(
       Eigen::Vector3d(
-        msg->pose.position.x,
-        msg->pose.position.y,
-        msg->pose.position.z
+        msg->position.x,
+        msg->position.y,
+        msg->position.z
       ),
       Eigen::Quaterniond(
-        msg->pose.orientation.w,
-        msg->pose.orientation.x,
-        msg->pose.orientation.y,
-        msg->pose.orientation.z
+        msg->orientation.w,
+        msg->orientation.x,
+        msg->orientation.y,
+        msg->orientation.z
       )
     );
     this->queryPose = queryPose;

@@ -3,7 +3,7 @@ import csv
 import math
 import os
 
-from geometry_msgs.msg import PoseStamped
+from geometry_msgs.msg import PoseStamped, Pose
 from potential_fields_interfaces.srv import PlanPath
 from potential_fields_interfaces.msg import ObstacleArray, Obstacle
 import rclpy
@@ -57,16 +57,14 @@ class SphereRobotDemo(Node):
             self.get_logger().info('Service not available, waiting again...')
 
         # Publish initial query pose at start
-        query_pose = PoseStamped()
-        query_pose.header.frame_id = self.fixed_frame
-        query_pose.header.stamp = self.get_clock().now().to_msg()
-        query_pose.pose.position.x = self.start[0]
-        query_pose.pose.position.y = self.start[1]
-        query_pose.pose.position.z = self.start[2]
-        query_pose.pose.orientation.x = 0.0
-        query_pose.pose.orientation.y = 0.0
-        query_pose.pose.orientation.z = 0.0
-        query_pose.pose.orientation.w = 1.0
+        query_pose = Pose()
+        query_pose.position.x = self.start[0]
+        query_pose.position.y = self.start[1]
+        query_pose.position.z = self.start[2]
+        query_pose.orientation.x = 0.0
+        query_pose.orientation.y = 0.0
+        query_pose.orientation.z = 0.0
+        query_pose.orientation.w = 1.0
         self.query_pub.publish(query_pose)
         self.get_logger().info('Published initial query pose.')
 

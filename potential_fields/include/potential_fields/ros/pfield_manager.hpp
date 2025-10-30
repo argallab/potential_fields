@@ -103,7 +103,7 @@ private:
   rclcpp::Publisher<Path>::SharedPtr plannedEndEffectorPathPub; // Publisher for planned end-effector path
   rclcpp::Subscription<PoseStamped>::SharedPtr goalPoseSub; // Subscriber for the goal pose
   rclcpp::Subscription<ObstacleArray>::SharedPtr obstacleSub; // Subscriber for obstacles
-  rclcpp::Subscription<geometry_msgs::msg::PoseStamped>::SharedPtr queryPoseSub; // Subscriber for query poses
+  rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr queryPoseSub; // Subscriber for query poses
   rclcpp::Service<PlanPath>::SharedPtr pathPlanningService; // Now hosted here
   rclcpp::Service<ComputeAutonomyVector>::SharedPtr autonomyVectorService; // Service to compute velocity vector at a given pose
 
