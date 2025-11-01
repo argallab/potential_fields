@@ -178,6 +178,60 @@ Eigen::Quaterniond PotentialField::integrateAngularVelocity(const Eigen::Quatern
   return (currentOrientation * dq).normalized();
 }
 
+TaskSpaceTwist PotentialField::constrainedTwistAtPose(const SpatialVector& pose, const TaskSpaceTwist& prevTwist, const double dt) {
+  TaskSpaceWrench W = this->evaluateWrenchAtPoseWithOpposingForceRemoval(pose);
+  return this->applyMotionConstraints(this->wrenchToTwist(W), prevTwist, dt);
+}
+
+std::pair<SpatialVector, TaskSpaceTwist> PotentialField::rungeKuttaStep(const SpatialVector& currentPose,
+  const TaskSpaceTwist& prevTwist, const double dt) {
+  // Stage 1
+  TaskSpaceTwist k1 = this->constrainedTwistAtPose(currentPose, prevTwist, dt);
+  // Pose at dt/2 using k1
+  SpatialVector T2(
+    this->integrateLinearVelocity(currentPose.getPosition(), k1.getLinearVelocity(), 0.5 * dt),
+    this->integrateAngularVelocity(currentPose.getOrientation(), k1.getAngularVelocity(), 0.5 * dt)
+  );
+  // Stage 2 (rate-limit vs k1 over dt/2)
+  TaskSpaceTwist k2 = this->constrainedTwistAtPose(T2, k1, 0.5 * dt);
+  // Pose at dt/2 using k2
+  SpatialVector T3(
+    this->integrateLinearVelocity(currentPose.getPosition(), k2.getLinearVelocity(), 0.5 * dt),
+    this->integrateAngularVelocity(currentPose.getOrientation(), k2.getAngularVelocity(), 0.5 * dt)
+  );
+  // Stage 3 (rate-limit vs k2 over dt/2)
+  TaskSpaceTwist k3 = this->constrainedTwistAtPose(T3, k2, 0.5 * dt);
+  // Pose at dt using k3
+  SpatialVector T4(
+    this->integrateLinearVelocity(currentPose.getPosition(), k3.getLinearVelocity(), dt),
+    this->integrateAngularVelocity(currentPose.getOrientation(), k3.getAngularVelocity(), dt)
+  );
+  // Stage 4 (rate-limit vs k3 over full dt)
+  TaskSpaceTwist k4 = this->constrainedTwistAtPose(T4, k3, dt);
+
+  // RK4 weighted average twist
+  Eigen::Vector3d v_bar = (k1.getLinearVelocity()
+    + 2.0 * k2.getLinearVelocity()
+    + 2.0 * k3.getLinearVelocity()
+    + k4.getLinearVelocity()) / 6.0;
+  Eigen::Vector3d w_bar = (k1.getAngularVelocity()
+    + 2.0 * k2.getAngularVelocity()
+    + 2.0 * k3.getAngularVelocity()
+    + k4.getAngularVelocity()) / 6.0;
+
+  // Final soft-saturation to ensure we still respect velocity caps
+  TaskSpaceTwist rk4WeightedTwist(v_bar, w_bar);
+  rk4WeightedTwist = this->applyMotionConstraints(rk4WeightedTwist, prevTwist, dt);
+
+  // Advance once using the averaged twist
+  SpatialVector nextPose(
+    this->integrateLinearVelocity(currentPose.getPosition(), rk4WeightedTwist.getLinearVelocity(), dt),
+    this->integrateAngularVelocity(currentPose.getOrientation(), rk4WeightedTwist.getAngularVelocity(), dt)
+  );
+
+  return {nextPose, rk4WeightedTwist};
+}
+
 Eigen::Vector3d PotentialField::computeAttractiveForceLinear(const SpatialVector& queryPose) const {
   const Eigen::Vector3d direction = queryPose.getPosition() - this->goalPose.getPosition();
   const double euclideanDistance = direction.norm();
@@ -259,12 +313,13 @@ PlannedPath PotentialField::planPath(
   for (size_t iter = 0; iter < maxIterations; ++iter) {
     // Evaluate wrench at current pose after removing opposing repulsive force components
     // to prevent pinning and stagnation in local minima
-    TaskSpaceWrench wrench = this->evaluateWrenchAtPoseWithOpposingForceRemoval(current);
-    TaskSpaceTwist constrainedTwist = this->applyMotionConstraints(this->wrenchToTwist(wrench), prevTwist, stepDt);
+    // TaskSpaceWrench wrench = this->evaluateWrenchAtPoseWithOpposingForceRemoval(current);
+    // TaskSpaceTwist constrainedTwist = this->applyMotionConstraints(this->wrenchToTwist(wrench), prevTwist, stepDt);
+    auto [nextPoseRK4, appliedTwist] = this->rungeKuttaStep(current, prevTwist, stepDt);
 
     // Record current state
     path.recordPathPoint(
-      current, constrainedTwist,
+      current, appliedTwist,
       getJointAnglesAtPose(current),
       timeStamp
     );
@@ -277,18 +332,13 @@ PlannedPath PotentialField::planPath(
       break;
     }
 
-    // Advance pose using constrained interpolation (acceleration limits applied internally)
-    Eigen::Vector3d nextPosition = this->integrateLinearVelocity(
-      current.getPosition(), constrainedTwist.linearVelocity, stepDt);
-    Eigen::Quaterniond nextOrientation = this->integrateAngularVelocity(
-      current.getOrientation(), constrainedTwist.angularVelocity, stepDt);
     // Update obstacles from new JointAngles
     auto jointAngles = path.jointAngles.back();
     this->updateObstaclesFromKinematics(jointAngles);
 
     // Update loop variables
-    current = SpatialVector(nextPosition, nextOrientation);
-    prevTwist = constrainedTwist; // supply velocity-limited twist as previous for next acceleration limiting
+    current = nextPoseRK4;
+    prevTwist = appliedTwist; // supply velocity-limited twist as previous for next acceleration limiting
     timeStamp += stepDt;
   }
 

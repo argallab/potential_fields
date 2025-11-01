@@ -485,6 +485,11 @@ public:
     const size_t maxIters = 30000
   );
 
+  TaskSpaceTwist constrainedTwistAtPose(const SpatialVector& pose, const TaskSpaceTwist& prevTwist, const double dt);
+
+  std::pair<SpatialVector, TaskSpaceTwist> rungeKuttaStep(const SpatialVector& currentPose,
+    const TaskSpaceTwist& prevTwist, const double dt);
+
 private:
   double attractiveGain; // Gain for attractive force
   double repulsiveGain; // Gain for repulsive force
