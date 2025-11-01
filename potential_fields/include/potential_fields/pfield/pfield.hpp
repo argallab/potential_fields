@@ -485,8 +485,25 @@ public:
     const size_t maxIters = 30000
   );
 
+  /**
+   * @brief Computes the constrained twist at a given pose using the previous twist and the time step
+   *        for velocity and acceleration limiting.
+   *
+   * @param pose The current pose to compute the constrained twist for
+   * @param prevTwist The previous twist to use for limiting
+   * @param dt The time step for the integration
+   * @return TaskSpaceTwist The computed constrained twist
+   */
   TaskSpaceTwist constrainedTwistAtPose(const SpatialVector& pose, const TaskSpaceTwist& prevTwist, const double dt);
 
+  /**
+   * @brief Computes the next pose and twist using the Runge-Kutta 4-step (RK4) integration method.
+   *
+   * @param currentPose The current pose to compute the next pose from
+   * @param prevTwist The previous twist to use for the integration
+   * @param dt The time step for the integration
+   * @return std::pair<SpatialVector, TaskSpaceTwist> The computed next pose and twist
+   */
   std::pair<SpatialVector, TaskSpaceTwist> rungeKuttaStep(const SpatialVector& currentPose,
     const TaskSpaceTwist& prevTwist, const double dt);
 
