@@ -161,6 +161,58 @@ Where:
 - $\epsilon$ parameterizes when to stop
 - $\alpha_i$ is a step-size (learning rate)
 
+#### Runge-Kutta 4 (RK4) Integration
+We integrate over the twist (linear and angular velocities) using a constrained RK4 step. Each stage evaluates a constrained twist at an intermediate pose and time step, then averages the four stages to advance the pose.
+
+Given current pose $q_i = (\mathbf{x}_i, \mathbf{R}_i)$ and previous applied twist $T_{i-1}$, with step size $\Delta t$:
+
+1) Stage 1
+$$
+\begin{aligned}
+\mathbf{k}_1 &= T_c\big(q_i,\, T_{i-1},\, \Delta t\big) \\
+q_{i}^{(1/2)} &= \Big(\, \mathbf{x}_i + \tfrac{\Delta t}{2}\,\mathbf{v}_1\,,\; \mathbf{R}_i\;\exp\big( [\boldsymbol{\omega}_1]_\times \tfrac{\Delta t}{2} \big) \Big)
+\end{aligned}
+$$
+
+2) Stage 2
+$$
+\begin{aligned}
+\mathbf{k}_2 &= T_c\big(q_{i}^{(1/2)},\, \mathbf{k}_1,\, \tfrac{\Delta t}{2}\big) \\
+q_{i}^{(1/2)'} &= \Big(\, \mathbf{x}_i + \tfrac{\Delta t}{2}\,\mathbf{v}_2\,,\; \mathbf{R}_i\;\exp\big( [\boldsymbol{\omega}_2]_\times \tfrac{\Delta t}{2} \big) \Big)
+\end{aligned}
+$$
+
+3) Stage 3
+$$
+\begin{aligned}
+\mathbf{k}_3 &= T_c\big(q_{i}^{(1/2)'},\, \mathbf{k}_2,\, \tfrac{\Delta t}{2}\big) \\
+q_{i}^{(1)} &= \Big(\, \mathbf{x}_i + \Delta t\,\mathbf{v}_3\,,\; \mathbf{R}_i\;\exp\big( [\boldsymbol{\omega}_3]_\times \Delta t \big) \Big)
+\end{aligned}
+$$
+
+4) Stage 4
+$$
+\mathbf{k}_4 = T_c\big(q_{i}^{(1)},\, \mathbf{k}_3,\, \Delta t\big)
+$$
+
+Weighted average twist (component-wise for linear and angular parts):
+$$
+\bar{\mathbf{v}} = \frac{\mathbf{v}_1 + 2\mathbf{v}_2 + 2\mathbf{v}_3 + \mathbf{v}_4}{6},\quad
+\bar{\boldsymbol{\omega}} = \frac{\boldsymbol{\omega}_1 + 2\boldsymbol{\omega}_2 + 2\boldsymbol{\omega}_3 + \boldsymbol{\omega}_4}{6}.
+$$
+
+The averaged twist is re-limited (soft saturation and rate limits) to ensure it respects the velocity/acceleration bounds. The pose is then advanced once:
+$$
+\mathbf{x}_{i+1} = \mathbf{x}_i + \bar{\mathbf{v}}\,\Delta t,\qquad
+\mathbf{R}_{i+1} = \mathbf{R}_i\;\exp\big( [\bar{\boldsymbol{\omega}}]_\times\, \Delta t \big),
+$$
+where $\exp([\boldsymbol{\omega}]_\times\, \Delta t)$ is implemented via an angle–axis exponential map (i.e., $\mathrm{AngleAxis}(|\boldsymbol{\omega}|\,\Delta t,\, \boldsymbol{\omega}/|\boldsymbol{\omega}|)$) and the resulting quaternion is normalized.
+
+Notes:
+- $T_c(\cdot)$ applies planning-only opposing-force removal, maps wrench to twist, and enforces motion constraints for each stage.
+- Per-stage rate limits use the stage’s effective step size ($\Delta t/2$ for stages 2–3, $\Delta t$ for stage 4) by supplying the previous stage’s twist to the constraint function.
+- After averaging, constraints are applied again before the final integration step (as in the implementation).
+
 ### Velocity and Acceleration Limits
 Before integrating the twist, linear and angular speeds are soft-saturated by norm and then rate-limited using maximum linear/angular accelerations over the step size $\Delta t$. The library enforces:
 
