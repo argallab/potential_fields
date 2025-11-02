@@ -390,7 +390,13 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
   );
   // Right before exiting, update the query pose to the start of the planned path
   // to visualize the planned trajectory from the new query pose
-  this->queryPose = startSV;
+  if (response->success) {
+    RCLCPP_INFO(this->get_logger(),
+      "Updating query pose to start of planned path at pos=(%.3f, %.3f, %.3f)",
+      startSV.getPosition().x(), startSV.getPosition().y(), startSV.getPosition().z()
+    );
+    this->queryPose = startSV;
+  }
   if (!response->success) {
     // If planning failed, log final pose and distance to goal
     const auto& finalPose = planningResult.poses.back();
