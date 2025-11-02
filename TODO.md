@@ -26,3 +26,4 @@
   - Improve interpolation and numerical integration methods
   - User should define motion constraints (velocity, acceleration, jerk) and planned path should respect those constraints
 - namespace pfield c++ library and externalize from ROS package
+- Allow PF with no goal, only obstacles (for avoidance behavior)

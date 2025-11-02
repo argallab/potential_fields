@@ -193,6 +193,14 @@ private:
    * @param filename The name of the CSV file to export the data to
    */
   void exportFieldDataToCSV(std::shared_ptr<PotentialField> pf, const std::string& filename);
+
+  /**
+   * @brief Integrates the internal query pose forward one timestep using the
+   *        potential field wrench, motion constraints, and velocity integration.
+   *
+   * @note Updates members: lastQueryUpdate, queryPose, prevQueryTwist.
+   */
+  void integrateQueryPoseFromField();
 };
 
 #endif // PFIELD_MANAGER_HPP

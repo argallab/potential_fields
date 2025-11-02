@@ -1,28 +1,43 @@
 /// @file pfield_manager.cpp
 /// @brief Manages a PotentialField instance and visualizes obstacles, the goal, and planned paths.
 /// @author Sharwin Patil
-/// @date October 6, 2025
+/// @date November 2, 2025
+/// @details
+///   ROS 2 node wrapping the potential field library. It:
+///   - Publishes RViz markers for goal, obstacles, influence zones, and velocity vectors
+///   - Integrates a live "query pose" each timer tick using opposing-force removal and motion constraints
+///   - Selects a MotionPlugin (e.g., Null, Franka) and assigns its IKSolver to the PotentialField
+///   - Optionally initializes kinematics from a URDF and adapts influence distance based on robot extent
 ///
-/// PARAMETERS:
-///   timer_frequency (float64): The frequency for the timer updating the potential field visualization [Hz]
-///   attractive_gain (float64): Gain for the attractive force towards the goal [Ns/m]
-///   rotational_attractive_gain (float64): Gain for the rotational attractive force [Ns/m]
-///   repulsive_gain (float64): Gain for the repulsive force from obstacles [Ns/m]
-///   max_force (float64): Maximum force allowed by the potential field [N]
-///   fixed_frame (string): The fixed frame for RViz visualization and potential field computation
-///   influence_zone_scale (float64): Scaling factor for the influence zone of obstacles
-///   field_resolution (float64): Resolution of the potential field grid when visualizing [m]
+/// PARAMETERS (declared as ROS 2 parameters):
+///   visualize_pf_frequency (float64): Timer frequency for PF updates [Hz]
+///   attractive_gain (float64): Gain for translational attraction [Ns/m]
+///   rotational_attractive_gain (float64): Gain for rotational attraction [Ns·m/rad]
+///   repulsive_gain (float64): Gain for obstacle repulsion [Ns/m]
+///   max_linear_velocity (float64): Linear velocity soft cap [m/s]
+///   max_angular_velocity (float64): Angular velocity soft cap [rad/s]
+///   max_linear_acceleration (float64): Linear acceleration limit [m/s^2]
+///   max_angular_acceleration (float64): Angular acceleration limit [rad/s^2]
+///   influence_distance (float64): Absolute distance from obstacle surface where repulsion acts [m]
+///   visualizer_buffer_area (float64): Extra margin around limits for RViz markers [m]
+///   field_resolution (float64): Grid spacing when sampling the field for visualization [m]
+///   fixed_frame (string): RViz fixed frame for visualization and PF computation
+///   urdf_file_path (string): Optional path to a URDF; enables kinematics and extent estimation
+///   motion_plugin_type (string): Motion plugin to use (e.g., "null", "franka")
+///   franka_hostname (string): Optional, required when motion_plugin_type == "franka"
 ///
 /// SERVICES:
-///   ~/pfield/plan_path (potential_fields_interfaces::srv::PlanPath): Interpolates a path from a start pose to the goal pose
-///   ~/pfield/compute_autonomy_vector (potential_fields_interfaces::srv::ComputeAutonomyVector): Computes velocity vector at pose
+///   pfield/plan_path (potential_fields_interfaces::srv::PlanPath): Plans a path from a start pose to the PF goal
+///   pfield/compute_autonomy_vector (potential_fields_interfaces::srv::ComputeAutonomyVector): Computes velocity at a pose
 ///
 /// SUBSCRIBERS:
-///   ~/goal_pose (geometry_msgs::msg::PoseStamped): Updates the goal pose in the potential field
-///   ~/pfield/obstacles (potential_fields_interfaces::msg::ObstacleArray): All PF Obstacles
+///   pfield/planning_goal_pose (geometry_msgs::msg::PoseStamped): Updates the PF goal pose
+///   pfield/obstacles (potential_fields_interfaces::msg::ObstacleArray): Adds/updates external PF obstacles
+///   pfield/query_pose (geometry_msgs::msg::Pose): Sets the live query pose used for visualization
 ///
 /// PUBLISHERS:
-///   ~/pfield/markers (visualization_msgs::msg::MarkerArray): Markers for PF visualization in RViz
+///   pfield/markers (visualization_msgs::msg::MarkerArray): RViz markers (reliable + transient_local QoS)
+///   pfield/planned_path (nav_msgs::msg::Path): Planned end-effector path
 
 #include "ros/pfield_manager.hpp"
 #include "robot_plugins/null_motion_plugin.hpp"
@@ -127,7 +142,7 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
 
   // Setup goal pose subscriber
   auto goalPoseQos = rclcpp::QoS(rclcpp::KeepLast(10)).reliable();
-  this->goalPoseSub = this->create_subscription<geometry_msgs::msg::PoseStamped>("/pfield/planning_goal_pose",
+  this->goalPoseSub = this->create_subscription<geometry_msgs::msg::PoseStamped>("pfield/planning_goal_pose",
     goalPoseQos,
     [this](const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
     const SpatialVector goalPose(
@@ -222,21 +237,25 @@ void PotentialFieldManager::timerCallback() {
   // Get updated obstacles from PFKinematics and update internal PF
   // this->pField->updateObstaclesFromKinematics(this->motionPlugin->getCurrentJointAngles());
   // Update the query pose position based on integrating the PF velocity
+  this->integrateQueryPoseFromField();
+  MarkerArray pfieldMarkers = this->visualizePF(this->pField);
+  this->pFieldMarkerPub->publish(pfieldMarkers);
+}
+
+void PotentialFieldManager::integrateQueryPoseFromField() {
   // Advance pose using constrained interpolation (acceleration limits applied internally)
   const double dt = this->now().seconds() - this->lastQueryUpdate.seconds();
   this->lastQueryUpdate = this->now();
   TaskSpaceWrench wrench = this->pField->evaluateWrenchAtPoseWithOpposingForceRemoval(this->queryPose);
-  TaskSpaceTwist twist = this->pField->applyMotionConstraints(this->pField->wrenchToTwist(wrench), this->prevQueryTwist, dt);
+  TaskSpaceTwist twist = this->pField->applyMotionConstraints(
+    this->pField->wrenchToTwist(wrench), this->prevQueryTwist, dt);
   Eigen::Vector3d nextPosition = this->pField->integrateLinearVelocity(
     this->queryPose.getPosition(), twist.linearVelocity, dt);
   Eigen::Quaterniond nextOrientation = this->pField->integrateAngularVelocity(
     this->queryPose.getOrientation(), twist.angularVelocity, dt);
   this->queryPose = SpatialVector(nextPosition, nextOrientation);
-  this->prevQueryTwist = twist; // supply velocity-limited twist as previous for next acceleration limiting
-
-
-  MarkerArray pfieldMarkers = this->visualizePF(this->pField);
-  this->pFieldMarkerPub->publish(pfieldMarkers);
+  // Supply velocity-limited twist as previous for next acceleration limiting
+  this->prevQueryTwist = twist;
 }
 
 void PotentialFieldManager::handleComputeAutonomyVector(
@@ -369,6 +388,9 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
     response->joint_trajectory.points.size(),
     response->end_effector_velocity_trajectory.size()
   );
+  // Right before exiting, update the query pose to the start of the planned path
+  // to visualize the planned trajectory from the new query pose
+  this->queryPose = startSV;
   if (!response->success) {
     // If planning failed, log final pose and distance to goal
     const auto& finalPose = planningResult.poses.back();
