@@ -167,6 +167,7 @@ We integrate over the twist (linear and angular velocities) using a constrained 
 Given current pose $q_i = (\mathbf{x}_i, \mathbf{R}_i)$ and previous applied twist $T_{i-1}$, with step size $\Delta t$:
 
 1) Stage 1
+
 $$
 \begin{aligned}
 \mathbf{k}_1 &= T_c\big(q_i,\, T_{i-1},\, \Delta t\big) \\
@@ -175,6 +176,7 @@ q_{i}^{(1/2)} &= \Big(\, \mathbf{x}_i + \tfrac{\Delta t}{2}\,\mathbf{v}_1\,,\; \
 $$
 
 2) Stage 2
+
 $$
 \begin{aligned}
 \mathbf{k}_2 &= T_c\big(q_{i}^{(1/2)},\, \mathbf{k}_1,\, \tfrac{\Delta t}{2}\big) \\
@@ -183,6 +185,7 @@ q_{i}^{(1/2)'} &= \Big(\, \mathbf{x}_i + \tfrac{\Delta t}{2}\,\mathbf{v}_2\,,\; 
 $$
 
 3) Stage 3
+
 $$
 \begin{aligned}
 \mathbf{k}_3 &= T_c\big(q_{i}^{(1/2)'},\, \mathbf{k}_2,\, \tfrac{\Delta t}{2}\big) \\
@@ -191,6 +194,7 @@ q_{i}^{(1)} &= \Big(\, \mathbf{x}_i + \Delta t\,\mathbf{v}_3\,,\; \mathbf{R}_i\;
 $$
 
 4) Stage 4
+
 $$
 \mathbf{k}_4 = T_c\big(q_{i}^{(1)},\, \mathbf{k}_3,\, \Delta t\big)
 $$
