@@ -2,6 +2,7 @@
 import csv
 import math
 import os
+import random
 
 from geometry_msgs.msg import PoseStamped, Pose
 from potential_fields_interfaces.srv import PlanPath
@@ -19,24 +20,25 @@ class SphereRobotDemo(Node):
             'fixed_frame', 'world').get_parameter_value().string_value
 
         self.goal_pub = self.create_publisher(
-            PoseStamped, '/pfield/planning_goal_pose', 10
+            PoseStamped, 'pfield/planning_goal_pose', 10
         )
         self.obstacle_pub = self.create_publisher(
-            ObstacleArray, '/pfield/obstacles', 10
+            ObstacleArray, 'pfield/obstacles', 10
         )
         self.query_pub = self.create_publisher(
-            Pose, '/pfield/query_pose', 10
+            Pose, 'pfield/query_pose', 10
         )
         self.cli = self.create_client(PlanPath, 'pfield/plan_path')
         # Service to trigger demo
         self.create_service(
-            Empty, '/run_sphere_demo', self.run_demo_callback
+            Empty, 'run_sphere_demo', self.run_demo_callback
         )
         self.get_logger().info('Ready to run plan path demo via service call.')
-        self.start = (-2.0, -1.5, -0.5)
-        self.goal = (4.0,  1.0,  0.6)
+        self.start = (-2.0, 0.0, 0.0)
+        self.goal = (3.0,  0.0,  0.0)
         # Publish static obstacles
-        obstacles = self.create_obstacles()
+        # obstacles = self.create_obstacles_in_the_way()
+        obstacles = self.create_clustered_obstacles()
         self.obstacle_pub.publish(obstacles)
         # Publish the goal pose (ensure a valid identity orientation)
         goal_pose = PoseStamped()
@@ -68,7 +70,44 @@ class SphereRobotDemo(Node):
         self.query_pub.publish(query_pose)
         self.get_logger().info('Published initial query pose.')
 
-    def create_obstacles(self):
+    def create_clustered_obstacles(self) -> ObstacleArray:
+        """Replicate the ClutteredSpheresDemo obstacle pattern as ROS obstacles.
+
+        Places ~10 spheres with radii and positions sampled from ranges used in
+        prototyping/pfield_3d_demo.py ClutteredSpheresDemo, with a light corridor
+        clearing near y ~ 0.
+        """
+        rng = random.Random(7)  # match the prototype's default seed
+        count = 10
+        obstacles_msg = ObstacleArray()
+        for i in range(count):
+            cx = rng.uniform(-1.5, 2.5)
+            cy = rng.uniform(-1.0, 1.0)
+            cz = rng.uniform(-0.4, 0.4)
+            r = rng.uniform(0.25, 0.55)
+            # corridor: keep y near 0 a bit clearer most of the time
+            if abs(cy) < 0.2 and rng.random() < 0.7:
+                cy += rng.choice([-1.0, 1.0]) * rng.uniform(0.3, 0.6)
+
+            sph = Obstacle()
+            sph.frame_id = f"obstacle/sphere_cluster/{i}"
+            sph.type = "Sphere"
+            sph.group = "Static"
+            sph.pose.position.x = cx
+            sph.pose.position.y = cy
+            sph.pose.position.z = cz
+            sph.pose.orientation.x = 0.0
+            sph.pose.orientation.y = 0.0
+            sph.pose.orientation.z = 0.0
+            sph.pose.orientation.w = 1.0
+            sph.radius = r
+            obstacles_msg.obstacles.append(sph)
+
+        self.get_logger().info(
+            f'Created clustered sphere obstacles: {len(obstacles_msg.obstacles)} items')
+        return obstacles_msg
+
+    def create_obstacles_in_the_way(self):
         obstacles_msg = ObstacleArray()
         # Replicate the obstacles from prototyping/pfield_3d_demo.py: obstacles_in_the_way()
         #   - Sphere at (1.5, 1.0, 0.7), radius 0.7
