@@ -311,10 +311,8 @@ PlannedPath PotentialField::planPath(
   double timeStamp = 0.0;
 
   for (size_t iter = 0; iter < maxIterations; ++iter) {
-    // Evaluate wrench at current pose after removing opposing repulsive force components
-    // to prevent pinning and stagnation in local minima
-    // TaskSpaceWrench wrench = this->evaluateWrenchAtPoseWithOpposingForceRemoval(current);
-    // TaskSpaceTwist constrainedTwist = this->applyMotionConstraints(this->wrenchToTwist(wrench), prevTwist, stepDt);
+    // Perform RK4 integration step to get next pose and the applied twist
+    // including removal of opposing repulsive force components and enforcement of motion constraints
     auto [nextPoseRK4, appliedTwist] = this->rungeKuttaStep(current, prevTwist, stepDt);
 
     // Record current state
