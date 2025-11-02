@@ -214,7 +214,7 @@ where $\exp([\boldsymbol{\omega}]_\times\, \Delta t)$ is implemented via an angl
 
 Notes:
 - $T_c(\cdot)$ applies planning-only opposing-force removal, maps wrench to twist, and enforces motion constraints for each stage.
-- Per-stage rate limits use the stage’s effective step size ($\Delta t/2$ for stages 2–3, $\Delta t$ for stage 4) by supplying the previous stage’s twist to the constraint function.
+- Per-stage rate limits use the stage’s effective step size ($\Delta t$ for stages 1 and 4, $\Delta t/2$ for stages 2–3) by supplying the previous stage’s twist to the constraint function.
 - After averaging, constraints are applied again before the final integration step (as in the implementation).
 
 ### Velocity and Acceleration Limits
