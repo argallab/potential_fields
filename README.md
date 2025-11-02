@@ -62,21 +62,22 @@ ros2 launch pfields_demo pf_demo.launch.xml
 Launching the project without any arguments is good enough to launch the basic robot and visualization. Of course, arguments are necessary to customize the PF package with your robot, RViz config, gain parameters, etc.
 
 # Potential Equations
-These equations were obtained from a [Columbia Presentation on Potential Field Path Planning](https://www.cs.columbia.edu/~allen/F17/NOTES/potentialfield.pdf). The paper: [Real-Time Obstacle Avoidance for Manipulators and Mobile Robots](https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=1087247) is the original reference for these equations and describes the derivation of the potential equations, how to obtain the gradients, and how to obtain a velocity from the gradients.
+These equations were obtained from this paper: [Real-Time Obstacle Avoidance for Manipulators and Mobile Robots](https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=1087247) [1] which describes the derivation of the potential equations, how to obtain the gradients, and how to obtain a velocity from the gradients.
 
 In this library, the potential field produces a task-space wrench over the robot’s end-effector pose:
 
 - Linear force $\mathbf{F}(q)$ [N] from the translational potential
 - Torque $\boldsymbol{\tau}(q)$ [Nm] from the rotational potential
 
-This wrench is mapped to a task-space twist (velocity) using constant gains:
+This wrench is mapped to a task-space twist $T(q)$ using constant gains:
 
 $$\begin{align}
-\mathbf{v}(q) &= k_{lin}\,\mathbf{F}(q) \\
-\boldsymbol{\omega}(q) &= k_{ang}\,\boldsymbol{\tau}(q)
+\mathbf{v}(q) &= k_{lin}\ \cdot \mathbf{F}(q) \\
+\boldsymbol{\omega}(q) &= k_{ang} \cdot \boldsymbol{\tau}(q) \\
+T(q) &= \begin{bmatrix}\mathbf{v}(q) \\ \boldsymbol{\omega}(q) \end{bmatrix}
 \end{align}$$
 
-with defaults of $k_{lin} = 1.0\,[(\mathrm{m/s})/\mathrm{N}]$ and $k_{ang} = 1.0\,[(\mathrm{rad/s})/\mathrm{Nm}]$. The computed twist is then limited by velocity and acceleration constraints before being integrated to obtain the next pose.
+with defaults of $k_{lin} = 1.0\,[(\mathrm{m/s})/\mathrm{N}]$ and $k_{ang} = 1.0\,[(\mathrm{rad/s})/\mathrm{Nm}]$.
 
 The potential functions are scalar fields representing potential energy (Newton-meters [Nm]). The gradient of the potential is represented as a force (Newtons [N]). To obtain velocity vectors, we use some parameter ($\zeta$ and $\eta$) that acts as an inverse damping coefficient (Newton-seconds / meter [Ns/m]) to convert the force into a velocity (meters / second [m/s]).
 
@@ -101,7 +102,7 @@ Let $q_c$ be the current unit quaternion and $q_g$ the goal orientation. The geo
 
 $$q_{diff} = q_c^{*} \otimes q_g,$$
 
-and the corresponding unit rotation axis $\mathbf{u} = \frac{\operatorname{vec}(q_{diff})}{\lVert\operatorname{vec}(q_{diff})\rVert}$. The attractive rotational torque is proportional to the geodesic angle and acts about $\mathbf{u}$:
+and the corresponding unit rotation axis $\mathbf{u} = \frac{\vec{q_{diff}}}{\lVert\vec{q_{diff}}\rVert}$. The attractive rotational torque is proportional to the geodesic angle and acts about $\mathbf{u}$:
 
 $$\boldsymbol{\tau}_{att}(q) = -\,\omega\,\theta\,\mathbf{u},$$
 
@@ -169,6 +170,33 @@ Before integrating the twist, linear and angular speeds are soft-saturated by no
 
 This produces smooth, feasible motions while following the potential field.
 
+#### Soft Saturation
+Soft saturation smoothly caps a vector’s norm while preserving its direction. For a vector $\mathbf{v}$, maximum allowed norm $v_{max}$, and softness parameter $\beta$:
+
+$$
+\mathbf{v}_{sat} \;=\; \mathbf{v} \cdot \frac{v_{max}\,\tanh\!\left(\beta\,\lVert\mathbf{v}\rVert / v_{max}\right)}{\lVert\mathbf{v}\rVert}.
+$$
+
+- If $\lVert\mathbf{v}\rVert \ll v_{max}$, $\tanh(x) \approx x$ and the scaling is nearly linear (no abrupt clipping).
+- As $\lVert\mathbf{v}\rVert \to \infty$, the saturated norm approaches $v_{max}$ asymptotically.
+- Higher $\beta$ produces a steeper transition near $v_{max}$; lower $\beta$ makes it gentler.
+
+This is applied to both linear and angular velocities before rate limiting.
+
+#### Rate Limiting
+Rate limiting bounds the change from the previous vector $\mathbf{v}_{prev}$ to the current target $\mathbf{v}_{curr}$ by a maximum step $\Delta_{max}$ (e.g., from acceleration limits over $\Delta t$):
+
+$$
+\mathbf{d} = \mathbf{v}_{curr} - \mathbf{v}_{prev},\quad
+\mathbf{v}_{rl} =
+\begin{cases}
+\mathbf{v}_{curr}, & \lVert\mathbf{d}\rVert \le \Delta_{max} \\
+\mathbf{v}_{prev} + \mathbf{d}\,\dfrac{\Delta_{max}}{\lVert\mathbf{d}\rVert}, & \lVert\mathbf{d}\rVert > \Delta_{max}
+\end{cases}
+$$
+
+This guarantees the step size is never larger than $\Delta_{max}$ while preserving the intended direction of change. After rate limiting, soft saturation is re-applied to ensure the final vector also respects the velocity caps.
+
 ### Mitigating Local Minima (Planning-only)
 To reduce sticking on broad obstacle faces, the planner removes only the repulsive component that directly opposes the attractive force and keeps tangential components that encourage sliding:
 
@@ -178,8 +206,27 @@ $$
 
 This filtering is applied only during planning; the unfiltered field is kept for visualization and testing semantics.
 
+## Path Planning Algorithm
+The path planning algorithm iteratively computes the potential field wrench, maps it to a twist, applies velocity and acceleration limits, and integrates the twist to update the pose. This process continues until the planner reaches the goal within a specified tolerance.
+
+```python
+# pseudocode for path planning algorithm
+def plan_path(start_pose, goal_pose, goal_tolerance, dt):
+    current_pose = start_pose
+    path = [current_pose]
+
+    while not at_goal(current_pose, goal_pose, goal_tolerance):
+        # 1) Evaluate the potential field wrench at the current pose in the potential field
+        wrench = evaluate_wrench_at_pose(current_pose, goal_pose)
+        # 2) Convert the wrench to a twist (velocity) and apply velocity/acceleration limits
+        twist = convert_wrench_to_twist(wrench)
+        twist_limited = apply_velocity_acceleration_limits(twist, dt)
+        # 3) Integrate the twist to get the next pose using RK4 while still respecting limits
+        current_pose = integrate_twist(current_pose, twist_limited, dt)
+        path.append(current_pose)
+
+    return path
+```
 
 # References
- [1] [Columbia Presentation on Potential Field Path Planning](https://www.cs.columbia.edu/~allen/F17/NOTES/potentialfield.pdf)
-
- [2] [Real-Time Obstacle Avoidance for Manipulators and Mobile Robots](https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=1087247)
+ [1] [Real-Time Obstacle Avoidance for Manipulators and Mobile Robots](https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=1087247)
