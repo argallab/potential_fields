@@ -27,6 +27,12 @@ import math
 import numpy as np
 import matplotlib.pyplot as plt
 from datetime import datetime
+from pathlib import Path
+from pfield_3d_prototype import (
+    attractive_force_magnitude,
+    attractive_moment_magnitude,
+    repulsive_force_magnitude,
+)
 
 # Defaults matched to PotentialField defaults
 DEFAULT_ATTRACTIVE_GAIN = 1.0
@@ -42,39 +48,10 @@ GRAPH_LIMITS = {
     "max_y": 1.0,
 }
 
-
-def attractive_force_magnitude(distance: np.ndarray,
-                               k_att: float = DEFAULT_ATTRACTIVE_GAIN,
-                               tol: float = TRANSLATIONAL_TOLERANCE) -> np.ndarray:
-    d = np.maximum(distance, 0.0)
-    mag = k_att * d
-    mag[d <= tol] = 0.0
-    return mag
-
-
-def attractive_moment_magnitude(angle_rad: np.ndarray,
-                                k_rot: float = DEFAULT_ROTATIONAL_ATTRACTIVE_GAIN,
-                                threshold: float = ROTATIONAL_THRESHOLD) -> np.ndarray:
-    th = np.maximum(angle_rad, 0.0)
-    mag = k_rot * th
-    mag[th <= threshold] = 0.0
-    return mag
-
-
-def repulsive_force_magnitude(distance: np.ndarray,
-                              k_rep: float = DEFAULT_REPULSIVE_GAIN,
-                              influence_distance: float = 1.25,
-                              eps: float = 1e-6) -> np.ndarray:
-    """Repulsive force magnitude for d < q; else 0.
-    Handles d -> 0 safely via epsilon clipping.
-    """
-    d = np.clip(distance, eps, None)
-    q = max(influence_distance, eps)
-    mag = np.zeros_like(d)
-    mask = d < q
-    dm = d[mask]
-    mag[mask] = k_rep * (1.0 / q - 1.0 / dm) * (1.0 / (dm * dm))
-    return mag
+# Save plots into the repository's data directory by default
+THIS_DIR = Path(__file__).resolve().parent
+DATA_DIR = THIS_DIR.parent / "data"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def add_limits_to_ax(ax):
@@ -150,11 +127,11 @@ def main(save_path: str | None = None):
 
     if save_path is None:
         ts = datetime.now().strftime("%Y%m%d_%H%M%S")
-        save_path = f"pf_forces_{ts}.png"
+        save_path = DATA_DIR / f"pf_forces_{ts}.png"
     fig.savefig(save_path, dpi=160)
     print(f"Saved plot to: {save_path}")
 
 
 if __name__ == "__main__":
-    # Default save in the current directory; adjust or pass a full path as needed.
+    # Default save in the data directory; pass a full path to override.
     main()

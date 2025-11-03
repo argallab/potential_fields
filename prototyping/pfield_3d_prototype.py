@@ -39,6 +39,129 @@ def rate_limit_step(prev: np.ndarray, curr: np.ndarray, dmax: float) -> np.ndarr
     return prev + d * (dmax / dn)
 
 
+# ------------------------------
+# Reusable potential-field helpers
+# Centralize lightweight utilities so visualization scripts can import instead
+# of re-implementing formulas.
+# ------------------------------
+
+def attractive_force_magnitude(
+    distance: np.ndarray | float,
+    k_att: float = 1.0,
+    tol: float = 1e-3,
+) -> np.ndarray | float:
+    """
+    Magnitude of translational attractive force: |F_att| = k_att * d (zero inside tol).
+    Accepts scalar or numpy array.
+    """
+    if isinstance(distance, (int, float)):
+        d = max(float(distance), 0.0)
+        return 0.0 if d <= tol else k_att * d
+    d_arr = np.maximum(np.asarray(distance, dtype=float), 0.0)
+    mag = k_att * d_arr
+    mag[d_arr <= tol] = 0.0
+    return mag
+
+
+def attractive_moment_magnitude(
+    angle_rad: np.ndarray | float,
+    k_rot: float = 0.7,
+    threshold: float = 0.02,
+) -> np.ndarray | float:
+    """
+    Magnitude of rotational attractive moment: |M_att| = k_rot * theta (zero inside threshold).
+    Accepts scalar or numpy array.
+    """
+    if isinstance(angle_rad, (int, float)):
+        th = max(float(angle_rad), 0.0)
+        return 0.0 if th <= threshold else k_rot * th
+    th_arr = np.maximum(np.asarray(angle_rad, dtype=float), 0.0)
+    mag = k_rot * th_arr
+    mag[th_arr <= threshold] = 0.0
+    return mag
+
+
+def repulsive_force_magnitude(
+    distance: np.ndarray | float,
+    k_rep: float,
+    influence_distance: float,
+    eps: float = 1e-6,
+) -> np.ndarray | float:
+    """
+    Khatib-style repulsive magnitude inside influence distance q:
+      |F_rep| = k_rep * (1/d - 1/q) * (1/d^2), for 0 < d < q; else 0.
+    Safe near surfaces with epsilon clipping.
+    Accepts scalar or numpy array.
+    """
+    q = max(float(influence_distance), eps)
+    if isinstance(distance, (int, float)):
+        d = max(float(distance), eps)
+        if d >= q:
+            return 0.0
+        inv_d = 1.0 / d
+        inv_q = 1.0 / q
+        return k_rep * (inv_d - inv_q) * (inv_d * inv_d)
+    d_arr = np.clip(np.asarray(distance, dtype=float), eps, None)
+    mag = np.zeros_like(d_arr)
+    mask = d_arr < q
+    dm = d_arr[mask]
+    inv_d = 1.0 / dm
+    inv_q = 1.0 / q
+    mag[mask] = k_rep * (inv_d - inv_q) * (inv_d * inv_d)
+    return mag
+
+
+def combine_forces_1d(
+    distance_from_goal: float,
+    obstacle_center: float,
+    k_att: float,
+    k_rep: float,
+    influence_q: float,
+    min_distance: float = 1e-3,
+) -> tuple[float, float, float]:
+    """
+    1D slice helper along +x: attractive toward goal at x=0, repulsive from an obstacle at x=obstacle_center.
+    Returns (F_attr, F_rep, F_total). Signs follow 1D directions.
+    """
+    d = float(distance_from_goal)
+    # Attractive toward goal (negative direction along +x)
+    F_attr = -k_att * d
+    # Repulsive acts away from obstacle center
+    dist_obs = abs(d - obstacle_center)
+    F_rep_mag = float(repulsive_force_magnitude(
+        max(dist_obs, min_distance), k_rep=k_rep, influence_distance=influence_q, eps=min_distance
+    ))
+    if F_rep_mag > 0.0:
+        sign = -1.0 if d > obstacle_center else 1.0
+        F_rep = sign * F_rep_mag
+    else:
+        F_rep = 0.0
+    return F_attr, F_rep, F_attr + F_rep
+
+
+def apply_motion_constraints_1d(
+    v_des: float,
+    v_prev: float,
+    dt: float,
+    vmax: float,
+    amax: float,
+) -> float:
+    """
+    Mirror simple 1D motion limits used in visualization:
+      1) velocity hard cap
+      2) acceleration cap relative to previous velocity
+      3) re-apply velocity cap
+    """
+    v_cap = float(np.clip(v_des, -vmax, vmax))
+    if dt <= 0.0:
+        return v_cap
+    dv = v_cap - v_prev
+    dv_max = amax * dt
+    if abs(dv) > dv_max and dv_max > 0.0:
+        v_cap = v_prev + math.copysign(dv_max, dv)
+    return float(np.clip(v_cap, -vmax, vmax))
+
+
 def _rotzxy(yaw: float, pitch: float, roll: float) -> np.ndarray:
     cz, sz = math.cos(yaw), math.sin(yaw)
     cy, sy = math.cos(pitch), math.sin(pitch)
@@ -593,16 +716,26 @@ class PotentialField3D:
         return float(min_d)
 
 
-def plot_kinematics(title: str, res: Dict[str, Any], show: bool = True, save_path: str = None, description: str = ""):
+def plot_kinematics(title: str,
+                    res: Dict[str, Any],
+                    show: bool = True,
+                    save_path: str | None = None,
+                    description: str = "",
+                    goal: Tuple[float, float, float] | np.ndarray | None = None):
     """
-    Plot position, velocity, and acceleration vs time from a plan_path result dict.
+    Plot a 3x2 grid of time-series:
+      (row 1, col 1) position components (x,y,z)
+      (row 1, col 2) distance-to-goal (if goal given) else |p|
+      (row 2, col 1) linear velocity components (vx,vy,vz)
+      (row 2, col 2) angular velocity components (wx,wy,wz) if present
+      (row 3, col 1) linear acceleration components (ax,ay,az)
+      (row 3, col 2) min_clearance_m if present
 
     Expected keys in res:
       - "t": time array [N]
       - "x", "y", "z": position components [N]
-      - "vx", "vy", "vz": velocity components [N]
-
-    Acceleration is computed numerically from velocity using np.gradient over time.
+      - "vx", "vy", "vz": linear velocity components [N]
+      - optionally: "wx","wy","wz" (or CSV-style "ee_wx" etc.) and "min_clearance_m".
     """
 
     t = np.asarray(res.get("t", []), dtype=float)
@@ -613,6 +746,21 @@ def plot_kinematics(title: str, res: Dict[str, Any], show: bool = True, save_pat
     vy = np.asarray(res.get("vy", []), dtype=float)
     vz = np.asarray(res.get("vz", []), dtype=float)
 
+    # Optional series
+    wx = res.get("wx")
+    wy = res.get("wy")
+    wz = res.get("wz")
+    if wx is None and ("ee_wx" in res):
+        wx = res.get("ee_wx")
+        wy = res.get("ee_wy")
+        wz = res.get("ee_wz")
+    wx = None if wx is None else np.asarray(wx, dtype=float)
+    wy = None if wy is None else np.asarray(wy, dtype=float)
+    wz = None if wz is None else np.asarray(wz, dtype=float)
+    min_clear = res.get("min_clearance_m", res.get("min_clearance"))
+    min_clear = None if min_clear is None else np.asarray(
+        min_clear, dtype=float)
+
     if t.size == 0:
         raise ValueError("Result dictionary is missing time array 't'.")
 
@@ -622,50 +770,89 @@ def plot_kinematics(title: str, res: Dict[str, Any], show: bool = True, save_pat
     az = np.gradient(vz, t)
 
     pos_mag = np.sqrt(x*x + y*y + z*z)
-    vel_mag = np.sqrt(vx*vx + vy*vy + vz*vz)
-    acc_mag = np.sqrt(ax*ax + ay*ay + az*az)
 
-    fig, axes = plt.subplots(3, 1, sharex=True, figsize=(9, 9))
+    # Build 3x2 grid
+    fig, axes = plt.subplots(3, 2, sharex=True, figsize=(12, 9))
+    fig.suptitle(f"{title}", fontsize=16)
 
-    fig.suptitle(f'{title}', fontsize=16)
+    # Row 1, Col 1: Position components
+    ax11 = axes[0, 0]
+    ax11.plot(t, x, label='x')
+    ax11.plot(t, y, label='y')
+    ax11.plot(t, z, label='z')
+    ax11.set_ylabel('Position [m]')
+    ax11.grid(True, linestyle=':')
+    ax11.legend(loc='best', fontsize=9)
 
-    # Position
-    axes[0].plot(t, x, label='x')
-    axes[0].plot(t, y, label='y')
-    axes[0].plot(t, z, label='z')
-    axes[0].plot(t, pos_mag, '--', color='gray', linewidth=1.0, label='|p|')
-    axes[0].set_ylabel('Position [m]')
-    axes[0].grid(True, linestyle=':')
-    axes[0].legend(loc='best', fontsize=9)
+    # Row 1, Col 2: Distance to goal (if provided) else |p|
+    ax12 = axes[0, 1]
+    if goal is not None:
+        g = np.asarray(goal, dtype=float).reshape(3,)
+        d_goal = np.sqrt((x - g[0])**2 + (y - g[1])**2 + (z - g[2])**2)
+        ax12.plot(t, d_goal, color='C3', label='‖p - goal‖')
+        ax12.set_ylabel('Dist→Goal [m]')
+        ax12.legend(loc='best', fontsize=9)
+    else:
+        ax12.plot(t, pos_mag, color='C7', label='|p|')
+        ax12.set_ylabel('|p| [m]')
+        ax12.legend(loc='best', fontsize=9)
+    ax12.grid(True, linestyle=':')
 
-    # Velocity
-    axes[1].plot(t, vx, label='vx')
-    axes[1].plot(t, vy, label='vy')
-    axes[1].plot(t, vz, label='vz')
-    axes[1].plot(t, vel_mag, '--', color='gray', linewidth=1.0, label='|v|')
-    axes[1].set_ylabel('Velocity [m/s]')
-    axes[1].grid(True, linestyle=':')
-    axes[1].legend(loc='best', fontsize=9)
+    # Row 2, Col 1: Linear velocity components
+    ax21 = axes[1, 0]
+    ax21.plot(t, vx, label='vx')
+    ax21.plot(t, vy, label='vy')
+    ax21.plot(t, vz, label='vz')
+    ax21.set_ylabel('Velocity [m/s]')
+    ax21.grid(True, linestyle=':')
+    ax21.legend(loc='best', fontsize=9)
 
-    # Acceleration
-    axes[2].plot(t, ax, label='ax')
-    axes[2].plot(t, ay, label='ay')
-    axes[2].plot(t, az, label='az')
-    axes[2].plot(t, acc_mag, '--', color='gray', linewidth=1.0, label='|a|')
-    axes[2].set_ylabel('Acceleration [m/s^2]')
-    axes[2].set_xlabel('Time [s]')
-    axes[2].grid(True, linestyle=':')
-    axes[2].legend(loc='best', fontsize=9)
+    # Row 2, Col 2: Angular velocity components (if present)
+    ax22 = axes[1, 1]
+    if wx is not None and wy is not None and wz is not None:
+        ax22.plot(t, wx, label='wx')
+        ax22.plot(t, wy, label='wy')
+        ax22.plot(t, wz, label='wz')
+        ax22.set_ylabel('Angular vel [rad/s]')
+        ax22.legend(loc='best', fontsize=9)
+    else:
+        ax22.text(0.5, 0.5, 'No angular velocity provided', transform=ax22.transAxes,
+                  ha='center', va='center', fontsize=10, color='gray')
+        ax22.set_ylabel('Angular vel [rad/s]')
+    ax22.grid(True, linestyle=':')
+
+    # Row 3, Col 1: Linear acceleration components
+    ax31 = axes[2, 0]
+    ax31.plot(t, ax, label='ax')
+    ax31.plot(t, ay, label='ay')
+    ax31.plot(t, az, label='az')
+    ax31.set_ylabel('Accel [m/s^2]')
+    ax31.set_xlabel('Time [s]')
+    ax31.grid(True, linestyle=':')
+    ax31.legend(loc='best', fontsize=9)
+
+    # Row 3, Col 2: Min clearance (if present)
+    ax32 = axes[2, 1]
+    if min_clear is not None:
+        ax32.plot(t, min_clear, color='C2', label='min_clearance')
+        ax32.legend(loc='best', fontsize=9)
+    else:
+        ax32.text(0.5, 0.5, 'No min_clearance provided', transform=ax32.transAxes,
+                  ha='center', va='center', fontsize=10, color='gray')
+    ax32.set_ylabel('Clearance [m]')
+    ax32.set_xlabel('Time [s]')
+    ax32.grid(True, linestyle=':')
 
     # Create a text box for the description if provided
     if description:
-        fig.text(0.5, 0.9, description, ha='center',
-                 va='bottom', fontsize=10)
+        fig.text(0.5, 0.92, description, ha='center', va='bottom', fontsize=10)
 
-    fig.tight_layout()
+    fig.tight_layout(rect=[0, 0, 1, 0.96])
 
     if save_path:
         fig.savefig(save_path, dpi=150, bbox_inches='tight')
     if show:
         plt.show()
+    else:
+        plt.close(fig)
     return fig, axes
