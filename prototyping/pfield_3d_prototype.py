@@ -721,8 +721,20 @@ def plot_kinematics(title: str,
                     show: bool = True,
                     save_path: str | None = None,
                     description: str = "",
-                    goal: Tuple[float, float, float] | np.ndarray | None = None):
+                    goal: Tuple[float, float,
+                                float] | np.ndarray | None = None,
+                    goal_orientation: Tuple[float, float, float] | np.ndarray | None = None):
     """
+    Args:
+        title: plot title
+        res: dictionary of time-series results from planner.simulate() or planner.plan_path()
+        show: whether to display the plot interactively
+        save_path: optional path to save the plot image (e.g., PNG)
+        description: optional text description to include below the title
+        goal: optional goal position (x,y,z) to plot distance-to-goal
+        goal_orientation: optional goal orientation (roll,pitch,yaw) in radians (not currently used)
+
+
     Plot a 3x2 grid of time-series:
       (row 1, col 1) position components (x,y,z) + dashed |p|
       (row 1, col 2) angular velocity components (wx,wy,wz) + dashed |w| (if present)
@@ -755,6 +767,18 @@ def plot_kinematics(title: str,
         wy = res.get("ee_wy")
         wz = res.get("ee_wz")
     wx = None if wx is None else np.asarray(wx, dtype=float)
+    # Orientation (quaternions) if available
+    qx = res.get("qx", res.get("ee_qx"))
+    qy = res.get("qy", res.get("ee_qy"))
+    qz = res.get("qz", res.get("ee_qz"))
+    qw = res.get("qw", res.get("ee_qw"))
+    has_quat_series = (
+        qx is not None and qy is not None and qz is not None and qw is not None)
+    if has_quat_series:
+        qx = np.asarray(qx, dtype=float)
+        qy = np.asarray(qy, dtype=float)
+        qz = np.asarray(qz, dtype=float)
+        qw = np.asarray(qw, dtype=float)
     wy = None if wy is None else np.asarray(wy, dtype=float)
     wz = None if wz is None else np.asarray(wz, dtype=float)
     min_clear = res.get("min_clearance_m", res.get("min_clearance"))
@@ -818,9 +842,55 @@ def plot_kinematics(title: str,
     if goal is not None:
         g = np.asarray(goal, dtype=float).reshape(3,)
         d_goal = np.sqrt((x - g[0])**2 + (y - g[1])**2 + (z - g[2])**2)
-        ax22.plot(t, d_goal, color='C3', label='‖p - goal‖')
+        line_d, = ax22.plot(t, d_goal, color='C3', label='‖p - goal‖')
         ax22.set_ylabel('Dist→Goal [m]')
-        ax22.legend(loc='best', fontsize=9)
+        # Optional angle_to_goal overlay if goal_orientation and quaternions are available
+        if goal_orientation is not None and has_quat_series:
+            # Convert goal_orientation to quaternion if needed (expects XYZ roll,pitch,yaw)
+            go = np.asarray(goal_orientation, dtype=float).reshape(-1)
+            if go.size == 3:
+                cr, sr = math.cos(go[0]*0.5), math.sin(go[0]*0.5)
+                cp, sp = math.cos(go[1]*0.5), math.sin(go[1]*0.5)
+                cy, sy = math.cos(go[2]*0.5), math.sin(go[2]*0.5)
+                # XYZ intrinsic rotations
+                qw_g = cr*cp*cy - sr*sp*sy
+                qx_g = sr*cp*cy + cr*sp*sy
+                qy_g = cr*sp*cy - sr*cp*sy
+                qz_g = cr*cp*sy + sr*sp*cy
+            elif go.size == 4:
+                qx_g, qy_g, qz_g, qw_g = float(go[0]), float(
+                    go[1]), float(go[2]), float(go[3])
+            else:
+                qx_g = qy_g = qz_g = 0.0
+                qw_g = 1.0
+            # Normalize goal quaternion
+            norm_g = math.sqrt(qx_g*qx_g + qy_g*qy_g + qz_g*qz_g + qw_g*qw_g)
+            if norm_g > 0:
+                qx_g, qy_g, qz_g, qw_g = qx_g/norm_g, qy_g/norm_g, qz_g/norm_g, qw_g/norm_g
+
+            # Angle between q_curr and q_goal: theta = 2*atan2(||vec(qe)||, |w(qe)|), qe = q_goal*^{-1} ⊗ q_curr
+            # q_goal^{-1} = conjugate for unit quaternion
+            # Quaternion multiply (a,b)⊗(c,d): (w1,x1,y1,z1)*(w2,x2,y2,z2)
+            # qe_w =  qw_g*qw + (-qx_g)*qx + (-qy_g)*qy + (-qz_g)*qz
+            # qe_x =  qw_g*qx - qx_g*qw - qy_g*qz + qz_g*qy
+            # qe_y =  qw_g*qy + qx_g*qz - qy_g*qw - qz_g*qx
+            # qe_z =  qw_g*qz - qx_g*qy + qy_g*qx - qz_g*qw
+            qe_w = qw_g*qw + (-qx_g)*qx + (-qy_g)*qy + (-qz_g)*qz
+            qe_x = qw_g*qx - qx_g*qw - qy_g*qz + qz_g*qy
+            qe_y = qw_g*qy + qx_g*qz - qy_g*qw - qz_g*qx
+            qe_z = qw_g*qz - qx_g*qy + qy_g*qx - qz_g*qw
+            vec_norm = np.sqrt(qe_x*qe_x + qe_y*qe_y + qe_z*qe_z)
+            angle_to_goal = 2.0*np.arctan2(vec_norm, np.abs(qe_w))
+            ax22b = ax22.twinx()
+            line_a, = ax22b.plot(t, angle_to_goal, color='C4',
+                                 label='angle_to_goal [rad]')
+            ax22b.set_ylabel('Angle→Goal [rad]')
+            # Merge legends
+            h1, l1 = ax22.get_legend_handles_labels()
+            h2, l2 = ax22b.get_legend_handles_labels()
+            ax22.legend(h1+h2, l1+l2, loc='best', fontsize=9)
+        else:
+            ax22.legend(loc='best', fontsize=9)
     else:
         ax22.plot(t, pos_mag, color='C7', label='|p|')
         ax22.set_ylabel('|p| [m]')

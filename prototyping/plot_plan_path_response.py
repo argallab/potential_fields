@@ -1,5 +1,6 @@
 import numpy as np
 import pandas as pd
+import scipy.spatial.transform
 from pathlib import Path
 from pfield_3d_prototype import plot_kinematics
 
@@ -32,6 +33,12 @@ def create_plots_with_kinematics(df: pd.DataFrame) -> None:
         "vy": np.asarray(df['ee_vy'], dtype=float),
         "vz": np.asarray(df['ee_vz'], dtype=float),
     }
+    # Include orientation quaternions if available for angle_to_goal computation
+    if {'ee_qx', 'ee_qy', 'ee_qz', 'ee_qw'}.issubset(df.columns):
+        res["ee_qx"] = np.asarray(df['ee_qx'], dtype=float)
+        res["ee_qy"] = np.asarray(df['ee_qy'], dtype=float)
+        res["ee_qz"] = np.asarray(df['ee_qz'], dtype=float)
+        res["ee_qw"] = np.asarray(df['ee_qw'], dtype=float)
     # Optional angular velocities and clearance
     if {'ee_wx', 'ee_wy', 'ee_wz'}.issubset(df.columns):
         res["wx"] = np.asarray(df['ee_wx'], dtype=float)
@@ -43,6 +50,13 @@ def create_plots_with_kinematics(df: pd.DataFrame) -> None:
     goal = (float(df['ee_px'].iloc[-1]),
             float(df['ee_py'].iloc[-1]),
             float(df['ee_pz'].iloc[-1]))
+    goal_orientation = (float(df['ee_qx'].iloc[-1]),
+                        float(df['ee_qy'].iloc[-1]),
+                        float(df['ee_qz'].iloc[-1]),
+                        float(df['ee_qw'].iloc[-1]))
+    # Convert quaternion to Euler angles (roll, pitch, yaw) for goal_orientation
+    quat = scipy.spatial.transform.Rotation.from_quat(goal_orientation)
+    goal_euler = quat.as_euler('xyz', degrees=False)
 
     # Save outputs under data/ with a consistent base name
     save_base = DATA_DIR / 'planned_path'
@@ -53,6 +67,7 @@ def create_plots_with_kinematics(df: pd.DataFrame) -> None:
         save_path=str(save_base),
         description='From planned_path.csv',
         goal=goal,
+        goal_orientation=goal_euler
     )
 
 
