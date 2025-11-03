@@ -724,11 +724,11 @@ def plot_kinematics(title: str,
                     goal: Tuple[float, float, float] | np.ndarray | None = None):
     """
     Plot a 3x2 grid of time-series:
-      (row 1, col 1) position components (x,y,z)
-      (row 1, col 2) distance-to-goal (if goal given) else |p|
-      (row 2, col 1) linear velocity components (vx,vy,vz)
-      (row 2, col 2) angular velocity components (wx,wy,wz) if present
-      (row 3, col 1) linear acceleration components (ax,ay,az)
+      (row 1, col 1) position components (x,y,z) + dashed |p|
+      (row 1, col 2) angular velocity components (wx,wy,wz) + dashed |w| (if present)
+      (row 2, col 1) linear velocity components (vx,vy,vz) + dashed |v|
+      (row 2, col 2) distance-to-goal (if goal given) else |p|
+      (row 3, col 1) linear acceleration components (ax,ay,az) + dashed |a|
       (row 3, col 2) min_clearance_m if present
 
     Expected keys in res:
@@ -770,62 +770,69 @@ def plot_kinematics(title: str,
     az = np.gradient(vz, t)
 
     pos_mag = np.sqrt(x*x + y*y + z*z)
+    vel_mag = np.sqrt(vx*vx + vy*vy + vz*vz)
+    acc_mag = np.sqrt(ax*ax + ay*ay + az*az)
 
     # Build 3x2 grid
     fig, axes = plt.subplots(3, 2, sharex=True, figsize=(12, 9))
     fig.suptitle(f"{title}", fontsize=16)
 
-    # Row 1, Col 1: Position components
+    # Row 1, Col 1: Position components (+|p|)
     ax11 = axes[0, 0]
     ax11.plot(t, x, label='x')
     ax11.plot(t, y, label='y')
     ax11.plot(t, z, label='z')
+    ax11.plot(t, pos_mag, '--', color='k', linewidth=1.2, label='|p|')
     ax11.set_ylabel('Position [m]')
     ax11.grid(True, linestyle=':')
     ax11.legend(loc='best', fontsize=9)
 
-    # Row 1, Col 2: Distance to goal (if provided) else |p|
+    # Row 1, Col 2: Angular velocity components (+|w|) if present
     ax12 = axes[0, 1]
-    if goal is not None:
-        g = np.asarray(goal, dtype=float).reshape(3,)
-        d_goal = np.sqrt((x - g[0])**2 + (y - g[1])**2 + (z - g[2])**2)
-        ax12.plot(t, d_goal, color='C3', label='‖p - goal‖')
-        ax12.set_ylabel('Dist→Goal [m]')
+    if wx is not None and wy is not None and wz is not None:
+        ax12.plot(t, wx, label='wx')
+        ax12.plot(t, wy, label='wy')
+        ax12.plot(t, wz, label='wz')
+        wmag = np.sqrt(wx*wx + wy*wy + wz*wz)
+        ax12.plot(t, wmag, '--', color='k', linewidth=1.2, label='|w|')
+        ax12.set_ylabel('Angular vel [rad/s]')
         ax12.legend(loc='best', fontsize=9)
     else:
-        ax12.plot(t, pos_mag, color='C7', label='|p|')
-        ax12.set_ylabel('|p| [m]')
-        ax12.legend(loc='best', fontsize=9)
+        ax12.text(0.5, 0.5, 'No angular velocity provided', transform=ax12.transAxes,
+                  ha='center', va='center', fontsize=10, color='gray')
+        ax12.set_ylabel('Angular vel [rad/s]')
     ax12.grid(True, linestyle=':')
 
-    # Row 2, Col 1: Linear velocity components
+    # Row 2, Col 1: Linear velocity components (+|v|)
     ax21 = axes[1, 0]
     ax21.plot(t, vx, label='vx')
     ax21.plot(t, vy, label='vy')
     ax21.plot(t, vz, label='vz')
+    ax21.plot(t, vel_mag, '--', color='k', linewidth=1.2, label='|v|')
     ax21.set_ylabel('Velocity [m/s]')
     ax21.grid(True, linestyle=':')
     ax21.legend(loc='best', fontsize=9)
 
-    # Row 2, Col 2: Angular velocity components (if present)
+    # Row 2, Col 2: Distance to goal (if provided) else |p|
     ax22 = axes[1, 1]
-    if wx is not None and wy is not None and wz is not None:
-        ax22.plot(t, wx, label='wx')
-        ax22.plot(t, wy, label='wy')
-        ax22.plot(t, wz, label='wz')
-        ax22.set_ylabel('Angular vel [rad/s]')
+    if goal is not None:
+        g = np.asarray(goal, dtype=float).reshape(3,)
+        d_goal = np.sqrt((x - g[0])**2 + (y - g[1])**2 + (z - g[2])**2)
+        ax22.plot(t, d_goal, color='C3', label='‖p - goal‖')
+        ax22.set_ylabel('Dist→Goal [m]')
         ax22.legend(loc='best', fontsize=9)
     else:
-        ax22.text(0.5, 0.5, 'No angular velocity provided', transform=ax22.transAxes,
-                  ha='center', va='center', fontsize=10, color='gray')
-        ax22.set_ylabel('Angular vel [rad/s]')
+        ax22.plot(t, pos_mag, color='C7', label='|p|')
+        ax22.set_ylabel('|p| [m]')
+        ax22.legend(loc='best', fontsize=9)
     ax22.grid(True, linestyle=':')
 
-    # Row 3, Col 1: Linear acceleration components
+    # Row 3, Col 1: Linear acceleration components (+|a|)
     ax31 = axes[2, 0]
     ax31.plot(t, ax, label='ax')
     ax31.plot(t, ay, label='ay')
     ax31.plot(t, az, label='az')
+    ax31.plot(t, acc_mag, '--', color='k', linewidth=1.2, label='|a|')
     ax31.set_ylabel('Accel [m/s^2]')
     ax31.set_xlabel('Time [s]')
     ax31.grid(True, linestyle=':')
@@ -851,6 +858,7 @@ def plot_kinematics(title: str,
 
     if save_path:
         fig.savefig(save_path, dpi=150, bbox_inches='tight')
+        print(f"Saved kinematics plot to {save_path}")
     if show:
         plt.show()
     else:
