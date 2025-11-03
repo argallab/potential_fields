@@ -267,7 +267,7 @@ Eigen::Vector3d PotentialField::computeRepulsiveForceLinear(const SpatialVector&
     const double Q = std::max(this->influenceDistance, NEAR_ZERO_THRESHOLD);
     const double d = (signedDistance >= 0.0) ? std::max(signedDistance, NEAR_ZERO_THRESHOLD) : NEAR_ZERO_THRESHOLD;
     // Only contribute if within the influence distance
-    if (d < Q) {
+    if (d <= Q) {
       // Magnitude per Khatib potential: eta * (1/d - 1/Q) * (1/d^2)
       const double inverseDistance = 1.0 / d;
       const double inverseDistanceSquared = inverseDistance * inverseDistance;
