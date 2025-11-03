@@ -286,3 +286,4 @@ def plan_path(start_pose, goal_pose, goal_tolerance, dt):
 
 # References
  [1] [Real-Time Obstacle Avoidance for Manipulators and Mobile Robots](https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=1087247)
+ [2] [Principles of Robot Motion: Theory, Algorithms, and Implementations](https://ieeexplore.ieee.org/book/6267238)
