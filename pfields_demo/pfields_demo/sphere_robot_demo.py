@@ -398,7 +398,7 @@ class SphereRobotDemo(Node):
                             # conservative: circumscribed sphere around cylinder
                             cr = getattr(obs, 'radius', 0.0)
                             ch = getattr(obs, 'height', 0.0) * 0.5
-                            r = math.sqrt(cr*cr + ch*ch)
+                            r = max(cr, math.sqrt(cr*cr + ch*ch))
                             d = math.sqrt((px-ox)**2 + (py-oy)
                                           ** 2 + (pz-oz)**2) - r
                             min_clearance = min(min_clearance, max(d, 0.0))
