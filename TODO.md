@@ -16,6 +16,7 @@
   - Update the wording/naming/labeling for gain parameters, influence zones, and function/variables
   - Update the README and in-code documentation to reflect PF wrench and twist definitions
   - Update plots, docs, and visualizations to reflect the correct units/etc.
+- Fix goal axes visualization (RGB cylinders)
 
 
 # Future TODOs and Refactors
