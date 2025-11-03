@@ -598,6 +598,11 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<Potenti
     influenceMarker.pose.orientation.y = orientation.y();
     influenceMarker.pose.orientation.z = orientation.z();
     influenceMarker.pose.orientation.w = orientation.w();
+    influenceMarker.color.r = 1.0f;
+    influenceMarker.color.g = 1.0f;
+    influenceMarker.color.b = 0.0f;
+    influenceMarker.color.a = 0.35f; // Semi-transparent
+    influenceMarker.lifetime = rclcpp::Duration(0, 0); // No lifetime
     const double influenceDistance = pf->getInfluenceDistance();
     switch (obstacle.getType()) {
     case ObstacleType::SPHERE: {
@@ -662,11 +667,6 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<Potenti
       break;
     }
     }
-    influenceMarker.color.r = 1.0f;
-    influenceMarker.color.g = 1.0f;
-    influenceMarker.color.b = 0.0f;
-    influenceMarker.color.a = 0.5f; // Semi-transparent
-    influenceMarker.lifetime = rclcpp::Duration(0, 0); // No lifetime
     markerArray.markers.push_back(influenceMarker);
   }
   return markerArray;
