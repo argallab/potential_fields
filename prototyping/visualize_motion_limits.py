@@ -2,8 +2,11 @@
 import math
 import numpy as np
 import matplotlib.pyplot as plt
-from dataclasses import dataclass
 from pathlib import Path
+from pfield_3d_prototype import (
+    combine_forces_1d,
+    apply_motion_constraints_1d,
+)
 
 # Potential Field constants (match pfield.hpp defaults / your chosen values)
 # [Ns/m]  (force magnitude = gain * distance)
@@ -25,80 +28,21 @@ obstacle_center = 0.5                 # Distance of obstacle from goal along +x
 scan_max = obstacle_center + influence_zone_scale * 1.5
 num_samples = 800
 
-# Time steps to visualize acceleration limiting effect
-dt_list = [0.01, 0.05, 0.1, 0.2]
-
-out_dir = Path(__file__).parent
-out_dir.mkdir(parents=True, exist_ok=True)
-
-
-@dataclass
-class Limits:
-    vmax: float
-    amax: float
+# Save results into the repository's data directory
+THIS_DIR = Path(__file__).resolve().parent
+DATA_DIR = THIS_DIR.parent / "data"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 
-limits = Limits(max_linear_velocity, max_linear_acceleration)
-
-
-def attractive_force_mag(d: float) -> float:
-    # F = -k * d -> magnitude k*d
-    return attractive_gain * d
-
-
-def repulsive_force_mag(d_obs: float) -> float:
-    # From PotentialField::computeRepulsiveForceLinear
-    # Only active if distance < influence_zone_scale
-    if d_obs >= influence_zone_scale:
-        return 0.0
-    d = max(d_obs, min_distance)
-    inv_d = 1.0 / d
-    inv_inf = 1.0 / influence_zone_scale
-    inv_d2 = inv_d * inv_d
-    mag = repulsive_gain * (inv_d - inv_inf) * inv_d2
-    return max(mag, 0.0)
-
-
-def combine_forces(d: float) -> tuple[float, float, float]:
-    """
-    d: distance from goal along +x axis.
-    Obstacle at obstacle_center. Distance to obstacle center = |d - obstacle_center|
-    Attractive pulls toward goal (negative direction), repulsive pushes away from obstacle center.
-    We treat everything 1D, so signs matter:
-      Attractive force = -attractive_gain * d
-      Repulsive force (if within influence) pushes away from obstacle: sign = +1 if d < obstacle_center else -1
-    """
-    F_attr = -attractive_gain * d
-    dist_obs = abs(d - obstacle_center)
-    F_rep_mag = repulsive_force_mag(dist_obs)
-    if F_rep_mag > 0:
-        # Direction: away from obstacle center
-        sign = -1.0 if d > obstacle_center else 1.0
-        F_rep = sign * F_rep_mag
-    else:
-        F_rep = 0.0
-    F_total = F_attr + F_rep
-    return F_attr, F_rep, F_total
-
-
-def apply_motion_constraints(v_des: float, v_prev: float, dt: float, lim: Limits) -> float:
-    """
-    Mirror of C++ logic (1D simplification):
-      1. Velocity cap
-      2. Acceleration cap relative to prev
-      3. Re-apply velocity cap
-    """
-    # Step 1 velocity cap
-    v_limited = np.clip(v_des, -lim.vmax, lim.vmax)
-    if dt <= 0.0:
-        return v_limited
-    dv = v_limited - v_prev
-    dv_max = lim.amax * dt
-    if abs(dv) > dv_max and dv_max > 0:
-        v_limited = v_prev + np.sign(dv) * dv_max
-    # Re-cap
-    v_limited = np.clip(v_limited, -lim.vmax, lim.vmax)
-    return v_limited
+def _combine_forces_1d(d: float) -> tuple[float, float, float]:
+    return combine_forces_1d(
+        distance_from_goal=d,
+        obstacle_center=obstacle_center,
+        k_att=attractive_gain,
+        k_rep=repulsive_gain,
+        influence_q=influence_zone_scale,
+        min_distance=min_distance,
+    )
 
 
 def plot_force_curves(distances, F_attr, F_rep, F_total):
@@ -117,7 +61,7 @@ def plot_force_curves(distances, F_attr, F_rep, F_total):
     plt.title('Potential Field Forces vs Distance (1D slice)')
     plt.legend()
     plt.grid(True)
-    fn = out_dir / 'pf_forces_vs_distance.png'
+    fn = DATA_DIR / 'pf_forces_vs_distance.png'
     plt.tight_layout()
     plt.savefig(fn, dpi=150)
     print(f"Saved {fn}")
@@ -137,7 +81,7 @@ def plot_velocity_curves(distances, v_uncon, v_constrained_dict):
     plt.title('Velocity vs Distance with Motion Constraints')
     plt.legend()
     plt.grid(True)
-    fn = out_dir / 'pf_velocity_vs_distance.png'
+    fn = DATA_DIR / 'pf_velocity_vs_distance.png'
     plt.tight_layout()
     plt.savefig(fn, dpi=150)
     print(f"Saved {fn}")
@@ -151,7 +95,7 @@ def main():
 
     # Compute forces
     for d in distances:
-        Fa, Fr, Ft = combine_forces(d)
+        Fa, Fr, Ft = _combine_forces_1d(float(d))
         F_attr_list.append(Fa)
         F_rep_list.append(Fr)
         F_tot_list.append(Ft)
@@ -165,13 +109,19 @@ def main():
 
     # Constrained velocities for various dt, assuming starting from rest and walking inward (largest forces outside first)
     v_constrained_dict = {}
-    for dt in dt_list:
+    for dt in (0.01, 0.05, 0.1, 0.2):
         v_prev = 0.0
         vc = []
         # Traverse from far to near (reverse distances) to emulate moving toward goal
         for F in reversed(F_tot_arr):
             v_des = F  # transform wrench->twist (gain=1)
-            v_lim = apply_motion_constraints(v_des, v_prev, dt, limits)
+            v_lim = apply_motion_constraints_1d(
+                v_des=float(v_des),
+                v_prev=float(v_prev),
+                dt=float(dt),
+                vmax=max_linear_velocity,
+                amax=max_linear_acceleration,
+            )
             vc.append(v_lim)
             v_prev = v_lim
         # reverse back to align with distances ascending
@@ -180,7 +130,7 @@ def main():
     plot_force_curves(distances, F_attr_arr, F_rep_arr, F_tot_arr)
     plot_velocity_curves(distances, v_uncon, v_constrained_dict)
 
-    print("Done. Inspect generated PNGs.")
+    print("Done. Inspect generated PNGs in data/.")
 
 
 if __name__ == "__main__":
