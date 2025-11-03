@@ -487,28 +487,74 @@ MarkerArray PotentialFieldManager::visualizePF(std::shared_ptr<PotentialField> p
 
 MarkerArray PotentialFieldManager::createQueryPoseMarker() {
   MarkerArray markerArray;
-  Marker queryPoseMarker;
-  queryPoseMarker.header.frame_id = this->fixedFrame;
-  queryPoseMarker.header.stamp = this->now();
-  queryPoseMarker.ns = "query_pose";
-  queryPoseMarker.id = 0;
-  queryPoseMarker.type = Marker::ARROW;
-  queryPoseMarker.action = Marker::ADD;
-  queryPoseMarker.pose.position.x = this->queryPose.getPosition().x();
-  queryPoseMarker.pose.position.y = this->queryPose.getPosition().y();
-  queryPoseMarker.pose.position.z = this->queryPose.getPosition().z();
-  queryPoseMarker.pose.orientation.x = this->queryPose.getOrientation().x();
-  queryPoseMarker.pose.orientation.y = this->queryPose.getOrientation().y();
-  queryPoseMarker.pose.orientation.z = this->queryPose.getOrientation().z();
-  queryPoseMarker.pose.orientation.w = this->queryPose.getOrientation().w();
-  queryPoseMarker.scale.x = 0.15; // Shaft length
-  queryPoseMarker.scale.y = 0.1; // Shaft diameter
-  queryPoseMarker.scale.z = 0.3; // Head diameter
-  queryPoseMarker.color.r = 0.0;
-  queryPoseMarker.color.g = 1.0;
-  queryPoseMarker.color.b = 0.0;
-  queryPoseMarker.color.a = 1.0;
-  markerArray.markers.push_back(queryPoseMarker);
+  // Mirror goal visualization: a center sphere (blue) and 3 RGB unit arrows for +X,+Y,+Z
+  const SpatialVector qp = this->queryPose;
+  // Center sphere (blue)
+  Marker qpSphere;
+  qpSphere.header.frame_id = this->fixedFrame;
+  qpSphere.header.stamp = this->now();
+  qpSphere.frame_locked = true;
+  qpSphere.ns = "query_pose";
+  qpSphere.id = 0;
+  qpSphere.type = Marker::SPHERE;
+  qpSphere.action = Marker::ADD;
+  qpSphere.pose.position.x = qp.getPosition().x();
+  qpSphere.pose.position.y = qp.getPosition().y();
+  qpSphere.pose.position.z = qp.getPosition().z();
+  qpSphere.pose.orientation.x = qp.getOrientation().x();
+  qpSphere.pose.orientation.y = qp.getOrientation().y();
+  qpSphere.pose.orientation.z = qp.getOrientation().z();
+  qpSphere.pose.orientation.w = qp.getOrientation().w();
+  qpSphere.scale.x = 0.15;
+  qpSphere.scale.y = 0.15;
+  qpSphere.scale.z = 0.15;
+  qpSphere.color.r = 0.0f;
+  qpSphere.color.g = 0.0f;
+  qpSphere.color.b = 1.0f; // Blue center sphere for query pose
+  qpSphere.color.a = 1.0f;
+  qpSphere.lifetime = rclcpp::Duration(0, 0);
+  markerArray.markers.push_back(qpSphere);
+
+  // RGB unit arrows aligned with query orientation
+  for (int i = 0; i < 3; ++i) {
+    Marker axis;
+    axis.header.frame_id = this->fixedFrame;
+    axis.header.stamp = this->now();
+    axis.ns = "query_pose";
+    axis.id = i + 1;
+    axis.type = Marker::ARROW;
+    axis.action = Marker::ADD;
+    axis.frame_locked = true;
+    axis.pose.position.x = qp.getPosition().x();
+    axis.pose.position.y = qp.getPosition().y();
+    axis.pose.position.z = qp.getPosition().z();
+    // Rotate default +X arrow to +X,+Y,+Z of the query frame
+    Eigen::AngleAxisd axisRotation = Eigen::AngleAxisd::Identity();
+    if (i == 0) { // +X (red)
+      axis.color.r = 1.0f;
+      axisRotation = Eigen::AngleAxisd(0.0, Eigen::Vector3d::UnitX());
+    }
+    else if (i == 1) { // +Y (green)
+      axis.color.g = 1.0f;
+      axisRotation = Eigen::AngleAxisd(M_PI / 2, Eigen::Vector3d::UnitZ());
+    }
+    else { // +Z (blue)
+      axis.color.b = 1.0f;
+      axisRotation = Eigen::AngleAxisd(-M_PI / 2, Eigen::Vector3d::UnitY());
+    }
+    Eigen::Quaterniond Q = qp.getOrientation() * Eigen::Quaterniond(axisRotation);
+    axis.pose.orientation.x = Q.x();
+    axis.pose.orientation.y = Q.y();
+    axis.pose.orientation.z = Q.z();
+    axis.pose.orientation.w = Q.w();
+    // ARROW scale: x=length, y=shaft diameter, z=head diameter
+    axis.scale.x = 0.5f;  // length
+    axis.scale.y = 0.04f; // shaft diameter
+    axis.scale.z = 0.10f; // head diameter
+    axis.color.a = 0.9f;
+    axis.lifetime = rclcpp::Duration(0, 0);
+    markerArray.markers.push_back(axis);
+  }
   return markerArray;
 }
 
@@ -706,33 +752,36 @@ MarkerArray PotentialFieldManager::createGoalMarker(std::shared_ptr<PotentialFie
     axis.header.stamp = this->now();
     axis.ns = "goal";
     axis.id = i + 1;
-    axis.type = Marker::CYLINDER;
+    axis.type = Marker::ARROW;
     axis.action = Marker::ADD;
+    axis.frame_locked = true;
     axis.pose.position.x = goalPose.getPosition().x();
     axis.pose.position.y = goalPose.getPosition().y();
     axis.pose.position.z = goalPose.getPosition().z();
-    Eigen::AngleAxisd axisRotation;
-    if (i == 0) { // X-axis (red cylinder)
+    // ARROW marker points along +X by default. Rotate it to +X,+Y,+Z of the goal frame.
+    Eigen::AngleAxisd axisRotation = Eigen::AngleAxisd::Identity();
+    if (i == 0) { // +X (red)
       axis.color.r = 1.0f;
-      axisRotation = Eigen::AngleAxisd(M_PI / 2, Eigen::Vector3d::UnitY());
+      axisRotation = Eigen::AngleAxisd(0.0, Eigen::Vector3d::UnitX());
     }
-    else if (i == 1) { // Y-axis (green cylinder)
+    else if (i == 1) { // +Y (green) : rotate +90deg about Z to map +X → +Y
       axis.color.g = 1.0f;
-      axisRotation = Eigen::AngleAxisd(-M_PI / 2, Eigen::Vector3d::UnitX());
+      axisRotation = Eigen::AngleAxisd(M_PI / 2, Eigen::Vector3d::UnitZ());
     }
-    else if (i == 2) { // Z-axis (blue cylinder)
+    else if (i == 2) { // +Z (blue) : rotate -90deg about Y to map +X → +Z
       axis.color.b = 1.0f;
-      axisRotation = Eigen::AngleAxisd(0, Eigen::Vector3d::UnitZ());
+      axisRotation = Eigen::AngleAxisd(-M_PI / 2, Eigen::Vector3d::UnitY());
     }
-    Eigen::Quaterniond Q = goalPose.getOrientation() * axisRotation;
+    Eigen::Quaterniond Q = goalPose.getOrientation() * Eigen::Quaterniond(axisRotation);
     axis.pose.orientation.x = Q.x();
     axis.pose.orientation.y = Q.y();
     axis.pose.orientation.z = Q.z();
     axis.pose.orientation.w = Q.w();
-    axis.scale.x = 0.075f; // Diameter
-    axis.scale.y = 0.075f; // Diameter
-    axis.scale.z = 1.0f;  // Length of the cylinder
-    axis.color.a = 0.75f; // Semi-transparent
+    // ARROW scale: x=length, y=shaft diameter, z=head diameter
+    axis.scale.x = 0.5f;  // 0.5 meter length
+    axis.scale.y = 0.04f; // shaft diameter
+    axis.scale.z = 0.10f; // head diameter
+    axis.color.a = 0.9f; // slightly opaque
     axis.lifetime = rclcpp::Duration(0, 0); // No lifetime
     goalAxes.push_back(axis);
   }
