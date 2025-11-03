@@ -237,7 +237,16 @@ Eigen::Vector3d PotentialField::computeAttractiveForceLinear(const SpatialVector
   const Eigen::Vector3d direction = queryPose.getPosition() - this->goalPose.getPosition();
   const double magnitude = direction.norm();
   if (magnitude <= this->translationalTolerance) return Eigen::Vector3d::Zero();
-  else return -this->attractiveGain * direction;
+  // else return -this->attractiveGain * direction;
+  // The Choset attractive potential defines a threshold for switching to quadratic behavior from conical
+  if (magnitude <= this->switchToQuadraticThreshold) {
+    // Quadratic Attraction Region
+    return -this->attractiveGain * direction;
+  }
+  else {
+    // Conical Attraction Region
+    return  (this->switchToQuadraticThreshold * (-this->attractiveGain * direction)) / magnitude;
+  }
 }
 
 Eigen::Vector3d PotentialField::computeAttractiveMoment(const SpatialVector& queryPose) const {
