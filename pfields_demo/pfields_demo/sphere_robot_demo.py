@@ -36,9 +36,10 @@ class SphereRobotDemo(Node):
         self.get_logger().info('Ready to run plan path demo via service call.')
         self.start = (-2.0, 0.0, 0.0)
         self.goal = (3.0,  0.0,  0.0)
-        # Publish static obstacles
+        # Publish static obstacles and remember them for clearance computation
         # obstacles = self.create_obstacles_in_the_way()
         obstacles = self.create_clustered_obstacles()
+        self.published_obstacles = obstacles  # cache for later CSV enrichment
         self.obstacle_pub.publish(obstacles)
         # Publish the goal pose (ensure a valid identity orientation)
         goal_pose = PoseStamped()
@@ -269,7 +270,8 @@ class SphereRobotDemo(Node):
     def save_planned_path_response(self, plan_path_response):
         # Save a CSV file with the planned path details for offline plotting.
         # CSV columns:
-        # time, ee_px, ee_py, ee_pz, ee_qx, ee_qy, ee_qz, ee_qw, ee_vx, ee_vy, ee_vz, joint1, ...
+        # time, ee_px, ee_py, ee_pz, ee_qx, ee_qy, ee_qz, ee_qw,
+        # ee_vx, ee_vy, ee_vz, ee_wx, ee_wy, ee_wz, ee_w_mag, min_clearance_m, joint1, ...
 
         # Determine lengths
         path_poses = plan_path_response.end_effector_path.poses
@@ -307,6 +309,7 @@ class SphereRobotDemo(Node):
         rows = []
         last_pose = None
         last_vel = None
+        last_ang = None
         last_joints = [math.nan] * n_joints if n_joints > 0 else []
 
         for i in range(n_rows):
@@ -332,7 +335,7 @@ class SphereRobotDemo(Node):
             qz = pose.orientation.z
             qw = pose.orientation.w
 
-            # velocity
+            # linear velocity
             if i < n_vel:
                 vel = ee_vels[i].twist.linear
                 last_vel = vel
@@ -349,6 +352,64 @@ class SphereRobotDemo(Node):
             vx = vel.x
             vy = vel.y
             vz = vel.z
+
+            # angular velocity
+            if i < n_vel:
+                ang = ee_vels[i].twist.angular
+                last_ang = ang
+            elif last_ang is not None:
+                ang = last_ang
+            else:
+                class _W:
+                    x = 0.0
+                    y = 0.0
+                    z = 0.0
+                ang = _W()
+
+            wx = ang.x
+            wy = ang.y
+            wz = ang.z
+            wmag = math.sqrt(wx*wx + wy*wy + wz*wz)
+
+            # minimum clearance to published obstacles (non-negative distance to surface)
+            min_clearance = math.nan
+            try:
+                if hasattr(self, 'published_obstacles') and self.published_obstacles is not None:
+                    min_clearance = float('inf')
+                    for obs in self.published_obstacles.obstacles:
+                        ox = obs.pose.position.x
+                        oy = obs.pose.position.y
+                        oz = obs.pose.position.z
+                        if obs.type.lower() == 'sphere':
+                            r = getattr(obs, 'radius', 0.0)
+                            d = math.sqrt((px-ox)**2 + (py-oy)
+                                          ** 2 + (pz-oz)**2) - r
+                            min_clearance = min(min_clearance, max(d, 0.0))
+                        elif obs.type.lower() == 'box':
+                            # conservative: circumscribed sphere around OBB
+                            hx = getattr(obs, 'length', 0.0) * 0.5
+                            hy = getattr(obs, 'width', 0.0) * 0.5
+                            hz = getattr(obs, 'height', 0.0) * 0.5
+                            r = math.sqrt(hx*hx + hy*hy + hz*hz)
+                            d = math.sqrt((px-ox)**2 + (py-oy)
+                                          ** 2 + (pz-oz)**2) - r
+                            min_clearance = min(min_clearance, max(d, 0.0))
+                        elif obs.type.lower() == 'cylinder':
+                            # conservative: circumscribed sphere around cylinder
+                            cr = getattr(obs, 'radius', 0.0)
+                            ch = getattr(obs, 'height', 0.0) * 0.5
+                            r = math.sqrt(cr*cr + ch*ch)
+                            d = math.sqrt((px-ox)**2 + (py-oy)
+                                          ** 2 + (pz-oz)**2) - r
+                            min_clearance = min(min_clearance, max(d, 0.0))
+                        else:
+                            # unknown type: skip
+                            pass
+                    if min_clearance == float('inf'):
+                        min_clearance = math.nan
+            except Exception as e:
+                self.get_logger().warn(
+                    f"Failed computing min_clearance at i={i}: {e}")
 
             # joints
             joints_row = []
@@ -369,13 +430,15 @@ class SphereRobotDemo(Node):
                     joints_row.append(last_joints[j] if not math.isnan(
                         last_joints[j]) else math.nan)
 
-            row = [t, px, py, pz, qx, qy, qz, qw, vx, vy, vz] + joints_row
+            row = [t, px, py, pz, qx, qy, qz, qw, vx, vy, vz,
+                   wx, wy, wz, wmag, min_clearance] + joints_row
             rows.append(row)
 
         # Write CSV
         filename = 'data/planned_path.csv'
         header = ['time_s', 'ee_px', 'ee_py', 'ee_pz', 'ee_qx',
-                  'ee_qy', 'ee_qz', 'ee_qw', 'ee_vx', 'ee_vy', 'ee_vz']
+                  'ee_qy', 'ee_qz', 'ee_qw', 'ee_vx', 'ee_vy', 'ee_vz',
+                  'ee_wx', 'ee_wy', 'ee_wz', 'ee_w_mag', 'min_clearance_m']
         header += joint_names if joint_names else [
             f'joint_{i}' for i in range(len(rows[0]) - len(header))]
 
