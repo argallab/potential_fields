@@ -73,7 +73,7 @@ def repulsive_force_magnitude(distance: np.ndarray,
     mag = np.zeros_like(d)
     mask = d < q
     dm = d[mask]
-    mag[mask] = k_rep * (1.0 / dm - 1.0 / q) * (1.0 / (dm * dm))
+    mag[mask] = k_rep * (1.0 / q - 1.0 / dm) * (1.0 / (dm * dm))
     return mag
 
 
