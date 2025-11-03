@@ -233,10 +233,20 @@ std::pair<SpatialVector, TaskSpaceTwist> PotentialField::rungeKuttaStep(const Sp
 }
 
 Eigen::Vector3d PotentialField::computeAttractiveForceLinear(const SpatialVector& queryPose) const {
+  // Choset Attractive Potential: F = zeta * (q - q_goal)
   const Eigen::Vector3d direction = queryPose.getPosition() - this->goalPose.getPosition();
-  const double euclideanDistance = direction.norm();
-  if (euclideanDistance <= this->translationalTolerance) return Eigen::Vector3d::Zero();
-  else return direction.normalized() * (-this->attractiveGain * euclideanDistance);
+  const double magnitude = direction.norm();
+  if (magnitude <= this->translationalTolerance) return Eigen::Vector3d::Zero();
+  // else return -this->attractiveGain * direction;
+  // The Choset attractive potential defines a threshold for switching to quadratic behavior from conical
+  if (magnitude <= this->switchToQuadraticThreshold) {
+    // Quadratic Attraction Region
+    return -this->attractiveGain * direction;
+  }
+  else {
+    // Conical Attraction Region
+    return  (this->switchToQuadraticThreshold * (-this->attractiveGain * direction)) / magnitude;
+  }
 }
 
 Eigen::Vector3d PotentialField::computeAttractiveMoment(const SpatialVector& queryPose) const {
@@ -268,11 +278,11 @@ Eigen::Vector3d PotentialField::computeRepulsiveForceLinear(const SpatialVector&
     const double d = (signedDistance >= 0.0) ? std::max(signedDistance, NEAR_ZERO_THRESHOLD) : NEAR_ZERO_THRESHOLD;
     // Only contribute if within the influence distance
     if (d <= Q) {
-      // Magnitude per Choset potential [2]: eta * (1/Q - 1/d) * (1/d^2)
+      // Magnitude per Khatib potential [1]: eta * (1/d - 1/Q) * (1/d^2)
       const double inverseDistance = 1.0 / d;
       const double inverseDistanceSquared = inverseDistance * inverseDistance;
       const double inverseInfluenceDistance = 1.0 / Q;
-      const double magnitude = this->repulsiveGain * (inverseInfluenceDistance - inverseDistance) * inverseDistanceSquared;
+      const double magnitude = this->repulsiveGain * (inverseDistance - inverseInfluenceDistance) * inverseDistanceSquared;
       if (magnitude > NEAR_ZERO_THRESHOLD) { F += normalToObstSurface * magnitude; }
     }
   }

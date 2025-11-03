@@ -8,9 +8,13 @@
  * @details The field produces a task-space wrench (F) assuming a massless system: linear force [F] and torque [Nm]
  *          The wrench is converted to a velocity vector (V): linear velocity [m/s] and angular velocity [rad/s]
  *
- * @version 2.0
- * @date 2025-05-08
+ * @note The reference for these equations and implementation is:
+ *       Principles of Robot Motion: Theory, Algorithms, and Implementations
+ *       by Choset et al, 2005, MIT Press.
+ *       https://ieeexplore.ieee.org/book/6267238
  *
+ * @version 3.0
+ * @date 2025-11-03
  *
  * @copyright Copyright (c) 2025
  *
@@ -524,6 +528,7 @@ private:
   std::shared_ptr<IKSolver> ikSolver; // Inverse kinematics solver for joint angle computation
   const double translationalTolerance = 1e-3; // Threshold for distances to the goal and obstacles [m]
   const double rotationalThreshold = 0.02; // Threshold for rotational geodesic distance [rad]
+  const double switchToQuadraticThreshold = 1.0; // [m] distance for switching to quadratic attractive potential from conical
   const double softSatBeta = 1.0; // Soft-saturation parameter, higher = more aggressive curve
   const double stagnationProgressRateThreshold = 0.01; // [m/s] min required progress toward goal
   const double stagnationSpeedRmsThreshold = 0.02; // [m/s] consider "not moving" if below this

@@ -62,7 +62,7 @@ ros2 launch pfields_demo pf_demo.launch.xml
 Launching the project without any arguments is good enough to launch the basic robot and visualization. Of course, arguments are necessary to customize the PF package with your robot, RViz config, gain parameters, etc.
 
 # Potential Equations
-These equations were obtained from this paper: [Real-Time Obstacle Avoidance for Manipulators and Mobile Robots](https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=1087247) [1] which describes the derivation of the potential equations, how to obtain the gradients, and how to obtain a velocity from the gradients.
+These equations were obtained from the [Principles of Robot Motion: Theory, Algorithms, and Implementations](https://ieeexplore.ieee.org/book/6267238) textbook [2] and [Real-Time Obstacle Avoidance for Manipulators and Mobile Robots](https://ieeexplore.ieee.org/stamp/stampCaCancaCccCfaksdfojas;kfjd;ksldadjf.jsp?tp=&arnumber=1087247) [1], which describes the derivation of the potential equations, how to obtain the gradients, and how to obtain a velocity from the gradients.
 
 In this library, the potential field produces a task-space wrench over the robot’s end-effector pose:
 
@@ -109,9 +109,7 @@ $$\boldsymbol{\tau}_{att}(q) = -\,\omega\,\theta\,\mathbf{u},$$
 applied only when $\theta$ exceeds a small threshold. Here $\omega$ is the rotational attractive gain.
 
 ## Repulsive Potential
-Repulsion increases with proximity to each obstacle and sums across obstacles. We use the obstacle surface’s signed distance $d$ and outward normal $\mathbf{n}_{out}$ at the closest point. Outside the obstacle $d \ge 0$; inside $d < 0$ is treated as $d \approx \varepsilon$ to produce a strong outward push.
-
-The classic Khatib potential [1] yields the repulsive force
+Repulsion increases with proximity to each obstacle and is summed across obstacles. We use the obstacle surface’s signed distance $d$ and outward normal $\mathbf{n}_{out}$ at the closest point. Outside the obstacle $d \ge 0$; inside $d < 0$ is treated as $d \approx \varepsilon$ to produce a strong outward push. The gradient of the potential yields the repulsive force
 
 $$
 \mathbf{F}_{rep}(q) = \begin{cases}
@@ -285,5 +283,14 @@ def plan_path(start_pose, goal_pose, goal_tolerance, dt):
 ```
 
 # References
- [1] [Real-Time Obstacle Avoidance for Manipulators and Mobile Robots](https://ieeexplore.ieee.org/stamp/stamp.jsp?tp=&arnumber=1087247)
+ [1] [Real-Time Obstacle Avoidance for Manipulators and Mobile Robots](https://ieeexplore.ieee.org/stamp/stampCaCancaCccCfaksdfojas;kfjd;ksldadjf.jsp?tp=&arnumber=1087247)
+
+ ```
+ O. Khatib, “Real-time obstacle avoidance for manipulators and mobile robots,” in Proc. 1985 IEEE Int. Conf. Robotics and Automation, vol. 2, pp. 500–505, 1985, doi: 10.1109/ROBOT.1985.1087247.
+ ```
+
  [2] [Principles of Robot Motion: Theory, Algorithms, and Implementations](https://ieeexplore.ieee.org/book/6267238)
+
+ ```
+ H. Choset, K. M. Lynch, S. Hutchinson, G. A. Kantor, W. Burgard, L. E. Kavraki, and S. Thrun, Principles of Robot Motion: Theory, Algorithms, and Implementations. Cambridge, MA: MIT Press, 2005.
+ ```
