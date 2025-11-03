@@ -8,9 +8,13 @@
  * @details The field produces a task-space wrench (F) assuming a massless system: linear force [F] and torque [Nm]
  *          The wrench is converted to a velocity vector (V): linear velocity [m/s] and angular velocity [rad/s]
  *
- * @version 2.0
- * @date 2025-05-08
+ * @note The reference for these equations and implementation is:
+ *       Principles of Robot Motion: Theory, Algorithms, and Implementations
+ *       by Choset et al, 2005, MIT Press.
+ *       https://ieeexplore.ieee.org/book/6267238
  *
+ * @version 3.0
+ * @date 2025-11-03
  *
  * @copyright Copyright (c) 2025
  *
