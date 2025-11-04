@@ -250,12 +250,28 @@ Eigen::Vector3d PotentialField::computeAttractiveForceLinear(const SpatialVector
 }
 
 Eigen::Vector3d PotentialField::computeAttractiveMoment(const SpatialVector& queryPose) const {
-  Eigen::Quaterniond orientationDiff = queryPose.getOrientation().conjugate() * this->goalPose.getOrientation();
-  orientationDiff.normalize();
-  const double angularDistance = queryPose.angularDistance(this->goalPose);
-  if (angularDistance <= this->rotationalThreshold) return Eigen::Vector3d::Zero();
-  Eigen::Vector3d u = orientationDiff.vec() / orientationDiff.vec().norm();
-  return -this->rotationalAttractiveGain * (angularDistance * u);
+  // Quaternion error that rotates current -> goal (shortest path)
+  Eigen::Quaterniond quatError = (
+    this->goalPose.getOrientation() * queryPose.getOrientation().conjugate()
+    ).normalized();
+
+  // Enforce shortest-path and continuity: q and -q represent same rotation; choose w >= 0
+  if (quatError.w() < 0.0) {
+    quatError.coeffs() *= -1.0; // flip sign of (x,y,z,w)
+  }
+
+  // Extract axis-angle from quatError in a numerically stable way
+  const double vnorm = quatError.vec().norm();
+  const double angle = 2.0 * std::atan2(vnorm, std::abs(quatError.w())); // in [0, pi]
+  if (angle <= this->rotationalThreshold) { return Eigen::Vector3d::Zero(); }
+
+  // Guard against divide-by-zero when angle ~ 0
+  if (vnorm < NEAR_ZERO_THRESHOLD) { return Eigen::Vector3d::Zero(); }
+  // Use bounded sine-form error for smoother large-angle behavior:
+  // 2*sin(angle/2) * axis == 2 * quatError.vec() (since quatError is normalized and w >= 0)
+  // Matches k*angle*axis for small angles and reduces aggressiveness near pi
+  const Eigen::Vector3d boundedError = 2.0 * quatError.vec();
+  return this->rotationalAttractiveGain * boundedError;
 }
 
 Eigen::Vector3d PotentialField::computeRepulsiveForceLinear(const SpatialVector& queryPose) const {
