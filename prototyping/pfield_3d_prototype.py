@@ -723,7 +723,10 @@ def plot_kinematics(title: str,
                     description: str = "",
                     goal: Tuple[float, float,
                                 float] | np.ndarray | None = None,
-                    goal_orientation: Tuple[float, float, float] | np.ndarray | None = None):
+                    goal_orientation: Tuple[float, float,
+                                            float] | np.ndarray | None = None,
+                    goal_tolerance: float = 0.05,
+                    goal_orientation_tolerance: float = 0.1):
     """
     Args:
         title: plot title
@@ -732,7 +735,9 @@ def plot_kinematics(title: str,
         save_path: optional path to save the plot image (e.g., PNG)
         description: optional text description to include below the title
         goal: optional goal position (x,y,z) to plot distance-to-goal
-        goal_orientation: optional goal orientation (roll,pitch,yaw) in radians (not currently used)
+        goal_orientation: optional goal orientation (roll,pitch,yaw) in radians
+        goal_tolerance: position tolerance for goal reached [m]
+        goal_orientation_tolerance: orientation tolerance for goal reached [rad]
 
 
     Plot a 3x2 grid of time-series:
@@ -844,6 +849,16 @@ def plot_kinematics(title: str,
         d_goal = np.sqrt((x - g[0])**2 + (y - g[1])**2 + (z - g[2])**2)
         line_d, = ax22.plot(t, d_goal, color='C3', label='‖p - goal‖')
         ax22.set_ylabel('Dist→Goal [m]')
+        # Add vertical dashed line when distance first satisfies tolerance
+        try:
+            mask_pos = d_goal <= float(goal_tolerance)
+            if np.any(mask_pos):
+                idx_pos = int(np.argmax(mask_pos))  # first True index
+                t_pos = float(t[idx_pos])
+                ax22.axvline(t_pos, color='C3', linestyle='--', alpha=0.6,
+                             label=f'pos tol ≤ {goal_tolerance:g}')
+        except Exception:
+            pass
         # Optional angle_to_goal overlay if goal_orientation and quaternions are available
         if goal_orientation is not None and has_quat_series:
             # Convert goal_orientation to quaternion if needed (expects XYZ roll,pitch,yaw)
@@ -885,6 +900,16 @@ def plot_kinematics(title: str,
             line_a, = ax22b.plot(t, angle_to_goal, color='C4',
                                  label='angle_to_goal [rad]')
             ax22b.set_ylabel('Angle→Goal [rad]')
+            # Add vertical dashed line when angular distance first satisfies tolerance
+            try:
+                mask_ang = angle_to_goal <= float(goal_orientation_tolerance)
+                if np.any(mask_ang):
+                    idx_ang = int(np.argmax(mask_ang))
+                    t_ang = float(t[idx_ang])
+                    ax22b.axvline(t_ang, color='C4', linestyle='--', alpha=0.6,
+                                  label=f'ang tol ≤ {goal_orientation_tolerance:g}')
+            except Exception:
+                pass
             # Merge legends
             h1, l1 = ax22.get_legend_handles_labels()
             h2, l2 = ax22b.get_legend_handles_labels()
