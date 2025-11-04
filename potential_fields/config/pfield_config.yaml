@@ -2,7 +2,7 @@ pfield_manager:
   ros__parameters:
     visualize_pf_frequency: 60.0 # [Hz]
     attractive_gain: 1.5 # [Nm]
-    rotational_attractive_gain: 0.7 # [Nm/rad]
+    rotational_attractive_gain: 1.5 # [Nm/rad]
     repulsive_gain: 0.7 # [Nm]
     max_linear_velocity: 2.0 # [m/s]
     max_angular_velocity: 0.4 # [rad/s]
