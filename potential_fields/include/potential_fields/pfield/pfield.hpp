@@ -447,7 +447,7 @@ public:
   /**
    * @brief Computes the attractive moment (torque) to align the query pose's orientation with the goal pose's orientation
    *
-   * @note Equation: M = -rotationalAttractiveGain * (angle * axis)
+   * @note Equation: M = rotationalAttractiveGain * (angle * axis)
    *
    * @param queryPose The pose in 3D space to compute the moment from
    * @return Eigen::Vector3d The attractive moment vector [Nm]
