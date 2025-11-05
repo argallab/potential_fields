@@ -54,7 +54,9 @@ private:
 
 class XArmPlugin : public MotionPlugin {
 public:
-  explicit XArmPlugin(const std::string& hostname);
+  XArmPlugin() : MotionPlugin("xarm_motion_plugin") {
+    this->ikSolver = std::make_shared<XArmIKSolver>();
+  }
   ~XArmPlugin() override = default;
 
   bool sendCartesianTwist(const geometry_msgs::msg::Twist& endEffectorTwist) override;

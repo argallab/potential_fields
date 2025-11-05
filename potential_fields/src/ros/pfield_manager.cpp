@@ -40,6 +40,7 @@
 
 #include "ros/pfield_manager.hpp"
 #include "robot_plugins/null_motion_plugin.hpp"
+#include "robot_plugins/franka_plugin.hpp"
 #include "robot_plugins/xarm_plugin.hpp"
 
 PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager") {
@@ -99,7 +100,7 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
     this->motionPlugin = std::make_unique<FrankaPlugin>(frankaHostname);
   }
   else if (this->motionPluginType == "xarm") {
-    this->motionPlugin = std::make_unique<XArmPlugin>(xarmIp);
+    this->motionPlugin = std::make_unique<XArmPlugin>();
   }
   else {
     RCLCPP_ERROR(this->get_logger(), "Unknown motion plugin type: %s. Using NullMotionPlugin", this->motionPluginType.c_str());
