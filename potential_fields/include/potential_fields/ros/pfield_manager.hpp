@@ -5,6 +5,7 @@
 #include <memory>
 #include <string>
 #include <vector>
+#include <cctype>
 
 #include <Eigen/Core>
 #include <Eigen/Geometry>
@@ -34,6 +35,8 @@
 
 #include "urdf/model.h"
 #include "urdf_parser/urdf_parser.h"
+
+#include "tf2_eigen/tf2_eigen.hpp"
 
 #include "rclcpp/rclcpp.hpp"
 

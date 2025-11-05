@@ -24,7 +24,6 @@
 ///   fixed_frame (string): RViz fixed frame for visualization and PF computation
 ///   urdf_file_path (string): Optional path to a URDF; enables kinematics and extent estimation
 ///   motion_plugin_type (string): Motion plugin to use (e.g., "null", "franka")
-///   franka_hostname (string): Optional, required when motion_plugin_type == "franka"
 ///
 /// SERVICES:
 ///   pfield/plan_path (potential_fields_interfaces::srv::PlanPath): Plans a path from a start pose to the PF goal
@@ -41,9 +40,7 @@
 
 #include "ros/pfield_manager.hpp"
 #include "robot_plugins/null_motion_plugin.hpp"
-#include "robot_plugins/franka_plugin.hpp"
-#include "tf2_eigen/tf2_eigen.hpp"
-#include <cctype>
+#include "robot_plugins/xarm_plugin.hpp"
 
 PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager") {
   RCLCPP_INFO(this->get_logger(), "PotentialFieldManager Initialized");
@@ -97,8 +94,12 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
     this->motionPlugin = std::make_unique<NullMotionPlugin>();
   }
   else if (this->motionPluginType == "franka") {
-    const std::string frankaHostname = this->declare_parameter("franka_hostname", std::string());
+    std::string frankaHostname = this->declare_parameter("franka_hostname", std::string());
+    frankaHostname = this->get_parameter("franka_hostname").as_string();
     this->motionPlugin = std::make_unique<FrankaPlugin>(frankaHostname);
+  }
+  else if (this->motionPluginType == "xarm") {
+    this->motionPlugin = std::make_unique<XArmPlugin>(xarmIp);
   }
   else {
     RCLCPP_ERROR(this->get_logger(), "Unknown motion plugin type: %s. Using NullMotionPlugin", this->motionPluginType.c_str());
