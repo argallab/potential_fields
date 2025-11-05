@@ -198,16 +198,19 @@ $$
 $$
 
 Weighted average twist (component-wise for linear and angular parts):
+
 $$
 \bar{\mathbf{v}} = \frac{\mathbf{v}_1 + 2\mathbf{v}_2 + 2\mathbf{v}_3 + \mathbf{v}_4}{6},\quad
 \bar{\boldsymbol{\omega}} = \frac{\boldsymbol{\omega}_1 + 2\boldsymbol{\omega}_2 + 2\boldsymbol{\omega}_3 + \boldsymbol{\omega}_4}{6}.
 $$
 
 The averaged twist is re-limited (soft saturation and rate limits) to ensure it respects the velocity/acceleration bounds. The pose is then advanced once:
+
 $$
 \mathbf{x}_{i+1} = \mathbf{x}_i + \bar{\mathbf{v}}\,\Delta t,\qquad
 \mathbf{R}_{i+1} = \mathbf{R}_i\;\exp\big( [\bar{\boldsymbol{\omega}}]_\times\, \Delta t \big),
 $$
+
 where $\exp([\boldsymbol{\omega}]_\times\, \Delta t)$ is implemented via an angle–axis exponential map (i.e., $\mathrm{AngleAxis}(|\boldsymbol{\omega}|\,\Delta t,\, \boldsymbol{\omega}/|\boldsymbol{\omega}|)$) and the resulting quaternion is normalized.
 
 Notes:

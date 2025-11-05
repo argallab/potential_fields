@@ -198,3 +198,15 @@ Single integrator
 Simple joint trajectory
 Look into Configuration space planning instead
 Handle self collision externally
+
+# RK4
+https://lpsa.swarthmore.edu/NumInt/NumIntFourth.html
+
+# 11/5 Meeting Notes
+- Mesh objects to primitive estimation
+- Test on Franka with some simple obstacles
+  - MoveIt Demo
+- Solid Euclidean Planner demo video on Robot
+- Give Demiana an example for the code to use with her robots
+- Test on XArm 7-DOF this week
+- IK and URDF/Xacro
