@@ -10,12 +10,12 @@
 
 # Immediate TODOs
 - Include installation instructions for fcl, pinnochio, libfranka and other external dependencies in README
-- Improve Extent Estimator ("Extentimator") to be more accurate and be realistic for robot arms
-  - Add unit tests for Extent Estimator
-- Create U-shaped obstacle test case for classic local minima problem
+- Allow PF with no goal, only obstacles (for avoidance behavior)
 
 # Future TODOs and Refactors
 - Investigate Configuration Space planning with the PF
 - namespace pfield c++ library and externalize from ROS package
-- Allow PF with no goal, only obstacles (for avoidance behavior)
 - Dynamic `switchToQuadraticPotential` based on current PF state (distance to goal, obstacles, current velocity, etc.)
+- Create U-shaped obstacle test case for classic local minima problem
+- Improve Extent Estimator ("Extentimator") to be more accurate and be realistic for robot arms
+  - Add unit tests for Extent Estimator
