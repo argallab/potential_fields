@@ -19,7 +19,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-${ROS_DISTRO}-pick-ik \
     ros-${ROS_DISTRO}-robot-state-publisher \
     ros-${ROS_DISTRO}-joint-state-publisher-gui \
-    # ros-${ROS_DISTRO}-pinocchio \
     ros-${ROS_DISTRO}-tf2-eigen \
     ros-${ROS_DISTRO}-tf2-ros \
     ros-${ROS_DISTRO}-trajectory-msgs \

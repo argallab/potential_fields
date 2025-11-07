@@ -18,7 +18,7 @@ PFDemo::PFDemo() : Node("pfield_demo") {
   // Get parameters from yaml file
   this->fixedFrame = this->get_parameter("fixed_frame").as_string();
 
-  this->goalPosePub = this->create_publisher<geometry_msgs::msg::PoseStamped>("/goal_pose", 10);
+  this->goalPosePub = this->create_publisher<geometry_msgs::msg::PoseStamped>("/pfield/planning_goal_pose", 10);
 
   // Wait for the service to be available
   this->planPathClient = this->create_client<PlanPath>("pfield/plan_path");
@@ -31,7 +31,7 @@ PFDemo::PFDemo() : Node("pfield_demo") {
   }
   RCLCPP_INFO(this->get_logger(), "Plan path service is available.");
 
-  this->eeVelocityPub = this->create_publisher<geometry_msgs::msg::TwistStamped>("/ee_velocity_command", 10);
+  this->eeVelocityPub = this->create_publisher<geometry_msgs::msg::TwistStamped>("/robot_action", 10);
 
   // Initialize demo service
   this->runPlanPathDemoService = this->create_service<std_srvs::srv::Empty>(
@@ -78,11 +78,11 @@ PFDemo::PFDemo() : Node("pfield_demo") {
     RCLCPP_INFO(this->get_logger(), "Sending plan_path request (async)...");
 
     // Create a publisher to publish the returned end-effector path when the response arrives
-    auto pathPub = this->create_publisher<nav_msgs::msg::Path>("/nav_msgs/msg/Path", 10);
+    // auto pathPub = this->create_publisher<nav_msgs::msg::Path>("/nav_msgs/msg/Path", 10);
     // Send request asynchronously and attach a callback to process the result
     this->planPathClient->async_send_request(
       pathPlanRequest,
-      [this, pathPub, dt](rclcpp::Client<PlanPath>::SharedFuture future) {
+      [this, dt](rclcpp::Client<PlanPath>::SharedFuture future) {
       auto pathPlanResponse = future.get();
       if (!pathPlanResponse) {
         RCLCPP_ERROR(this->get_logger(), "plan_path service returned an empty response (async)");
@@ -105,10 +105,10 @@ PFDemo::PFDemo() : Node("pfield_demo") {
         RCLCPP_INFO(this->get_logger(), "(async) First EE linear velocity: (%.6f, %.6f, %.6f)", v.x, v.y, v.z);
       }
 
-      // Publish the path for visualization (if present)
-      if (ee_path_len > 0) {
-        pathPub->publish(pathPlanResponse->end_effector_path);
-      }
+      // // Publish the path for visualization (if present)
+      // if (ee_path_len > 0) {
+      //   pathPub->publish(pathPlanResponse->end_effector_path);
+      // }
 
       // Save CSV like the python demo
       try {
@@ -119,7 +119,7 @@ PFDemo::PFDemo() : Node("pfield_demo") {
       }
 
       // Send EE velocity commands to follow the path
-      this->sendEEVelocityCommand(pathPlanResponse->end_effector_velocity_trajectory, dt);
+      // this->sendEEVelocityCommand(pathPlanResponse->end_effector_velocity_trajectory, dt);
     }
     );
   });
