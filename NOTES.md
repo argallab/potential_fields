@@ -210,3 +210,20 @@ https://lpsa.swarthmore.edu/NumInt/NumIntFourth.html
 - Give Demiana an example for the code to use with her robots
 - Test on XArm 7-DOF this week
 - IK and URDF/Xacro
+
+## Sequence for testing UFactory Xarm7
+
+### Run docker container
+
+```bash
+docker start -i argallab_pfields
+```
+
+### Launch nodes
+
+```bash
+# Robot Launch
+ros2 launch xarm_moveit_config xarm7_moveit_realmove.launch.py robot_ip:=192.168.1.199 add_gripper:=true
+# Launch PF Node that hosts Path Planning service
+# Launch Node that publishes TwistStamped to '/robot_action' from PF Path Planning Service
+```
