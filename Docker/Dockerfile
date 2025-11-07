@@ -19,11 +19,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-${ROS_DISTRO}-pick-ik \
     ros-${ROS_DISTRO}-robot-state-publisher \
     ros-${ROS_DISTRO}-joint-state-publisher-gui \
-    ros-${ROS_DISTRO}-pinocchio \
+    # ros-${ROS_DISTRO}-pinocchio \
     ros-${ROS_DISTRO}-tf2-eigen \
-    ros-${ROS_DISTRO}-hpp-fcl \
+    ros-${ROS_DISTRO}-tf2-ros \
     ros-${ROS_DISTRO}-trajectory-msgs \
     ros-${ROS_DISTRO}-geometric-shapes \
+    ros-${ROS_DISTRO}-urdf \
     ros-${ROS_DISTRO}-gz-ros2-control \
     ros-${ROS_DISTRO}-ros-gz-sim \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
@@ -33,6 +34,8 @@ RUN apt-get update && apt-get install -q -y --no-install-recommends \
     dirmngr \
     gnupg2 \
     libeigen3-dev \
+    libfcl-dev \
+    libccd-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # install ubuntu packages
@@ -104,19 +107,17 @@ RUN apt-get update \
     && rm -rf /var/lib/apt/lists/*
 
 # Install and build libccd (FCL depends on this)
-RUN git clone https://github.com/danfis/libccd.git && \
-    cd libccd/src && \
-    make && \
-    make install && \
-    cd /
-
-# Install and build FCL Library
-RUN git clone https://github.com/flexible-collision-library/fcl.git && \
-    cd fcl && \
-    mkdir build && \
-    cd build && \
-    cmake .. && \
-    make
+# RUN git clone https://github.com/danfis/libccd.git && \
+#     cd libccd/src && \
+#     make && \
+#     make install && \
+#     cd / && \
+#     git clone https://github.com/flexible-collision-library/fcl.git && \
+#     cd fcl && \
+#     mkdir build && \
+#     cd build && \
+#     cmake .. && \
+#     make
 
 # Install Pinocchio
 RUN mkdir -p /etc/apt/keyrings && \
