@@ -11,7 +11,7 @@
 
 class XArmIKSolver : public IKSolver {
 public:
-  XArmIKSolver() : IKSolver("xarm_ik_solver") {};
+  XArmIKSolver();
   ~XArmIKSolver() override = default;
 
   /**
@@ -54,10 +54,8 @@ private:
 
 class XArmPlugin : public MotionPlugin {
 public:
-  XArmPlugin() : MotionPlugin("xarm_motion_plugin") {
-    this->ikSolver = std::make_shared<XArmIKSolver>();
-  }
-  ~XArmPlugin() override = default;
+  XArmPlugin();
+  ~XArmPlugin() override;
 
   bool sendCartesianTwist(const geometry_msgs::msg::Twist& endEffectorTwist) override;
   bool sendJointStates(const sensor_msgs::msg::JointState& js) override;

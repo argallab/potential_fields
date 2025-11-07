@@ -1,12 +1,15 @@
+// Implementation file for XArm IK + Motion plugin.
+// Keep constructors/destructors out-of-line so the translation unit
+// becomes the key location for vtable emission, avoiding undefined reference
+// to vtable errors if this TU was previously not linked.
+
 #include <robot_plugins/xarm_plugin.hpp>
 
 XArmIKSolver::XArmIKSolver() : IKSolver("xarm_ik_solver") {
-  // Initialize the home transform from base to end-effector
   this->homeTransformOE = Eigen::Matrix4d::Identity();
-  // For example, set a fixed offset for the home position (modify as needed)
-  this->homeTransformOE(0, 3) = 0.4; // x offset
-  this->homeTransformOE(1, 3) = 0.0; // y offset
-  this->homeTransformOE(2, 3) = 0.4; // z offset
+  this->homeTransformOE(0, 3) = 0.4; // example x offset
+  this->homeTransformOE(1, 3) = 0.0; // example y offset
+  this->homeTransformOE(2, 3) = 0.4; // example z offset
 }
 
 bool XArmIKSolver::solve(
@@ -19,7 +22,7 @@ bool XArmIKSolver::solve(
   const bool seed_ok = seed.size() == 7;
   const std::array<double, 7> currentConfiguration = seed_ok
     ? std::array<double, 7>{seed[0], seed[1], seed[2], seed[3], seed[4], seed[5], seed[6]}
-  : {0, 0, 0, 0, 0, 0, 0};
+  : std::array<double, 7>{0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0};
 
   // Placeholder IK solution logic for XArm
   // In practice, replace this with a call to an actual IK solver for the XArm

@@ -79,6 +79,7 @@ add_library(robot_plugins SHARED
   src/robot_plugins/geofik.cpp
   src/robot_plugins/weighted_ik.cpp
   src/robot_plugins/franka_plugin.cpp
+  src/robot_plugins/xarm_plugin.cpp
 )
 ament_target_dependencies(robot_plugins
   Eigen3
@@ -91,10 +92,10 @@ target_include_directories(robot_plugins PUBLIC
   include/potential_fields/robot_plugins
 )
 
-if (Franka_FOUND)
-target_link_libraries(robot_plugins
-  Franka::Franka
-)
+if(Franka_FOUND)
+  target_link_libraries(robot_plugins
+    Franka::Franka
+  )
 else()
   message(WARNING "Franka not found, building without it.")
 endif()
