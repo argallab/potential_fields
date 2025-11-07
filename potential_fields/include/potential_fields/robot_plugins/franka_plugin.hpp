@@ -1,3 +1,4 @@
+#ifdef USING_FRANKA
 #ifndef FRANKA_PLUGIN_HPP
 #define FRANKA_PLUGIN_HPP
 
@@ -97,3 +98,4 @@ private:
 
 
 #endif // !FRANKA_PLUGIN_HPP
+#endif // USING_FRANKA
