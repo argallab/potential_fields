@@ -19,3 +19,4 @@
 - Create U-shaped obstacle test case for classic local minima problem
 - Improve Extent Estimator ("Extentimator") to be more accurate and be realistic for robot arms
   - Add unit tests for Extent Estimator
+- Fix DOCKER image to include all dependencies and build colcon build out of the box
