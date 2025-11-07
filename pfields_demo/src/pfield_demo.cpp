@@ -31,6 +31,8 @@ PFDemo::PFDemo() : Node("pfield_demo") {
   }
   RCLCPP_INFO(this->get_logger(), "Plan path service is available.");
 
+  this->eeVelocityPub = this->create_publisher<geometry_msgs::msg::TwistStamped>("/ee_velocity_command", 10);
+
   // Initialize demo service
   this->runPlanPathDemoService = this->create_service<std_srvs::srv::Empty>(
     "/pfield_demo/run_plan_path_demo",
@@ -68,6 +70,7 @@ PFDemo::PFDemo() : Node("pfield_demo") {
     pathPlanRequest->goal = goalPose;
     pathPlanRequest->delta_time = 0.1; // 100 ms between waypoints
     pathPlanRequest->goal_tolerance = 0.1; // 10 cm tolerance
+    const double dt = pathPlanRequest->delta_time;
 
     // Publish the goal pose
     this->goalPosePub->publish(goalPose);
@@ -76,11 +79,10 @@ PFDemo::PFDemo() : Node("pfield_demo") {
 
     // Create a publisher to publish the returned end-effector path when the response arrives
     auto pathPub = this->create_publisher<nav_msgs::msg::Path>("/nav_msgs/msg/Path", 10);
-
     // Send request asynchronously and attach a callback to process the result
     this->planPathClient->async_send_request(
       pathPlanRequest,
-      [this, pathPub](rclcpp::Client<PlanPath>::SharedFuture future) {
+      [this, pathPub, dt](rclcpp::Client<PlanPath>::SharedFuture future) {
       auto pathPlanResponse = future.get();
       if (!pathPlanResponse) {
         RCLCPP_ERROR(this->get_logger(), "plan_path service returned an empty response (async)");
@@ -115,6 +117,9 @@ PFDemo::PFDemo() : Node("pfield_demo") {
       catch (const std::exception& e) {
         RCLCPP_ERROR(this->get_logger(), "Failed to save planned path CSV: %s", e.what());
       }
+
+      // Send EE velocity commands to follow the path
+      this->sendEEVelocityCommand(pathPlanResponse->end_effector_velocity_trajectory, dt);
     }
     );
   });
