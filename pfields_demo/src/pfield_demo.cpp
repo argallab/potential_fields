@@ -290,6 +290,13 @@ void PFDemo::save_planned_path_response(const std::shared_ptr<PlanPath::Response
   RCLCPP_INFO(this->get_logger(), "Saved planned path CSV to %s", std::filesystem::absolute(filename).string().c_str());
 }
 
+void PFDemo::sendEEVelocityCommand(std::vector<geometry_msgs::msg::TwistStamped> eeVels, const double dt) {
+  for (const auto& velCmd : eeVels) {
+    this->eeVelocityPub->publish(velCmd);
+    rclcpp::sleep_for(std::chrono::nanoseconds(static_cast<int64_t>(dt * 1e9)));
+  }
+}
+
 int main(int argc, char* argv[]) {
   rclcpp::init(argc, argv);
   rclcpp::spin(std::make_shared<PFDemo>());
