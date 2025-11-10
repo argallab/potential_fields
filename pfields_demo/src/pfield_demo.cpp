@@ -34,9 +34,12 @@ PFDemo::PFDemo() : Node("pfield_demo") {
   RCLCPP_INFO(this->get_logger(), "Plan path service is available.");
 
   this->eeVelocityPub = this->create_publisher<geometry_msgs::msg::TwistStamped>("/robot_action", 10);
+  this->obstaclePub = this->create_publisher<potential_fields_interfaces::msg::ObstacleArray>("/pfield/obstacles", 10);
 
   this->tfBuffer = std::make_shared<tf2_ros::Buffer>(this->get_clock());
   this->tfListener = std::make_shared<tf2_ros::TransformListener>(*this->tfBuffer, this);
+
+  this->createAndPublishObstacles();
 
   // Initialize demo service
   this->runPlanPathDemoService = this->create_service<std_srvs::srv::Empty>(
@@ -58,12 +61,13 @@ PFDemo::PFDemo() : Node("pfield_demo") {
     goalPose.header.stamp = this->now();
     goalPose.header.frame_id = this->fixedFrame;
     goalPose.pose = startPose.pose;
-    goalPose.pose.position.x += 0.15; // Move +X 150mm
+    goalPose.pose.position.x += 0.225; // Move +X 225mm
+    goalPose.pose.position.y += 0.05; // Move +Y 50mm
 
     pathPlanRequest->start = startPose;
     pathPlanRequest->goal = goalPose;
-    pathPlanRequest->delta_time = 0.1; // 100 ms between waypoints
-    pathPlanRequest->goal_tolerance = 0.1; // 10 cm tolerance
+    pathPlanRequest->delta_time = 0.02; // 2 ms between waypoints
+    pathPlanRequest->goal_tolerance = 0.001; // 1 mm tolerance
     pathPlanRequest->max_iterations = 30000; // Max iterations for planning
     const double dt = pathPlanRequest->delta_time;
 
@@ -113,6 +117,27 @@ PFDemo::PFDemo() : Node("pfield_demo") {
   });
 }
 
+void PFDemo::createAndPublishObstacles() {
+  potential_fields_interfaces::msg::ObstacleArray allObstacles;
+
+  // Virtual sphere in the way
+  potential_fields_interfaces::msg::Obstacle sphere;
+  sphere.frame_id = "virtual_sphere";
+  sphere.type = "Sphere";
+  sphere.group = "Static";
+  sphere.pose.position.x = 0.39 + 0.15;
+  sphere.pose.position.y = -0.01;
+  sphere.pose.position.z = 0.2935;
+  sphere.pose.orientation.x = 0.0;
+  sphere.pose.orientation.y = 0.0;
+  sphere.pose.orientation.z = 0.0;
+  sphere.pose.orientation.w = 1.0;
+  sphere.radius = 0.01;
+  allObstacles.obstacles.push_back(sphere);
+
+  this->obstaclePub->publish(allObstacles);
+}
+
 geometry_msgs::msg::Pose PFDemo::getEndEffectorPose() {
   while (!this->tfBuffer->canTransform(this->fixedFrame, this->fixedFrame, tf2::TimePointZero, tf2::durationFromSec(0.1))) {}
   // Use the TF Listener to get the Pose of the `link_tcp` frame from the `world` frame
@@ -127,10 +152,14 @@ geometry_msgs::msg::Pose PFDemo::getEndEffectorPose() {
       eePose.orientation.y = tf.transform.rotation.y;
       eePose.orientation.z = tf.transform.rotation.z;
       eePose.orientation.w = tf.transform.rotation.w;
+      RCLCPP_INFO(this->get_logger(),
+        "Found TF (%s -> %s): (%.2f, %.2f, %.2f) [mm]", this->fixedFrame.c_str(), EE_TF_FRAME.c_str(),
+        eePose.position.x, eePose.position.y, eePose.position.z
+      );
       return eePose;
     }
     catch (const tf2::TransformException& ex) {
-      RCLCPP_DEBUG(this->get_logger(),
+      RCLCPP_ERROR(this->get_logger(),
         "Failed to find TF (%s -> %s): %s", this->fixedFrame.c_str(), EE_TF_FRAME.c_str(), ex.what()
       );
       return geometry_msgs::msg::Pose();
@@ -146,6 +175,15 @@ void PFDemo::startEEVelocityStreaming(const std::vector<geometry_msgs::msg::Twis
   }
 
   this->eeVelocityBuffer = eeVels;
+  // Append the zero command to stop the robot at the end
+  geometry_msgs::msg::TwistStamped zeroCmd;
+  zeroCmd.twist.linear.x = 0.0;
+  zeroCmd.twist.linear.y= 0.0;
+  zeroCmd.twist.linear.z = 0.0;
+  zeroCmd.twist.angular.x = 0.0;
+  zeroCmd.twist.angular.y = 0.0;
+  zeroCmd.twist.angular.z = 0.0;
+  this->eeVelocityBuffer.push_back(zeroCmd);
   this->eeVelocityIndex = 0;
   this->eeVelocityDt = dt;
   this->isStreamingEEVel = true;

@@ -245,3 +245,31 @@ ros2 launch xarm_moveit_config xarm7_moveit_realmove.launch.py robot_ip:=192.168
 # Launch PF Node that hosts Path Planning service (and demo service)
 ros2 launch pfields_demo pf_demo.launch.xml use_rviz:=false 
 ```
+
+### Demo Obstacles
+Obstacle definitions for demo. Positions are relative to robot base
+
+```yaml
+wooden_box:
+  frame_id: "Wooden_Box"
+  type: "Box"
+  group: "Static"
+  pose:
+    position:
+      x: 0.94 # [m]
+      y: -0.31 # [m]
+      z: 0.19 # [m]
+    orientation:
+      x: 0.0
+      y: 0.0
+      z: 0.0
+      w: 1.0
+  radius: 0.0
+  length: 0.38
+  width: 0.38
+  height: 0.38
+  mesh_resource: ""
+  scale_x: 0.0
+  scale_y: 0.0
+  scale_z: 0.0
+```

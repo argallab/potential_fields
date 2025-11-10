@@ -13,6 +13,7 @@
 - Demo cpp node that:
   - Is a client of `/pfield/plan_path`
   - In the callback of the service call, publish the EE Velocity Trajectory to the `/robot_action` topic
+  - listen to tf tree for EE position for planning
 - Include installation instructions for fcl, pinnochio, libfranka and other external dependencies in README
 - Fix DOCKER image to include all dependencies and build colcon build out of the box
   - Fix FCL installation and coal includes to be compatible with only apt installed version (`libfcl-dev` and `libccd-dev`)

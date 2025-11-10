@@ -26,6 +26,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-${ROS_DISTRO}-urdf \
     ros-${ROS_DISTRO}-gz-ros2-control \
     ros-${ROS_DISTRO}-ros-gz-sim \
+    ros-${ROS_DISTRO}-pinocchio \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # install packages
@@ -135,7 +136,11 @@ ENV PATH=/opt/openrobots/bin:$PATH \
     PYTHONPATH=/opt/openrobots/lib/python3.10/site-packages:$PYTHONPATH \
     CMAKE_PREFIX_PATH=/opt/openrobots/lib/cmake:$CMAKE_PREFIX_PATH
 
-# RUN git clone https://github.com/xArm-Developer/xArm-Python-SDK.git && cd xArm-Python-SDK && python3 setup.py install
+# TODO(Sharwin): DO THIS LINE BELOW
+# RUN git clone https://github.com/xArm-Developer/xArm-Python-SDK.git && cd xArm-Python-SDK && TODO FINISH INSTALL
+
+# TODO(Sharwin): Get example-robot-data repo for public URDFs
+# https://github.com/Gepetto/example-robot-data/blob/devel/robots/xarm_description/urdf/xarm7.urdf
 
 # Build libfranka
 # RUN apt-get update && \
