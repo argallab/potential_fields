@@ -319,14 +319,21 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
       request->start.pose.orientation.z
     )
   );
-
-  // Plan a path using the request parameters and store the result
-  auto planningResult = this->pField->planPath(
-    /*startPose=*/startSV,
-    /*dt=*/request->delta_time,
-    /*goalTolerance=*/request->goal_tolerance,
-    /*maxIterations=*/request->max_iterations
-  );
+  PlannedPath planningResult;
+  try {
+    // Plan a path using the request parameters and store the result
+    planningResult = this->pField->planPath(
+      /*startPose=*/startSV,
+      /*dt=*/request->delta_time,
+      /*goalTolerance=*/request->goal_tolerance,
+      /*maxIterations=*/request->max_iterations
+    );
+  }
+  catch (const std::exception& e) {
+    RCLCPP_ERROR(this->get_logger(), "Exception during path planning: %s", e.what());
+    response->success = false;
+    return;
+  }
 
   // Establish a consistent time base for the planned trajectory
   const double stepDt = (request->delta_time > 0.0) ? request->delta_time : 0.1;
@@ -403,6 +410,10 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
   }
   if (!response->success) {
     // If planning failed, log final pose and distance to goal
+    if (planningResult.poses.empty()) {
+      RCLCPP_WARN(this->get_logger(), "Planning failed with no poses generated.");
+      return;
+    }
     const auto& finalPose = planningResult.poses.back();
     const Eigen::Vector3d goalPos = this->pField->getGoalPose().getPosition();
     const double distanceToGoal = (finalPose.getPosition() - goalPos).norm();
