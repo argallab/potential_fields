@@ -2,6 +2,8 @@
 #define PFIELD_DEMO_HPP
 
 #include "rclcpp/rclcpp.hpp"
+#include <vector>
+#include <cstddef>
 #include "potential_fields_interfaces/srv/plan_path.hpp"
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "nav_msgs/msg/path.hpp"
@@ -25,7 +27,18 @@ private:
   rclcpp::Service<std_srvs::srv::Empty>::SharedPtr runPlanPathDemoService;
   // Save a PlanPath response to CSV (same format as pf_demo.py)
   void save_planned_path_response(const std::shared_ptr<potential_fields_interfaces::srv::PlanPath::Response>& res);
-  void sendEEVelocityCommand(std::vector<geometry_msgs::msg::TwistStamped> eeVels, const double dt);
+
+  // Timer-based streaming of end-effector velocity commands
+  void startEEVelocityStreaming(const std::vector<geometry_msgs::msg::TwistStamped>& eeVels, double dt);
+  void stopEEVelocityStreaming();
+  void eeVelocityTimerCallback();
+
+  // Streaming state
+  bool isStreamingEEVel{false};
+  std::vector<geometry_msgs::msg::TwistStamped> eeVelocityBuffer; // queued trajectory
+  std::size_t eeVelocityIndex{0};
+  double eeVelocityDt{0.1};
+  rclcpp::TimerBase::SharedPtr eeVelocityTimer; // publishes at eeVelocityDt
 };
 
 #endif // PFIELD_DEMO_HPP
