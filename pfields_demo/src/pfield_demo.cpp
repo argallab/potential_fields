@@ -1,7 +1,9 @@
 #include "pfield_demo.hpp"
 #include "rclcpp/rclcpp.hpp"
-#include "tf2_ros/static_transform_broadcaster.h"
+// #include "tf2_ros/static_transform_broadcaster.h"
 #include "potential_fields_interfaces/srv/plan_path.hpp"
+#include "tf2_eigen/tf2_eigen.hpp"
+
 #include <fstream>
 #include <iomanip>
 #include <sstream>
@@ -33,6 +35,9 @@ PFDemo::PFDemo() : Node("pfield_demo") {
 
   this->eeVelocityPub = this->create_publisher<geometry_msgs::msg::TwistStamped>("/robot_action", 10);
 
+  this->tfBuffer = std::make_shared<tf2_ros::Buffer>(this->get_clock());
+  this->tfListener = std::make_shared<tf2_ros::TransformListener>(*this->tfBuffer, this);
+
   // Initialize demo service
   this->runPlanPathDemoService = this->create_service<std_srvs::srv::Empty>(
     "/pfield_demo/run_plan_path_demo",
@@ -47,24 +52,13 @@ PFDemo::PFDemo() : Node("pfield_demo") {
     geometry_msgs::msg::PoseStamped startPose;
     startPose.header.stamp = this->now();
     startPose.header.frame_id = this->fixedFrame;
-    startPose.pose.position.x = 0.0;
-    startPose.pose.position.y = 0.0;
-    startPose.pose.position.z = 0.0;
-    startPose.pose.orientation.x = 0.0;
-    startPose.pose.orientation.y = 0.0;
-    startPose.pose.orientation.z = 0.0;
-    startPose.pose.orientation.w = 1.0;
+    startPose.pose = this->getEndEffectorPose();
 
     geometry_msgs::msg::PoseStamped goalPose;
     goalPose.header.stamp = this->now();
     goalPose.header.frame_id = this->fixedFrame;
-    goalPose.pose.position.x = 0.5;
-    goalPose.pose.position.y = 0.0;
-    goalPose.pose.position.z = 0.0;
-    goalPose.pose.orientation.y = 0.0;
-    goalPose.pose.orientation.z = 0.0;
-    goalPose.pose.orientation.x = 0.0;
-    goalPose.pose.orientation.w = 1.0;
+    goalPose.pose = startPose.pose;
+    goalPose.pose.position.x += 0.15; // Move +X 150mm
 
     pathPlanRequest->start = startPose;
     pathPlanRequest->goal = goalPose;
@@ -117,6 +111,87 @@ PFDemo::PFDemo() : Node("pfield_demo") {
     }
     );
   });
+}
+
+geometry_msgs::msg::Pose PFDemo::getEndEffectorPose() {
+  while (!this->tfBuffer->canTransform(this->fixedFrame, this->fixedFrame, tf2::TimePointZero, tf2::durationFromSec(0.1))) {}
+  // Use the TF Listener to get the Pose of the `link_tcp` frame from the `world` frame
+  const std::string EE_TF_FRAME = "link_tcp";
+  try {
+      auto tf = this->tfBuffer->lookupTransform(this->fixedFrame, EE_TF_FRAME, tf2::TimePointZero);
+      geometry_msgs::msg::Pose eePose;
+      eePose.position.x = tf.transform.translation.x;
+      eePose.position.y = tf.transform.translation.y;
+      eePose.position.z = tf.transform.translation.z;
+      eePose.orientation.x = tf.transform.rotation.x;
+      eePose.orientation.y = tf.transform.rotation.y;
+      eePose.orientation.z = tf.transform.rotation.z;
+      eePose.orientation.w = tf.transform.rotation.w;
+      return eePose;
+    }
+    catch (const tf2::TransformException& ex) {
+      RCLCPP_DEBUG(this->get_logger(),
+        "Failed to find TF (%s -> %s): %s", this->fixedFrame.c_str(), EE_TF_FRAME.c_str(), ex.what()
+      );
+      return geometry_msgs::msg::Pose();
+    }
+}
+
+void PFDemo::startEEVelocityStreaming(const std::vector<geometry_msgs::msg::TwistStamped>& eeVels, double dt) {
+  // If an existing stream is in progress, stop it first
+  this->stopEEVelocityStreaming();
+  if (eeVels.empty() || dt <= 0.0) {
+    RCLCPP_WARN(this->get_logger(), "Requested EE velocity stream has no points or non-positive dt (dt=%.6f)", dt);
+    return;
+  }
+
+  this->eeVelocityBuffer = eeVels;
+  this->eeVelocityIndex = 0;
+  this->eeVelocityDt = dt;
+  this->isStreamingEEVel = true;
+
+  // Create and start a timer to publish at the requested period
+  this->eeVelocityTimer = this->create_wall_timer(
+    std::chrono::duration<double>(this->eeVelocityDt),
+    std::bind(&PFDemo::eeVelocityTimerCallback, this)
+  );
+
+  RCLCPP_INFO(this->get_logger(), "Started EE velocity streaming: %zu points @ %.3f Hz", eeVelocityBuffer.size(), 1.0 / eeVelocityDt);
+}
+
+void PFDemo::stopEEVelocityStreaming() {
+  if (this->eeVelocityTimer) {
+    this->eeVelocityTimer->cancel();
+    this->eeVelocityTimer.reset();
+  }
+  if (this->isStreamingEEVel) {
+    RCLCPP_INFO(this->get_logger(), "Stopped EE velocity streaming after %zu/%zu points", eeVelocityIndex, eeVelocityBuffer.size());
+  }
+  this->isStreamingEEVel = false;
+  this->eeVelocityBuffer.clear();
+  this->eeVelocityIndex = 0;
+}
+
+void PFDemo::eeVelocityTimerCallback() {
+  if (!this->isStreamingEEVel) {
+    // Nothing to stream, defensive cancel
+    if (this->eeVelocityTimer) {
+      this->eeVelocityTimer->cancel();
+      this->eeVelocityTimer.reset();
+    }
+    return;
+  }
+
+  if (this->eeVelocityIndex >= this->eeVelocityBuffer.size()) {
+    // Finished streaming
+    this->stopEEVelocityStreaming();
+    return;
+  }
+
+  auto cmd = this->eeVelocityBuffer[this->eeVelocityIndex++];
+  // Re-stamp for more accurate stamps
+  cmd.header.stamp = this->now();
+  this->eeVelocityPub->publish(cmd);
 }
 
 // Helper: save PlanPath response to CSV in data/ with same layout as pf_demo.py
@@ -287,63 +362,6 @@ void PFDemo::save_planned_path_response(const std::shared_ptr<PlanPath::Response
 
   csv.close();
   RCLCPP_INFO(this->get_logger(), "Saved planned path CSV to %s", std::filesystem::absolute(filename).string().c_str());
-}
-
-void PFDemo::startEEVelocityStreaming(const std::vector<geometry_msgs::msg::TwistStamped>& eeVels, double dt) {
-  // If an existing stream is in progress, stop it first
-  this->stopEEVelocityStreaming();
-  if (eeVels.empty() || dt <= 0.0) {
-    RCLCPP_WARN(this->get_logger(), "Requested EE velocity stream has no points or non-positive dt (dt=%.6f)", dt);
-    return;
-  }
-
-  this->eeVelocityBuffer = eeVels;
-  this->eeVelocityIndex = 0;
-  this->eeVelocityDt = dt;
-  this->isStreamingEEVel = true;
-
-  // Create and start a timer to publish at the requested period
-  this->eeVelocityTimer = this->create_wall_timer(
-    std::chrono::duration<double>(this->eeVelocityDt),
-    std::bind(&PFDemo::eeVelocityTimerCallback, this)
-  );
-
-  RCLCPP_INFO(this->get_logger(), "Started EE velocity streaming: %zu points @ %.3f Hz", eeVelocityBuffer.size(), 1.0 / eeVelocityDt);
-}
-
-void PFDemo::stopEEVelocityStreaming() {
-  if (this->eeVelocityTimer) {
-    this->eeVelocityTimer->cancel();
-    this->eeVelocityTimer.reset();
-  }
-  if (this->isStreamingEEVel) {
-    RCLCPP_INFO(this->get_logger(), "Stopped EE velocity streaming after %zu/%zu points", eeVelocityIndex, eeVelocityBuffer.size());
-  }
-  this->isStreamingEEVel = false;
-  this->eeVelocityBuffer.clear();
-  this->eeVelocityIndex = 0;
-}
-
-void PFDemo::eeVelocityTimerCallback() {
-  if (!this->isStreamingEEVel) {
-    // Nothing to stream, defensive cancel
-    if (this->eeVelocityTimer) {
-      this->eeVelocityTimer->cancel();
-      this->eeVelocityTimer.reset();
-    }
-    return;
-  }
-
-  if (this->eeVelocityIndex >= this->eeVelocityBuffer.size()) {
-    // Finished streaming
-    this->stopEEVelocityStreaming();
-    return;
-  }
-
-  auto cmd = this->eeVelocityBuffer[this->eeVelocityIndex++];
-  // Re-stamp for more accurate stamps
-  cmd.header.stamp = this->now();
-  this->eeVelocityPub->publish(cmd);
 }
 
 int main(int argc, char* argv[]) {

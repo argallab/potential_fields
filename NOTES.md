@@ -213,17 +213,35 @@ https://lpsa.swarthmore.edu/NumInt/NumIntFourth.html
 
 ## Sequence for testing UFactory Xarm7
 
-### Run docker container
+Start the Docker Container:
 
 ```bash
 docker start -i argallab_pfields
 ```
 
-### Launch nodes
+If edits are made to the docker file, delete the image using `docker rmi <image_id>`, using the image id shown from `docker images`.
+Then recreate the image by building the docker image:
+
+```bash
+# In the Docker/ directory
+docker build -t pfields .
+# After the image is built, the container can be created and started by running:
+sudo docker run -it --privileged \
+-v /dev:/dev \
+-v /home/$USER/workspaces/pfield_ws/src:/home/workspace/src \
+-e DISPLAY \
+-e QT_X11_NO_MITSHM=1 \
+--name argallab_pfields \
+--net=host \
+pfields:latest
+```
+
+Once the docker container is started, run `colcon build` and `source install/setup.bash` to initialize the ROS workspace,
+and then launch the appropriate nodes:
 
 ```bash
 # Robot Launch
 ros2 launch xarm_moveit_config xarm7_moveit_realmove.launch.py robot_ip:=192.168.1.199 add_gripper:=true
-# Launch PF Node that hosts Path Planning service
-# Launch Node that publishes TwistStamped to '/robot_action' from PF Path Planning Service
+# Launch PF Node that hosts Path Planning service (and demo service)
+ros2 launch pfields_demo pf_demo.launch.xml use_rviz:=false 
 ```
