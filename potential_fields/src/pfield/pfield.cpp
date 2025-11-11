@@ -1,6 +1,8 @@
 #include "pfield/pfield.hpp"
 #include "pfield/pf_obstacle.hpp"
 #include "pfield/spatial_vector.hpp"
+#include <algorithm>
+#include <limits>
 
 void PotentialField::initializeKinematics(
   const std::string& urdfFilePath,
@@ -178,7 +180,9 @@ Eigen::Quaterniond PotentialField::integrateAngularVelocity(const Eigen::Quatern
   return (currentOrientation * dq).normalized();
 }
 
-TaskSpaceTwist PotentialField::constrainedTwistAtPose(const SpatialVector& pose, const TaskSpaceTwist& prevTwist, const double dt) {
+TaskSpaceTwist PotentialField::constrainedTwistAtPose(
+  const SpatialVector& pose,
+  const TaskSpaceTwist& prevTwist, const double dt) {
   TaskSpaceWrench W = this->evaluateWrenchAtPoseWithOpposingForceRemoval(pose);
   return this->applyMotionConstraints(this->wrenchToTwist(W), prevTwist, dt);
 }
@@ -239,14 +243,86 @@ Eigen::Vector3d PotentialField::computeAttractiveForceLinear(const SpatialVector
   if (magnitude <= this->translationalTolerance) return Eigen::Vector3d::Zero();
   // else return -this->attractiveGain * direction;
   // The Choset attractive potential defines a threshold for switching to quadratic behavior from conical
-  if (magnitude <= this->switchToQuadraticThreshold) {
+  const double dStarThreshold = this->dynamicQuadraticThresholdEnabled ? this->computeDynamicQuadraticThreshold(queryPose)
+    : this->defaultDStarThreshold;
+  if (magnitude <= dStarThreshold) {
     // Quadratic Attraction Region
     return -this->attractiveGain * direction;
   }
   else {
     // Conical Attraction Region
-    return  (this->switchToQuadraticThreshold * (-this->attractiveGain * direction)) / magnitude;
+    return  (dStarThreshold * (-this->attractiveGain * direction)) / magnitude;
   }
+}
+
+double PotentialField::minObstacleClearanceAt(const Eigen::Vector3d& point) const {
+  if (this->obstacles.empty()) {
+    return std::numeric_limits<double>::infinity();
+  }
+  double minClearance = std::numeric_limits<double>::infinity();
+  for (const auto& obst : this->obstacles) {
+    double signedDistance = 0.0; // signed distance: >0 outside, <0 inside
+    Eigen::Vector3d normal = Eigen::Vector3d::Zero();
+    obst.computeSignedDistanceAndNormal(point, signedDistance, normal);
+    double clearance = std::max(0.0, signedDistance); // treat inside as 0 clearance
+    if (clearance < minClearance) minClearance = clearance;
+  }
+  return minClearance;
+}
+
+double PotentialField::minClearanceAlongSegment(const Eigen::Vector3d& from, const Eigen::Vector3d& to, int samples) const {
+  if (this->obstacles.empty()) {
+    return std::numeric_limits<double>::infinity();
+  }
+  samples = std::max(2, samples);
+  double minClearance = std::numeric_limits<double>::infinity();
+  for (int i = 0; i < samples; ++i) {
+    double u = static_cast<double>(i) / static_cast<double>(samples - 1);
+    Eigen::Vector3d p = from + u * (to - from);
+    double clearance = this->minObstacleClearanceAt(p);
+    if (clearance < minClearance) minClearance = clearance;
+  }
+  return minClearance;
+}
+
+double PotentialField::computeDynamicQuadraticThreshold(const SpatialVector& queryPose) const {
+  // Baseline from existing parameter
+  double baseline = this->defaultDStarThreshold;
+  if (!this->isUsingDynamicQuadraticThreshold()) { return baseline; }
+
+  // Clearance near goal and along straight-line path to goal
+  const Eigen::Vector3d goalPosition = this->goalPose.getPosition();
+  const Eigen::Vector3d queryPosition = queryPose.getPosition();
+  const double clearanceAtGoal = this->minObstacleClearanceAt(goalPosition);
+  const double pathClearance = this->minClearanceAlongSegment(queryPosition, goalPosition, 7);
+
+  // Use the more conservative clearance estimate
+  double baselineClearance = std::min(clearanceAtGoal, pathClearance);
+
+  // Stopping distance based on limits (ensure smooth approach)
+  double stoppingDistance = 0.0;
+  if (this->maxLinearAcceleration > NEAR_ZERO_THRESHOLD) {
+    stoppingDistance = 0.5 * (this->maxLinearVelocity * this->maxLinearVelocity) / this->maxLinearAcceleration;
+  }
+
+  // If we have clearance data, increase d* in clutter (small clearance) to start quadratic earlier.
+  // If free space (large clearance), keep near baseline.
+  double dStar = baseline;
+  if (std::isfinite(baselineClearance)) {
+    const double Q = std::max(this->influenceDistance, 0.0);
+    const double clutterScale = std::max(0.0, Q - baselineClearance); // larger when tighter space
+    // Blend baseline, clutter and stopping distance
+    dStar = baseline + 0.5 * clutterScale + 0.5 * stoppingDistance;
+  }
+  else {
+    // No obstacles: just add a portion of stopping distance
+    dStar = baseline + 0.5 * stoppingDistance;
+  }
+  // Clamp to reasonable bounds
+  const double minimumDStarValue = 0.02;
+  const double dStarMin = std::max(5.0 * this->translationalTolerance, minimumDStarValue);
+  const double dStarMax = std::max(this->influenceDistance, baseline);
+  return std::clamp(dStar, dStarMin, dStarMax);
 }
 
 Eigen::Vector3d PotentialField::computeAttractiveMoment(const SpatialVector& queryPose) const {

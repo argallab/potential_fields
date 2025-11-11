@@ -83,6 +83,7 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
     this->maxLinearAcceleration, this->maxAngularAcceleration,
     this->influenceDistance
   );
+  this->pField->useDynamicQuadraticThreshold(true);
 
   // Initialize the motion plugin
   std::transform(
@@ -497,6 +498,9 @@ MarkerArray PotentialFieldManager::visualizePF(std::shared_ptr<PotentialField> p
   MarkerArray queryPoseMarkerArray = this->createQueryPoseMarker();
   markerArray.markers.insert(markerArray.markers.cend(), queryPoseMarkerArray.markers.cbegin(),
     queryPoseMarkerArray.markers.cend());
+  MarkerArray thresholdMarkers = this->createThresholdMarkers(pf);
+  markerArray.markers.insert(markerArray.markers.cend(), thresholdMarkers.markers.cbegin(),
+    thresholdMarkers.markers.cend());
   return markerArray;
 }
 
@@ -570,6 +574,37 @@ MarkerArray PotentialFieldManager::createQueryPoseMarker() {
     axis.lifetime = rclcpp::Duration(0, 0);
     markerArray.markers.push_back(axis);
   }
+  return markerArray;
+}
+
+MarkerArray PotentialFieldManager::createThresholdMarkers(std::shared_ptr<PotentialField> pf) {
+  MarkerArray markerArray;
+  // Create a translucent sphere representing the dStarThreshold around the goal
+  const SpatialVector goalPose = pf->getGoalPose();
+  Marker thresholdMarker;
+  thresholdMarker.header.frame_id = this->fixedFrame;
+  thresholdMarker.header.stamp = this->now();
+  thresholdMarker.ns = "dstar_threshold";
+  thresholdMarker.id = 0;
+  thresholdMarker.type = Marker::SPHERE;
+  thresholdMarker.action = Marker::ADD;
+  thresholdMarker.pose.position.x = goalPose.getPosition().x();
+  thresholdMarker.pose.position.y = goalPose.getPosition().y();
+  thresholdMarker.pose.position.z = goalPose.getPosition().z();
+  thresholdMarker.pose.orientation.x = goalPose.getOrientation().x();
+  thresholdMarker.pose.orientation.y = goalPose.getOrientation().y();
+  thresholdMarker.pose.orientation.z = goalPose.getOrientation().z();
+  thresholdMarker.pose.orientation.w = goalPose.getOrientation().w();
+  const double dStarThreshold = pf->computeDynamicQuadraticThreshold(this->queryPose);
+  thresholdMarker.scale.x = dStarThreshold * 2.0; // Diameter
+  thresholdMarker.scale.y = dStarThreshold * 2.0;
+  thresholdMarker.scale.z = dStarThreshold * 2.0;
+  thresholdMarker.color.r = 0.0f;
+  thresholdMarker.color.g = 1.0f;
+  thresholdMarker.color.b = 1.0f; // Cyan sphere for d* threshold
+  thresholdMarker.color.a = 0.15f; // Semi-transparent
+  thresholdMarker.lifetime = rclcpp::Duration(0, 0); // No lifetime
+  markerArray.markers.push_back(thresholdMarker);
   return markerArray;
 }
 

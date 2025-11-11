@@ -138,6 +138,8 @@ private:
 
   MarkerArray createQueryPoseMarker();
 
+  MarkerArray createThresholdMarkers(std::shared_ptr<PotentialField> pf);
+
   /**
    * @brief Get Obstacle and Obstacle Influence Zone markers from a potential field
    *
