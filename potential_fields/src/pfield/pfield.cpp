@@ -288,6 +288,7 @@ double PotentialField::minClearanceAlongSegment(const Eigen::Vector3d& from, con
 double PotentialField::computeDynamicQuadraticThreshold(const SpatialVector& queryPose) const {
   // Baseline from existing parameter
   double baseline = this->defaultDStarThreshold;
+  if (!this->isUsingDynamicQuadraticThreshold()) { return baseline; }
 
   // Clearance near goal and along straight-line path to goal
   const Eigen::Vector3d goalPosition = this->goalPose.getPosition();
