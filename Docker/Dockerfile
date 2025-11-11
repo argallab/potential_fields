@@ -71,14 +71,14 @@ RUN apt-get update -yq && apt-get install -yq \
     unzip \
     git \
     python3-scipy \
-    python3-numpy \ 
+    python3-numpy \
     python3-cvxopt \
-    python3-pandas \ 
+    python3-pandas \
     python3-colcon-common-extensions \
     python-is-python3 \
-	python3-tk \
-	python3-pytest-rerunfailures \
-	python3-matplotlib \
+    python3-tk \
+    python3-pytest-rerunfailures \
+    python3-matplotlib \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # Install necessary packages for libfranka
@@ -106,19 +106,6 @@ RUN apt-get update \
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/*
 
-# Install and build libccd (FCL depends on this)
-# RUN git clone https://github.com/danfis/libccd.git && \
-#     cd libccd/src && \
-#     make && \
-#     make install && \
-#     cd / && \
-#     git clone https://github.com/flexible-collision-library/fcl.git && \
-#     cd fcl && \
-#     mkdir build && \
-#     cd build && \
-#     cmake .. && \
-#     make
-
 # Install Pinocchio
 RUN mkdir -p /etc/apt/keyrings && \
     curl -fsSL http://robotpkg.openrobots.org/packages/debian/robotpkg.asc | tee /etc/apt/keyrings/robotpkg.asc && \
@@ -136,23 +123,19 @@ ENV PATH=/opt/openrobots/bin:$PATH \
     PYTHONPATH=/opt/openrobots/lib/python3.10/site-packages:$PYTHONPATH \
     CMAKE_PREFIX_PATH=/opt/openrobots/lib/cmake:$CMAKE_PREFIX_PATH
 
-# TODO(Sharwin): DO THIS LINE BELOW
-# RUN git clone https://github.com/xArm-Developer/xArm-Python-SDK.git && cd xArm-Python-SDK && TODO FINISH INSTALL
+# install xArm python sdk
+RUN git clone https://github.com/xArm-Developer/xArm-Python-SDK.git /home/workspace/src/xArm-Python-SDK && \
+    cd /home/workspace/src/xArm-Python-SDK && \
+    pip install . --break-system-packages
 
-# TODO(Sharwin): Get example-robot-data repo for public URDFs
-# https://github.com/Gepetto/example-robot-data/blob/devel/robots/xarm_description/urdf/xarm7.urdf
-
-# Build libfranka
-# RUN apt-get update && \
-#     apt-get remove "*libfranka*" && \ 
-#     git clone --recurse-submodules https://github.com/frankarobotics/libfranka.git && \
-#     cd libfranka && \
-#     git checkout 0.16.0 && \
-#     git submodule update && \
-#     mkdir build && \
-#     cd build && \
-#     cmake -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH=/opt/openrobots/lib/cmake -DBUILD_TESTS=OFF .. && \
-#     make
+# install example robot data for urdf models
+RUN git clone --recursive https://github.com/Gepetto/example-robot-data.git /home/workspace/src/example-robot-data && \
+    cd /home/workspace/src/example-robot-data && \
+    mkdir -p /home/workspace/src/example-robot-data/build && \
+    cd /home/workspace/src/example-robot-data/build && \
+    cmake .. && \
+    make && \
+    make install
 
 # install box 2d
 RUN pip3 install Box2D --break-system-packages
