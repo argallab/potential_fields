@@ -96,8 +96,9 @@ TEST(PotentialFieldTest, AttractiveGainScaling) {
   PotentialField pf(3.0, 0.0, 0.0, 0.0, 10.0, 1.0, 5.0, 5.0);
   SpatialVector query(Eigen::Vector3d(2.0, 0.0, 0.0));
   TaskSpaceTwist vel = pf.evaluateVelocityAtPose(query);
-  // magnitude = gain * distance = 3 * 2 = 6, direction toward goal: negative x
-  EXPECT_NEAR(vel.getLinearVelocity().x(), -6.0, 1e-6);
+  // With d* = 1.0 (fixed, dynamic disabled), distance(=2) > d* so we are in the conical region.
+  // Expected force magnitude = gain * d* = 3 * 1 = 3 toward the goal (negative x).
+  EXPECT_NEAR(vel.getLinearVelocity().x(), -3.0, 1e-6);
   EXPECT_NEAR(vel.getLinearVelocity().y(), 0.0, 1e-6);
 }
 
@@ -357,7 +358,8 @@ TEST(PotentialFieldTest, RotationalAttraction) {
   PotentialField pf(goal, 0.0, 0.0, 10.0, 0.0, 15.0, 0.0, 5.0, 1e-3);
   TaskSpaceWrench rawWrench = pf.evaluateWrenchAtPose(query);
   double rawOmegaMag = rawWrench.torque.norm();
-  EXPECT_NEAR(rawOmegaMag, 10.0 * goal.angularDistance(query), 1e-6); // pre-constraint check
+  // Implementation uses bounded sine form: 2*sin(angle/2) * gain
+  EXPECT_NEAR(rawOmegaMag, 10.0 * 2.0 * std::sin(0.5 * goal.angularDistance(query)), 1e-6); // pre-constraint check
   // Use limited velocity to reflect soft saturation constraint (dt=0 => velocity soft-cap only)
   TaskSpaceTwist vel = pf.evaluateLimitedVelocityAtPose(query);
   // Linear velocity should be ~0 (positions are equal)
@@ -517,7 +519,8 @@ TEST(PotentialFieldTest, EvaluateWrenchAtPosePureTorque) {
     Eigen::Vector3d tau_dir = w.torque / (tau_norm + 1e-18);
     EXPECT_NEAR((axis.cross(tau_dir)).norm(), 0.0, 1e-3);
   }
-  EXPECT_NEAR(tau_norm, 2.0 * goal.angularDistance(query), 1e-2);
+  // Implementation uses bounded sine form: 2*sin(angle/2) * gain
+  EXPECT_NEAR(tau_norm, 2.0 * 2.0 * std::sin(0.5 * goal.angularDistance(query)), 1e-6);
 }
 
 TEST(PotentialFieldTest, NoOvershootApproachGoalMonotonic) {
@@ -630,9 +633,9 @@ TEST(PotentialFieldTest, PlanPathTimeStampConsistency) {
   }
 }
 
-TEST(PotentialFieldTest, PlanPathTwistMatchesConstrainedVelocityAtPose) {
-  // planPath records the velocity AFTER applying motion constraints.
-  // Verify that path.twists[i] equals applyMotionConstraints(evaluateVelocityAtPose(poses[i]), prev, dt)
+TEST(PotentialFieldTest, PlanPathTwistMatchesRK4ConstrainedTwist) {
+  // planPath records the RK4-averaged constrained twist (with opposing-force removal) per step.
+  // Reconstruct that twist using the same method and compare strictly.
   SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
   PotentialField pf(goal, 1.0, 0.0, 0.0);
   SpatialVector start(Eigen::Vector3d(1.5, 0.0, 0.0), Eigen::Quaterniond::Identity());
@@ -646,11 +649,101 @@ TEST(PotentialFieldTest, PlanPathTwistMatchesConstrainedVelocityAtPose) {
   ASSERT_EQ(path.poses.size(), path.twists.size());
   TaskSpaceTwist prevLimited; // starts at zero
   for (size_t i = 0; i < path.poses.size(); ++i) {
-    TaskSpaceTwist raw = pf.evaluateVelocityAtPose(path.poses[i]);
-    TaskSpaceTwist expectedLimited = pf.applyMotionConstraints(raw, prevLimited, dt);
-    // compare components
-    EXPECT_NEAR((expectedLimited.getLinearVelocity() - path.twists[i].getLinearVelocity()).norm(), 0.0, 1e-9);
-    EXPECT_NEAR((expectedLimited.getAngularVelocity() - path.twists[i].getAngularVelocity()).norm(), 0.0, 1e-9);
-    prevLimited = expectedLimited;
+    const SpatialVector& current = path.poses[i];
+    // k1
+    TaskSpaceTwist k1 = pf.constrainedTwistAtPose(current, prevLimited, dt);
+    SpatialVector T2(
+      pf.integrateLinearVelocity(current.getPosition(), k1.getLinearVelocity(), 0.5 * dt),
+      pf.integrateAngularVelocity(current.getOrientation(), k1.getAngularVelocity(), 0.5 * dt)
+    );
+    // k2
+    TaskSpaceTwist k2 = pf.constrainedTwistAtPose(T2, k1, 0.5 * dt);
+    SpatialVector T3(
+      pf.integrateLinearVelocity(current.getPosition(), k2.getLinearVelocity(), 0.5 * dt),
+      pf.integrateAngularVelocity(current.getOrientation(), k2.getAngularVelocity(), 0.5 * dt)
+    );
+    // k3
+    TaskSpaceTwist k3 = pf.constrainedTwistAtPose(T3, k2, 0.5 * dt);
+    SpatialVector T4(
+      pf.integrateLinearVelocity(current.getPosition(), k3.getLinearVelocity(), dt),
+      pf.integrateAngularVelocity(current.getOrientation(), k3.getAngularVelocity(), dt)
+    );
+    // k4
+    TaskSpaceTwist k4 = pf.constrainedTwistAtPose(T4, k3, dt);
+
+    Eigen::Vector3d v_bar = (
+      k1.getLinearVelocity() + 2.0 * k2.getLinearVelocity() + 2.0 * k3.getLinearVelocity() + k4.getLinearVelocity()
+      ) / 6.0;
+    Eigen::Vector3d w_bar = (
+      k1.getAngularVelocity() + 2.0 * k2.getAngularVelocity() + 2.0 * k3.getAngularVelocity() + k4.getAngularVelocity()
+      ) / 6.0;
+    TaskSpaceTwist expected = pf.applyMotionConstraints(TaskSpaceTwist(v_bar, w_bar), prevLimited, dt);
+
+    // compare components strictly
+    EXPECT_NEAR((expected.getLinearVelocity() - path.twists[i].getLinearVelocity()).norm(), 0.0, 1e-9);
+    EXPECT_NEAR((expected.getAngularVelocity() - path.twists[i].getAngularVelocity()).norm(), 0.0, 1e-9);
+    prevLimited = path.twists[i];
   }
+}
+
+// ===== Dynamic threshold and clearance helpers =====
+
+TEST(PotentialFieldDynamicThresholdTest, MinObstacleClearanceAtAndAlongSegment) {
+  PotentialField pf; // defaults
+  // Add a unit sphere at the origin
+  pf.addObstacle(PotentialFieldObstacle(
+    "sphere1",
+    Eigen::Vector3d::Zero(),
+    Eigen::Quaterniond::Identity(),
+    ObstacleType::SPHERE,
+    ObstacleGroup::STATIC,
+    ObstacleGeometry{1.0, 0.0, 0.0, 0.0}
+  ));
+
+  // Point outside: distance to surface = 3 - 1 = 2
+  EXPECT_NEAR(pf.minObstacleClearanceAt(Eigen::Vector3d(3.0, 0.0, 0.0)), 2.0, 1e-12);
+  // Point on surface: clearance 0
+  EXPECT_NEAR(pf.minObstacleClearanceAt(Eigen::Vector3d(1.0, 0.0, 0.0)), 0.0, 1e-12);
+  // Point inside: negative signed distance -> clamped to 0 clearance
+  EXPECT_NEAR(pf.minObstacleClearanceAt(Eigen::Vector3d(0.5, 0.0, 0.0)), 0.0, 1e-12);
+
+  // Segment that crosses the sphere: min clearance should be 0 somewhere along the path
+  EXPECT_NEAR(pf.minClearanceAlongSegment(Eigen::Vector3d(-3.0, 0.0, 0.0),
+    Eigen::Vector3d(3.0, 0.0, 0.0), 25), 0.0, 1e-12);
+  // Segment that stays outside at x=3: min clearance remains 2
+  EXPECT_NEAR(pf.minClearanceAlongSegment(Eigen::Vector3d(3.0, 0.0, 0.0),
+    Eigen::Vector3d(3.0, 2.0, 0.0), 11), 2.0, 1e-12);
+}
+
+TEST(PotentialFieldDynamicThresholdTest, NoObstaclesBaselinePlusStopping) {
+  // With no obstacles, d* = baseline + 0.5 * stoppingDistance, clamped to [dMin, influenceDistance]
+  PotentialField pf; // defaults: vmax=5, amax=1, baseline ~ 1.0, influence=1.0
+  pf.setInfluenceDistance(10.0); // widen clamp upper bound so stopping distance affects result
+  pf.useDynamicQuadraticThreshold(true);
+  SpatialVector query(Eigen::Vector3d(2.0, 0.0, 0.0));
+
+  // Stopping distance evaluates to 12.5
+  const double stopping = 0.5 * (DEFAULT_MAX_LINEAR_VELOCITY * DEFAULT_MAX_LINEAR_VELOCITY) / DEFAULT_MAX_LINEAR_ACCELERATION;
+  const double expected = 1.0 + 0.5 * stopping; // baseline(=1.0) + 6.25 = 7.25
+  EXPECT_NEAR(pf.computeDynamicQuadraticThreshold(query), expected, 1e-9);
+}
+
+TEST(PotentialFieldDynamicThresholdTest, ClampedByInfluenceInClutter) {
+  // Place an obstacle at the goal so clearance ~ 0; dynamic d* should clamp to influenceDistance
+  SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
+  PotentialField pf(goal, 1.0, 0.0, 0.0);
+  pf.setInfluenceDistance(3.0); // small influence to exercise clamping
+  pf.useDynamicQuadraticThreshold(true);
+  // Obstacle centered at goal
+  pf.addObstacle(PotentialFieldObstacle(
+    "clutter",
+    goal.getPosition(),
+    Eigen::Quaterniond::Identity(),
+    ObstacleType::SPHERE,
+    ObstacleGroup::STATIC,
+    ObstacleGeometry{0.9, 0.0, 0.0, 0.0}
+  ));
+  SpatialVector query(Eigen::Vector3d(5.0, 0.0, 0.0));
+  const double dstar = pf.computeDynamicQuadraticThreshold(query);
+  EXPECT_NEAR(dstar, pf.getInfluenceDistance(), 1e-12);
 }

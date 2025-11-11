@@ -28,6 +28,7 @@
 #include <unordered_map>
 #include <vector>
 #include <memory>
+#include <utility>
 
 #include <eigen3/Eigen/Core>
 #include <eigen3/Eigen/Geometry>
@@ -254,6 +255,7 @@ public:
   void setMaxAngularAcceleration(double newMaxAngularAcceleration) { this->maxAngularAcceleration = newMaxAngularAcceleration; }
   void setInfluenceDistance(double newInfluenceDistance) { this->influenceDistance = newInfluenceDistance; }
   void setGoalPose(SpatialVector newGoalPose) { this->goalPose = newGoalPose; }
+  void useDynamicQuadraticThreshold(bool enabled) { this->dynamicQuadraticThresholdEnabled = enabled; }
   double getAttractiveGain() const { return this->attractiveGain; }
   double getRepulsiveGain() const { return this->repulsiveGain; }
   double getRotationalAttractiveGain() const { return this->rotationalAttractiveGain; }
@@ -262,6 +264,7 @@ public:
   double getMaxLinearAcceleration() const { return this->maxLinearAcceleration; }
   double getMaxAngularAcceleration() const { return this->maxAngularAcceleration; }
   double getInfluenceDistance() const { return this->influenceDistance; }
+  bool isUsingDynamicQuadraticThreshold() const { return this->dynamicQuadraticThresholdEnabled; }
   SpatialVector getGoalPose() const { return this->goalPose; }
   std::vector<PotentialFieldObstacle> getObstacles() const { return this->obstacles; }
 
@@ -511,6 +514,38 @@ public:
   std::pair<SpatialVector, TaskSpaceTwist> rungeKuttaStep(const SpatialVector& currentPose,
     const TaskSpaceTwist& prevTwist, const double dt);
 
+  /**
+   * @brief Compute a per-step switch distance d* that blends goal/path clearance and stopping distance.
+   *
+   * @note When dynamic thresholding is disabled, the fixed defaultDStarThreshold is used.
+   *
+   * @param queryPose The current pose to compute the dynamic threshold for
+   * @return double The computed dynamic quadratic threshold distance d* [m]
+   */
+  double computeDynamicQuadraticThreshold(const SpatialVector& queryPose) const;
+
+  /**
+   * @brief Computes the minimum obstacle clearance at a given point.
+   *
+   * @note Returns +infinity if no obstacles are present as `std::numeric_limits<double>::infinity()`.
+   *
+   * @param point The point in 3D space to compute the clearance for
+   * @return double The minimum clearance distance to the nearest obstacle [m]
+   */
+  double minObstacleClearanceAt(const Eigen::Vector3d& point) const;
+
+  /**
+   * @brief Computes the minimum obstacle clearance along a line segment.
+   *
+   * @note Returns +infinity if no obstacles are present as `std::numeric_limits<double>::infinity()`.
+   *
+   * @param from The starting point of the line segment
+   * @param to The ending point of the line segment
+   * @param samples The number of samples to take along the segment (default is 7)
+   * @return double The minimum clearance distance along the segment [m]
+   */
+  double minClearanceAlongSegment(const Eigen::Vector3d& from, const Eigen::Vector3d& to, int samples = 7) const;
+
 private:
   double attractiveGain; // Gain for attractive force
   double repulsiveGain; // Gain for repulsive force
@@ -528,11 +563,12 @@ private:
   std::shared_ptr<IKSolver> ikSolver; // Inverse kinematics solver for joint angle computation
   const double translationalTolerance = 1e-3; // Threshold for distances to the goal and obstacles [m]
   const double rotationalThreshold = 0.02; // Threshold for rotational geodesic distance [rad]
-  const double switchToQuadraticThreshold = 1.0; // [m] distance for switching to quadratic attractive potential from conical
+  const double defaultDStarThreshold = 1.0; // [m] distance for switching to quadratic attractive potential from conical
   const double softSatBeta = 1.0; // Soft-saturation parameter, higher = more aggressive curve
   const double stagnationProgressRateThreshold = 0.01; // [m/s] min required progress toward goal
   const double stagnationSpeedRmsThreshold = 0.02; // [m/s] consider "not moving" if below this
   const int    stagnationWindowMinPoints = 8;    // need at least this many points in window
+  bool dynamicQuadraticThresholdEnabled = false; // if true, use dynamic d* based on obstacles/kinematics
 
   bool isPathStagnated(const PlannedPath& path);
 };
