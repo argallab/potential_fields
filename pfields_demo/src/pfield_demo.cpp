@@ -143,27 +143,27 @@ geometry_msgs::msg::Pose PFDemo::getEndEffectorPose() {
   // Use the TF Listener to get the Pose of the `link_tcp` frame from the `world` frame
   const std::string EE_TF_FRAME = "link_tcp";
   try {
-      auto tf = this->tfBuffer->lookupTransform(this->fixedFrame, EE_TF_FRAME, tf2::TimePointZero);
-      geometry_msgs::msg::Pose eePose;
-      eePose.position.x = tf.transform.translation.x;
-      eePose.position.y = tf.transform.translation.y;
-      eePose.position.z = tf.transform.translation.z;
-      eePose.orientation.x = tf.transform.rotation.x;
-      eePose.orientation.y = tf.transform.rotation.y;
-      eePose.orientation.z = tf.transform.rotation.z;
-      eePose.orientation.w = tf.transform.rotation.w;
-      RCLCPP_INFO(this->get_logger(),
-        "Found TF (%s -> %s): (%.2f, %.2f, %.2f) [mm]", this->fixedFrame.c_str(), EE_TF_FRAME.c_str(),
-        eePose.position.x, eePose.position.y, eePose.position.z
-      );
-      return eePose;
-    }
-    catch (const tf2::TransformException& ex) {
-      RCLCPP_ERROR(this->get_logger(),
-        "Failed to find TF (%s -> %s): %s", this->fixedFrame.c_str(), EE_TF_FRAME.c_str(), ex.what()
-      );
-      return geometry_msgs::msg::Pose();
-    }
+    auto tf = this->tfBuffer->lookupTransform(this->fixedFrame, EE_TF_FRAME, tf2::TimePointZero);
+    geometry_msgs::msg::Pose eePose;
+    eePose.position.x = tf.transform.translation.x;
+    eePose.position.y = tf.transform.translation.y;
+    eePose.position.z = tf.transform.translation.z;
+    eePose.orientation.x = tf.transform.rotation.x;
+    eePose.orientation.y = tf.transform.rotation.y;
+    eePose.orientation.z = tf.transform.rotation.z;
+    eePose.orientation.w = tf.transform.rotation.w;
+    RCLCPP_INFO(this->get_logger(),
+      "Found TF (%s -> %s): (%.2f, %.2f, %.2f) [mm]", this->fixedFrame.c_str(), EE_TF_FRAME.c_str(),
+      eePose.position.x, eePose.position.y, eePose.position.z
+    );
+    return eePose;
+  }
+  catch (const tf2::TransformException& ex) {
+    RCLCPP_ERROR(this->get_logger(),
+      "Failed to find TF (%s -> %s): %s", this->fixedFrame.c_str(), EE_TF_FRAME.c_str(), ex.what()
+    );
+    return geometry_msgs::msg::Pose();
+  }
 }
 
 void PFDemo::startEEVelocityStreaming(const std::vector<geometry_msgs::msg::TwistStamped>& eeVels, double dt) {
@@ -178,7 +178,7 @@ void PFDemo::startEEVelocityStreaming(const std::vector<geometry_msgs::msg::Twis
   // Append the zero command to stop the robot at the end
   geometry_msgs::msg::TwistStamped zeroCmd;
   zeroCmd.twist.linear.x = 0.0;
-  zeroCmd.twist.linear.y= 0.0;
+  zeroCmd.twist.linear.y = 0.0;
   zeroCmd.twist.linear.z = 0.0;
   zeroCmd.twist.angular.x = 0.0;
   zeroCmd.twist.angular.y = 0.0;
