@@ -243,7 +243,7 @@ and then launch the appropriate nodes:
 # Robot Launch
 ros2 launch xarm_moveit_config xarm7_moveit_realmove.launch.py robot_ip:=192.168.1.199 add_gripper:=true
 # Launch PF Node that hosts Path Planning service (and demo service)
-ros2 launch pfields_demo pf_demo.launch.xml use_rviz:=false 
+ros2 launch pfields_demo pf_demo.launch.xml use_rviz:=false
 ```
 
 ### Demo Obstacles
@@ -273,3 +273,9 @@ wooden_box:
   scale_y: 0.0
   scale_z: 0.0
 ```
+
+# 11/12 Meeting Notes
+robot modularity documentation (other robots)
+rest of arm hitting obstacles using mesh links
+real obstacles demo
+teleop demo
