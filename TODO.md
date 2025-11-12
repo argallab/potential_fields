@@ -12,13 +12,15 @@
 - Allow PF with no goal, only obstacles (for avoidance behavior)
 - Include installation instructions for fcl, pinnochio, libfranka and other external dependencies in README
 - Fix DOCKER image to include all dependencies and build colcon build out of the box
+  - Split into separate images for PF and robot dependencies
 
 # Future TODOs and Refactors
 - Investigate Configuration Space planning with the PF
+  - Principles of Robot Motion, Choset et al.
+  - Modern Robotics, Lynch and Park
 - namespace pfield c++ library and externalize from ROS package
   - Allow optional robot dependencies in pfield_lib CMakeLists.txt
   - ROS package should simply link with pfield_lib like a standard library
-- Dynamic `switchToQuadraticPotential` based on current PF state (distance to goal, obstacles, current velocity, etc.)
 - Create U-shaped obstacle test case for classic local minima problem
 - Improve Extent Estimator ("Extentimator") to be more accurate and be realistic for robot arms
   - Add unit tests for Extent Estimator
