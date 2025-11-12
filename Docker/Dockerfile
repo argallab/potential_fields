@@ -124,15 +124,17 @@ ENV PATH=/opt/openrobots/bin:$PATH \
     CMAKE_PREFIX_PATH=/opt/openrobots/lib/cmake:$CMAKE_PREFIX_PATH
 
 # install xArm python sdk
-RUN git clone https://github.com/xArm-Developer/xArm-Python-SDK.git /home/workspace/src/xArm-Python-SDK && \
-    cd /home/workspace/src/xArm-Python-SDK && \
+RUN cd /home/workspace/src && \
+    git clone https://github.com/xArm-Developer/xArm-Python-SDK.git && \
+    cd xArm-Python-SDK && \
     pip install . --break-system-packages
 
 # install example robot data for urdf models
-RUN git clone --recursive https://github.com/Gepetto/example-robot-data.git /home/workspace/src/example-robot-data && \
-    cd /home/workspace/src/example-robot-data && \
-    mkdir -p /home/workspace/src/example-robot-data/build && \
-    cd /home/workspace/src/example-robot-data/build && \
+RUN cd /home/workspace/src && \
+    git clone --recursive https://github.com/Gepetto/example-robot-data.git && \
+    cd example-robot-data && \
+    mkdir -p build && \
+    cd build && \
     cmake .. && \
     make && \
     make install
