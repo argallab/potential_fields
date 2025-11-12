@@ -277,5 +277,5 @@ wooden_box:
 # 11/12 Meeting Notes
 robot modularity documentation (other robots)
 rest of arm hitting obstacles using mesh links
-real obstacles demo
+real obstacles demo, maybe foam so it's safer
 teleop demo
