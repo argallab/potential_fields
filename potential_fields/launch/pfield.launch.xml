@@ -1,9 +1,9 @@
 <launch>
-<arg name="use_rviz" default="true" description="Whether to launch RViz or not."/>
-<arg name="rviz_config" default="$(find-pkg-share potential_fields)/config/view_pfield.rviz" description="The RVIZ config file (.rviz)"/>
-<arg name="rviz_fixed_frame" default="world" description="The fixed frame for RVIZ"/>
-<arg name="urdf_file_path" default="" description="The absolute filepath to the URDF file for the robot"/>
-<arg name="motion_plugin_type" default="" description="The type of motion plugin to use in PFieldManager (e.g. 'franka')"/>
+  <arg name="use_rviz" default="true" description="Whether to launch RViz or not."/>
+  <arg name="rviz_config" default="$(find-pkg-share potential_fields)/config/view_pfield.rviz" description="The RVIZ config file (.rviz)"/>
+  <arg name="rviz_fixed_frame" default="world" description="The fixed frame for RVIZ"/>
+  <arg name="urdf_file_path" default="" description="The absolute filepath to the URDF file for the robot"/>
+  <arg name="motion_plugin_type" default="" description="The type of motion plugin to use in PFieldManager (e.g. 'franka')"/>
 
   <!-- RViz -->
   <node pkg="rviz2" exec="rviz2" args="-d $(var rviz_config) --fixed-frame $(var rviz_fixed_frame)" if="$(var use_rviz)" output="screen">
