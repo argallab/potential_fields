@@ -1,0 +1,8 @@
+# PS3 controller
+ACTION=="add", KERNEL=="js[0-9]*", SUBSYSTEM=="input", SUBSYSTEMS=="input", ATTRS{name}=="Sony PLAYSTATION(R)3 Controller", ATTRS{properties}=="0", SYMLINK+="ps3", MODE="0666" 
+
+# Sip and puff interface
+ACTION=="add", KERNEL=="js[0-9]*", SUBSYSTEM=="input", SUBSYSTEMS=="usb", ATTRS{idVendor}=="0a95", ATTRS{idProduct}=="0015", SYMLINK+="sip_and_puff", MODE="0666"
+
+# 3-axis Joystick (IPD CH-Products)
+ACTION=="add", KERNEL=="js[0-9]*", SUBSYSTEM=="input", SUBSYSTEMS=="usb", ATTRS{idVendor}=="068e", ATTRS{idProduct}=="00ca", SYMLINK+="3_axis_joystick", MODE="0666"

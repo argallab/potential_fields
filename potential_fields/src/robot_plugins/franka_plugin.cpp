@@ -1,3 +1,4 @@
+#ifdef USING_FRANKA
 #include "robot_plugins/franka_plugin.hpp"
 #include "weighted_ik.h"
 #include <cmath>
@@ -194,3 +195,5 @@ bool FrankaPlugin::readRobotState(sensor_msgs::msg::JointState& js, geometry_msg
     return false;
   }
 }
+
+#endif // USING_FRANKA

@@ -11,15 +11,16 @@ DATA_DIR = THIS_DIR.parent / "data"
 
 def get_latest_csv_file() -> Path:
     # Default to canonical name used by the planner
-    return DATA_DIR / "planned_path.csv"
+    # return DATA_DIR / "planned_path.csv"
     # If you wish to pick the most recent timestamped file instead, uncomment below:
-    # name_template = "planned_path_"
-    # files = [p for p in DATA_DIR.glob(f"{name_template}*.csv")]
-    # if not files:
-    #     raise FileNotFoundError(
-    #         f"No {name_template}<timestamp>.csv files found in '{DATA_DIR}'.")
-    # latest_file = max(files, key=lambda p: p.stat().st_ctime)
-    # return latest_file
+    name_template = "planned_path_"
+    files = [p for p in DATA_DIR.glob(f"{name_template}*.csv")]
+    # Timestamps are in the format: YYYYMMDD_HHMMSS
+    if not files:
+        raise FileNotFoundError(
+            f"No {name_template}<timestamp>.csv files found in '{DATA_DIR}'.")
+    latest_file = max(files, key=lambda p: p.stat().st_ctime)
+    return latest_file
 
 
 def create_plots_with_kinematics(df: pd.DataFrame) -> None:

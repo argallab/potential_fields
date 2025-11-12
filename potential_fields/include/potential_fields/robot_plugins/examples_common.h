@@ -1,6 +1,8 @@
 // Copyright (c) 2023 Franka Robotics GmbH
 // Use of this source code is governed by the Apache-2.0 license, see LICENSE
-#pragma once
+#ifdef USING_FRANKA
+#ifndef EXAMPLES_COMMON_HPP
+#define EXAMPLES_COMMON_HPP
 
 #include <array>
 
@@ -81,3 +83,6 @@ private:
   Vector7d ddq_max_start_ = (Vector7d() << 5, 5, 5, 5, 5, 5, 5).finished();
   Vector7d ddq_max_goal_ = (Vector7d() << 5, 5, 5, 5, 5, 5, 5).finished();
 };
+
+#endif // !EXAMPLES_COMMON_HPP
+#endif // USING_FRANKA

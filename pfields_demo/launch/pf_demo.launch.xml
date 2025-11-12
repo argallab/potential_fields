@@ -14,12 +14,17 @@
   <arg name="base_yaw" default="0.0" description="Yaw of the robot's base frame relative to RViz fixed frame"/>
 
   <!-- PF Demo Node -->
-  <!-- <node pkg="pfields_demo" exec="pf_demo.py" name="pf_demo_node" output="screen">
+  <!-- <node pkg="pfields_demo" exec="pf_demo.py" name="pfield_demo_py" output="screen">
     <param name="fixed_frame" value="$(var rviz_fixed_frame)"/>
   </node> -->
 
   <!-- Sphere Demo Node -->
-  <node pkg="pfields_demo" exec="sphere_robot_demo.py" name="pokeball" output="screen">
+  <!-- <node pkg="pfields_demo" exec="sphere_robot_demo.py" name="sphere_robot" output="screen">
+    <param name="fixed_frame" value="$(var rviz_fixed_frame)"/>
+  </node> -->
+
+  <!-- C++ Demo Node -->
+  <node pkg="pfields_demo" exec="pfield_demo_node" name="pfield_demo_cpp" output="screen">
     <param name="fixed_frame" value="$(var rviz_fixed_frame)"/>
   </node>
 

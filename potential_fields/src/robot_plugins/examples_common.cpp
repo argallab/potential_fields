@@ -1,5 +1,6 @@
 // Copyright (c) 2023 Franka Robotics GmbH
 // Use of this source code is governed by the Apache-2.0 license, see LICENSE
+#ifdef USING_FRANKA
 #include "robot_plugins/examples_common.h"
 
 #include <algorithm>
@@ -124,3 +125,5 @@ franka::JointPositions MotionGenerator::operator()(const franka::RobotState& rob
   output.motion_finished = motion_finished;
   return output;
 }
+
+#endif // USING_FRANKA

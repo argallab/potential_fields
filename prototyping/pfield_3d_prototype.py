@@ -953,7 +953,7 @@ def plot_kinematics(title: str,
 
     if save_path:
         fig.savefig(save_path, dpi=150, bbox_inches='tight')
-        print(f"Saved kinematics plot to {save_path}")
+        print(f"Saved kinematics plot to {save_path}.png")
     if show:
         plt.show()
     else:

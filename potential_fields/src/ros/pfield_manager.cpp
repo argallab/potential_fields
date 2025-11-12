@@ -24,7 +24,6 @@
 ///   fixed_frame (string): RViz fixed frame for visualization and PF computation
 ///   urdf_file_path (string): Optional path to a URDF; enables kinematics and extent estimation
 ///   motion_plugin_type (string): Motion plugin to use (e.g., "null", "franka")
-///   franka_hostname (string): Optional, required when motion_plugin_type == "franka"
 ///
 /// SERVICES:
 ///   pfield/plan_path (potential_fields_interfaces::srv::PlanPath): Plans a path from a start pose to the PF goal
@@ -42,8 +41,7 @@
 #include "ros/pfield_manager.hpp"
 #include "robot_plugins/null_motion_plugin.hpp"
 #include "robot_plugins/franka_plugin.hpp"
-#include "tf2_eigen/tf2_eigen.hpp"
-#include <cctype>
+#include "robot_plugins/xarm_plugin.hpp"
 
 PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager") {
   RCLCPP_INFO(this->get_logger(), "PotentialFieldManager Initialized");
@@ -97,9 +95,15 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   if (this->motionPluginType.empty()) {
     this->motionPlugin = std::make_unique<NullMotionPlugin>();
   }
+#ifdef USING_FRANKA
   else if (this->motionPluginType == "franka") {
-    const std::string frankaHostname = this->declare_parameter("franka_hostname", std::string());
+    std::string frankaHostname = this->declare_parameter("franka_hostname", std::string());
+    frankaHostname = this->get_parameter("franka_hostname").as_string();
     this->motionPlugin = std::make_unique<FrankaPlugin>(frankaHostname);
+  }
+#endif // USING_FRANKA
+  else if (this->motionPluginType == "xarm") {
+    this->motionPlugin = std::make_unique<XArmPlugin>();
   }
   else {
     RCLCPP_ERROR(this->get_logger(), "Unknown motion plugin type: %s. Using NullMotionPlugin", this->motionPluginType.c_str());
@@ -316,14 +320,21 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
       request->start.pose.orientation.z
     )
   );
-
-  // Plan a path using the request parameters and store the result
-  auto planningResult = this->pField->planPath(
-    /*startPose=*/startSV,
-    /*dt=*/request->delta_time,
-    /*goalTolerance=*/request->goal_tolerance,
-    /*maxIterations=*/request->max_iterations
-  );
+  PlannedPath planningResult;
+  try {
+    // Plan a path using the request parameters and store the result
+    planningResult = this->pField->planPath(
+      /*startPose=*/startSV,
+      /*dt=*/request->delta_time,
+      /*goalTolerance=*/request->goal_tolerance,
+      /*maxIterations=*/request->max_iterations
+    );
+  }
+  catch (const std::exception& e) {
+    RCLCPP_ERROR(this->get_logger(), "Exception during path planning: %s", e.what());
+    response->success = false;
+    return;
+  }
 
   // Establish a consistent time base for the planned trajectory
   const double stepDt = (request->delta_time > 0.0) ? request->delta_time : 0.1;
@@ -400,6 +411,10 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
   }
   if (!response->success) {
     // If planning failed, log final pose and distance to goal
+    if (planningResult.poses.empty()) {
+      RCLCPP_WARN(this->get_logger(), "Planning failed with no poses generated.");
+      return;
+    }
     const auto& finalPose = planningResult.poses.back();
     const Eigen::Vector3d goalPos = this->pField->getGoalPose().getPosition();
     const double distanceToGoal = (finalPose.getPosition() - goalPos).norm();

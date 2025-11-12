@@ -54,6 +54,11 @@ ament_target_dependencies(pfield_demo_node
   sensor_msgs
   control_msgs
 )
+# Install the Cpp demo node
+install(
+  TARGETS pfield_demo_node
+  DESTINATION lib/${PROJECT_NAME}
+)
 
 # Install the Python demo node
 install(

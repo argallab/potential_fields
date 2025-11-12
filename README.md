@@ -5,14 +5,76 @@ MSR project to revamp current pfields repo for open sourcing
 
 # ROS Package Structure and Overview
 
-## Potential Field C++ Library
-The `pfield` library is a ROS-independent C++ API that the ROS package maintains an instance of. Vectors and Quaternions are implemented with [Eigen](https://libeigen.gitlab.io/docs/) and are wrapped into a singular object named `SpatialVector`. The Vector portion defines the translational velocity [m/s] towards the goal and the Quaternion represents the unit quaternion difference between the orientation and the goal orientation. Currently the C++ library is embedded in the include and src directories of the ROS package but will be extracted and presented as a standalone C++ library that the ROS package will need to link with.
+## Package layout (high level)
 
-## PotentialFieldManager (ROS Node)
-Manages the `pfield` instance and visualizes the obstacles, the goal pose, and the "planned" path. Subcribes to `/goal_pose` to get the updated goal pose and updates the internal pfield instance's goal pose. Also subscribes to `/pfield/obstacles` to obtain the obstacles for the potential field. The obstacles can be published from any node and the robot parser node (see below) handles publishing the robot's geometry as pfield obstacles. The manager also handles user arguments to setup RViz and tune the attraction/repulsive gains.
+This package is split into two parts:
 
-## Robot Parser (ROS Node)
-Subscribes to the robot description and publishes the `pfield` obstacles consistent with the URDF available. Requires that the user publishes a transform from a fixed frame (provided as a launch argument) to the base link of the robot. Publishes the collision objects from the URDF as pfield obstacles to the `/pfield/obstacles` topic to send updated obstacles.
+1. Core C++ libraries (ROS-agnostic)
+2. ROS integration (one node)
+
+```txt
+potential_fields
+├── config # ROS config files (ROS Parameters, RViz config)
+├── include
+│   └── potential_fields
+│       ├── pfield # Core C++ PF library
+│       ├── robot_plugins # Core C++ robot plugins and IK
+│       └── ros # ROS node headers
+├── launch
+├── src
+│   ├── pfield
+│   ├── robot_plugins
+│   └── ros
+└── test
+    └── resources
+```
+
+## Core C++ libraries (ROS-agnostic)
+
+These headers and sources implement the planning and kinematics logic without depending on ROS:
+
+- `pfield/` — Potential-field primitives and algorithms
+    - Spatial math: `SpatialVector` (position + unit quaternion).
+    - Field model: attractive/repulsive potentials, wrench -> twist mapping, soft saturation, rate limiting, RK4 integration.
+    - Obstacles: spheres, boxes/OBB, cylinders, meshes; signed distance and outward normal queries.
+    - Optional kinematics: `PFKinematics` can be initialized from a URDF file to derive robot extent and geometry-driven obstacles.
+
+- `robot_plugins/` — Robot adapters and IK
+    - Interfaces: `MotionPlugin` (runtime robot integration), `IKSolver` (task-space IK + Jacobian).
+    - Implementations: `NullMotionPlugin` (no hardware), `FrankaPlugin` (example hardware). Plugins provide the `IKSolver` to the PF.
+
+The intent is that this layer stays reusable and testable outside of ROS; the ROS node simply wires it up to topics/services.
+
+## ROS integration: PotentialFieldManager node
+
+`pfield_manager` is the single ROS 2 node that owns and orchestrates the core library:
+
+- Maintains instances of `PotentialField`, `MotionPlugin`, and the plugin-provided `IKSolver`.
+- Optionally initializes PF kinematics from a URDF path (parameter `urdf_file_path`) to estimate robot extent and populate obstacles.
+- Publishes RViz markers (goal/query triads, obstacles, influence volumes, velocity vectors) and a planned EE path.
+- Exposes a path-planning service and a convenience service for a local autonomy vector.
+
+Topics and services
+
+### Publishers
+
+- `pfield/markers` (`visualization_msgs/MarkerArray`): goal, query pose, obstacles, influence zones, velocity vectors.
+- `pfield/planned_path` (`nav_msgs/Path`): end-effector path from the last planning request.
+
+### Subscribers
+- `pfield/planning_goal_pose` (`geometry_msgs/PoseStamped`): sets the PF goal pose.
+- `pfield/obstacles` (`potential_fields_interfaces/ObstacleArray`): external obstacles; any node may publish here.
+- `pfield/query_pose` (`geometry_msgs/Pose`): live “query pose” to visualize field flow.
+### Services
+- `pfield/plan_path` (`potential_fields_interfaces/srv/PlanPath`): plan a path from a start pose to the current goal.
+- `pfield/compute_autonomy_vector` (`potential_fields_interfaces/srv/ComputeAutonomyVector`): compute the limited twist at a pose.
+
+Notes on robot geometry
+
+- You can supply obstacles directly via `pfield/obstacles` from any node.
+- Alternatively, provide a URDF path to the node via `urdf_file_path`; the PF library will initialize `PFKinematics`, estimate robot extent (for influence distance), and can update geometry-derived obstacles as planning progresses.
+
+_NOTE: Geometry-derived obstacles from the robot's links are in effort to avoid self-collisions. This will likely be reworked by planning in the configuration space instead of task space._
 
 ## Setting up the workspace
 Once this repository is cloned, you will need to install the `Eigen` dependency locally on your machine before being able to build and launch the `potential_fields` package:

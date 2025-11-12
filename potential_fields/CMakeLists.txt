@@ -11,8 +11,9 @@ endif()
 
 enable_testing()
 
-set(FRANKA_INSTALL_PATH "$ENV{HOME}/ws/franka/install" CACHE PATH "Path to libfranka installation directory")
-set(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH};${FRANKA_INSTALL_PATH}")
+# set(FRANKA_INSTALL_PATH "$ENV{HOME}/ws/franka/install" CACHE PATH "Path to libfranka installation directory")
+# set(CMAKE_PREFIX_PATH "${CMAKE_PREFIX_PATH};${FRANKA_INSTALL_PATH}")
+# set(USING_FRANKA) # Toggle to include Franka code
 
 # find dependencies
 find_package(ament_cmake REQUIRED)
@@ -31,7 +32,7 @@ find_package(Eigen3 REQUIRED)
 find_package(geometric_shapes REQUIRED)
 find_package(hpp-fcl REQUIRED)
 find_package(pinocchio REQUIRED)
-find_package(Franka REQUIRED)
+# find_package(Franka REQUIRED)
 
 
 # Setup pfield_lib library
@@ -78,20 +79,26 @@ add_library(robot_plugins SHARED
   src/robot_plugins/geofik.cpp
   src/robot_plugins/weighted_ik.cpp
   src/robot_plugins/franka_plugin.cpp
+  src/robot_plugins/xarm_plugin.cpp
 )
 ament_target_dependencies(robot_plugins
   Eigen3
   rclcpp
   geometry_msgs
   sensor_msgs
-  Franka
+  # Franka
 )
 target_include_directories(robot_plugins PUBLIC
   include/potential_fields/robot_plugins
 )
-target_link_libraries(robot_plugins
-  Franka::Franka
-)
+
+if(Franka_FOUND)
+  target_link_libraries(robot_plugins
+    Franka::Franka
+  )
+else()
+  message(WARNING "Franka not found, building without it.")
+endif()
 
 # Use precompiled headers to speed up builds (CMake >= 3.16)
 if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.16)

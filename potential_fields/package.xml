@@ -22,7 +22,6 @@
   <depend>geometric_shapes</depend>
   <depend>hpp-fcl</depend>
   <depend>pinocchio</depend>
-  <depend>Franka</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
