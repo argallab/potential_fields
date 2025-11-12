@@ -565,12 +565,7 @@ private:
   const double rotationalThreshold = 0.02; // Threshold for rotational geodesic distance [rad]
   const double defaultDStarThreshold = 1.0; // [m] distance for switching to quadratic attractive potential from conical
   const double softSatBeta = 1.0; // Soft-saturation parameter, higher = more aggressive curve
-  const double stagnationProgressRateThreshold = 0.01; // [m/s] min required progress toward goal
-  const double stagnationSpeedRmsThreshold = 0.02; // [m/s] consider "not moving" if below this
-  const int    stagnationWindowMinPoints = 8;    // need at least this many points in window
   bool dynamicQuadraticThresholdEnabled = false; // if true, use dynamic d* based on obstacles/kinematics
-
-  bool isPathStagnated(const PlannedPath& path);
 };
 
 #endif // PFIELDS_HPP
