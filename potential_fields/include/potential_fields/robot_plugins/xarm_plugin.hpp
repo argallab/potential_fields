@@ -47,7 +47,7 @@ public:
 
 private:
   // The joint angles of the XArm in the "home" position [rad]
-  const std::array<double, 7> homeJointAngles = {0,0,0,0,0,0,0};
+  const std::array<double, 7> homeJointAngles = {0, 0, 0, 0, 0, 0, 0};
   // The homogeneous transform from the robot's base link [O] to the end-effector [E] in the "home" position
   Eigen::Matrix4d homeTransformOE;
 };
