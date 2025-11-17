@@ -279,3 +279,14 @@ robot modularity documentation (other robots)
 rest of arm hitting obstacles using mesh links
 real obstacles demo, maybe foam so it's safer
 teleop demo
+
+# Planning Paths while avoiding collisions between robot geometry (links) and obstacles
+- The geometry of the robot should be able to be represented with primitives and meshes
+- Given a robot state (joint angles), the robot geometry should be able to be transformed to the world frame
+- We need a function to compute the minimum distance between all robot links and all obstacles in the environment
+- The minimum distance can be used to threshold paths that are too close to obstacles and mark for replanning
+
+## Replanning Strategy
+While planning a path, the joint angles are recorded via the IKSolver. We can also record the minimum clearance between the
+robot geometry and the obstacles in the environment at each step of the path planning. With a threshold distance, we can mark
+sections of the path that are too close to obstacles and replan accordingly.
