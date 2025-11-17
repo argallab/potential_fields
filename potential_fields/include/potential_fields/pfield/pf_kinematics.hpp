@@ -94,6 +94,20 @@ public:
    */
   double estimateRobotExtentRadius();
 
+  /**
+   * @brief Given joint angles and obstacles, compute minimum clearances between robot links and obstacles
+   *        for each link with collision geometry.
+   *
+   * @note For example a 3-link robot might return [0.05, 0.12, 0.02] (in meters)
+   *
+   * @param jointAngles The joint angles to compute FK for [rad]
+   * @param obstacles The obstacles to compute clearances against
+   * @return std::vector<double> Minimum clearances per link with collision geometry [m]
+   */
+  std::vector<double> getMinClearancesFromJointAngles(
+    const std::vector<double>& jointAngles,
+    const std::vector<PotentialFieldObstacle>& obstacles);
+
 private:
   pinocchio::Model model;
   pinocchio::Data data;
@@ -102,10 +116,10 @@ private:
   std::vector<std::string> linkNamesCache;
   std::vector<int> jointQIndices; // idx_q per cached joint (or -1 if not found/unsupported)
   std::vector<int> frameIDCache;       // frame id per cached link (or -1 if not found)
-  bool cachesReady = false;
   std::vector<std::string> collisionLinkNames; // Names of links with collision geometry
   std::vector<CollisionCatalogEntry> collisionCatalog; // Catalog of collision objects from URDF
   std::vector<PotentialFieldObstacle> obstacleGeometryTemplates; // pose will be updated per callback
+  bool cachesReady = false;
 };
 
 #endif // PF_KINEMATICS_HPP

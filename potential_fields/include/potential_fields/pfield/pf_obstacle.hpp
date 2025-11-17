@@ -11,6 +11,10 @@
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 
+#include <coal/collision_object.h>
+#include <coal/shape/geometric_shapes.h>
+#include <coal/math/transform.h>
+
 #include "spatial_vector.hpp"
 #include "mesh_collision.hpp"
 
@@ -267,6 +271,22 @@ public:
    */
   void computeSignedDistanceAndNormal(const Eigen::Vector3d& worldPoint, double& signedDistance, Eigen::Vector3d& normal) const;
 
+  /**
+   * @brief Computes the minimum distance between this obstacle and another obstacle
+   *
+   * @param[in] otherObstacle The other obstacle to compute the distance to
+   * @param[out] normalToOther The normal vector pointing from this obstacle to the other obstacle
+   * @return double The minimum distance between the two obstacles
+   */
+  double computeMinimumDistanceTo(const PotentialFieldObstacle& otherObstacle, Eigen::Vector3d& normalToOther) const;
+
+  /**
+   * @brief Creates a COAL collision object from this obstacle for distance/collision queries
+   *
+   * @return std::shared_ptr<coal::CollisionObject> The COAL collision object representing this obstacle
+   */
+  std::shared_ptr<coal::CollisionObject> toCoalCollisionObject() const;
+
 private:
   std::string frameID; // Frame ID for the obstacle
   Eigen::Vector3d position; // Center Position of the obstacle in 3D space
@@ -275,10 +295,21 @@ private:
   ObstacleType type; // Type of the obstacle
   ObstacleGroup group; // Obstacle group/category
   ObstacleGeometry geometry; // Geometry of the obstacle, containing relevant dimensions
-
   std::string meshResource; // URI or file path to the mesh resource (e.g., package://, file://)
   Eigen::Vector3d meshScale; // Scale for mesh visualization if using MESH_RESOURCE
   std::shared_ptr<MeshCollisionData> meshCollisionData; // populated when mesh resource loaded (shared to avoid deep copies)
+
+  /**
+   * @brief Computes the minimum distance using sampling-based approach (fallback for complex cases)
+   *        This is kept as a private fallback method in case COAL fails
+   *
+   * @param[in] otherObstacle The other obstacle to compute the distance to
+   * @param[out] normalToOther The normal vector pointing from this obstacle to the other obstacle
+   * @param[in] numSamplesPerAxis Number of samples per axis for the sampling grid
+   * @return double The minimum distance between the two obstacles
+   */
+  double computeMinimumDistanceSampling(const PotentialFieldObstacle& otherObstacle,
+    Eigen::Vector3d& normalToOther, int numSamplesPerAxis) const;
 };
 
 struct PotentialFieldObstacleHash {
