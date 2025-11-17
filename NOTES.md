@@ -290,3 +290,14 @@ teleop demo
 While planning a path, the joint angles are recorded via the IKSolver. We can also record the minimum clearance between the
 robot geometry and the obstacles in the environment at each step of the path planning. With a threshold distance, we can mark
 sections of the path that are too close to obstacles and replan accordingly.
+
+# COAL Integration Notes
+
+```
+@misc{coalweb,
+   author = {Jia Pan and Sachin Chitta and Dinesh Manocha and Florent Lamiraux and Joseph Mirabel and Justin Carpentier and Louis Montaut and others},
+   title = {Coal: an extension of the Flexible Collision Library},
+   howpublished = {https://github.com/coal-library/coal},
+   year = {2015--2024}
+}
+```

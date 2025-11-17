@@ -13,6 +13,7 @@
 - Include installation instructions for fcl, pinnochio, libfranka and other external dependencies in README
 - Fix DOCKER image to include all dependencies and build colcon build out of the box
   - Split into separate images for PF and robot dependencies
+- Use `ros-jazzy-coal` as dependency for COAL. Clean up library usage for mesh collisions.
 
 # Future TODOs and Refactors
 - Investigate Configuration Space planning with the PF
