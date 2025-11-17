@@ -582,6 +582,8 @@ public:
     const size_t maxIters = 30000
   );
 
+  std::vector<std::pair<double, double>> identifyPathCollisions(PlannedPath path, double clearanceThreshold);
+
   std::vector<double> computeInverseKinematics(const SpatialVector& targetPose, const std::vector<double>& seedJointAngles) const;
 
 private:

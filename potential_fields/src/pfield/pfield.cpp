@@ -457,6 +457,8 @@ PlannedPath PotentialField::planPath(
   TaskSpaceTwist prevTwist; // previous applied twist (starts zero)
   double timeStamp = 0.0;
 
+  // TODO(Sharwin24): Implement backtracking or escape maneuvers if robot links collide with environment
+  // during path planning
   for (size_t iter = 0; iter < maxIterations; ++iter) {
     // Perform RK4 integration step to get next pose and the applied twist
     // including removal of opposing repulsive force components and enforcement of motion constraints
@@ -524,4 +526,36 @@ bool PotentialField::isRobotInCollisionWithEnvironment(double clearanceThreshold
   }
   // Only after checking all robot-environment pairs, return false if no collisions detected
   return false;
+}
+
+std::vector<std::pair<double, double>> PotentialField::identifyPathCollisions(PlannedPath path, double clearanceThreshold) {
+  // Return a list of <startTime, endTime> pairs indicating segments of the path in collision
+  std::vector<std::pair<double, double>> collisionSegments;
+  if (path.numPoints == 0) return collisionSegments;
+  bool inCollision = false;
+  double segmentStartTime = 0.0;
+  for (size_t i = 0; i < path.numPoints; ++i) {
+    SpatialVector pose = path.poses[i];
+    // Update obstacles from kinematics at this pose
+    const std::vector<double> jointAngles = path.jointAngles[i];
+    updateObstaclesFromKinematics(jointAngles);
+    bool collisionAtPose = this->isRobotInCollisionWithEnvironment(clearanceThreshold);
+    if (collisionAtPose && !inCollision) {
+      // Starting a new collision segment
+      inCollision = true;
+      segmentStartTime = path.timeStamps[i];
+    }
+    else if (!collisionAtPose && inCollision) {
+      // Ending a collision segment
+      inCollision = false;
+      double segmentEndTime = path.timeStamps[i];
+      collisionSegments.emplace_back(segmentStartTime, segmentEndTime);
+    }
+  }
+  // If still in collision at the end of the path, close the final segment
+  if (inCollision) {
+    double segmentEndTime = path.timeStamps.back();
+    collisionSegments.emplace_back(segmentStartTime, segmentEndTime);
+  }
+  return collisionSegments;
 }

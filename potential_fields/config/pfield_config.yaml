@@ -11,4 +11,4 @@ pfield_manager:
     influence_distance: 0.075 # Influence distance for obstacle repulsion [m]
     visualizer_buffer_area: 0.5 # Extra area around obstacles and goal to visualize the PF [m]
     field_resolution: 0.5 # Resolution to show PF velocity arrows in RViz [m]
-    motion_plugin_type: "xarm" # Motion plugin to use (e.g., "null", "franka", "xarm")
+    motion_plugin_type: "null" # Motion plugin to use (e.g., "null", "franka", "xarm")
