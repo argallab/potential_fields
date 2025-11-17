@@ -100,7 +100,7 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
     std::string frankaHostname = this->declare_parameter("franka_hostname", std::string());
     frankaHostname = this->get_parameter("franka_hostname").as_string();
     this->motionPlugin = std::make_unique<FrankaPlugin>(frankaHostname);
-}
+  }
 #endif // USING_FRANKA
   else if (this->motionPluginType == "xarm") {
     this->motionPlugin = std::make_unique<XArmPlugin>();
@@ -323,8 +323,13 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
   PlannedPath planningResult;
   try {
     // Plan a path using the request parameters and store the result
+    // Convert starting_joint_angles (std::vector<float>) to std::vector<double> expected by planPath
+    std::vector<double> startJointAnglesDouble(
+      request->starting_joint_angles.cbegin(), request->starting_joint_angles.cend()
+    );
     planningResult = this->pField->planPath(
       /*startPose=*/startSV,
+      /*startJointAngles=*/startJointAnglesDouble,
       /*dt=*/request->delta_time,
       /*goalTolerance=*/request->goal_tolerance,
       /*maxIterations=*/request->max_iterations
@@ -429,7 +434,7 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
 PFLimits PotentialFieldManager::getPFLimits(std::shared_ptr<PotentialField> pf) {
   PFLimits limits;
   // Determine the limits of the potential field based on obstacle positions, goal position, and query pose
-  auto obstacles = pf->getObstacles();
+  auto obstacles = pf->getEnvObstacles();
   Eigen::Vector3d goalPos = pf->getGoalPose().getPosition();
   Eigen::Vector3d queryPos = this->queryPose.getPosition();
   if (obstacles.empty()) {
@@ -610,7 +615,12 @@ MarkerArray PotentialFieldManager::createThresholdMarkers(std::shared_ptr<Potent
 
 MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<PotentialField> pf) {
   MarkerArray markerArray;
-  std::vector<PotentialFieldObstacle> obstacles = pf->getObstacles();
+  std::vector<PotentialFieldObstacle> envObstacles = pf->getEnvObstacles();
+  std::vector<PotentialFieldObstacle> robotObstacles = pf->getRobotObstacles();
+  // Combine both environment and robot obstacles for visualization
+  std::vector<PotentialFieldObstacle> obstacles;
+  obstacles.insert(obstacles.end(), envObstacles.begin(), envObstacles.end());
+  obstacles.insert(obstacles.end(), robotObstacles.begin(), robotObstacles.end());
   for (const auto& obstacle : obstacles) {
     int hashID = createHashID(obstacle);
     Marker obstacleMarker;
@@ -673,12 +683,25 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<Potenti
       break;
     }
     }
-    obstacleMarker.color.r = 1.0f;
-    obstacleMarker.color.g = 0.0f;
-    obstacleMarker.color.b = 0.0f;
+    if (obstacle.getGroup() == ObstacleGroup::ROBOT) {
+      // Robot obstacles in green
+      obstacleMarker.color.r = 0.0f;
+      obstacleMarker.color.g = 1.0f;
+      obstacleMarker.color.b = 0.0f;
+    }
+    else {
+      // Environment obstacles in red
+      obstacleMarker.color.r = 1.0f;
+      obstacleMarker.color.g = 0.0f;
+      obstacleMarker.color.b = 0.0f;
+    }
     obstacleMarker.color.a = 1.0f; // Opaque
     obstacleMarker.lifetime = rclcpp::Duration(0, 0); // No lifetime
     markerArray.markers.push_back(obstacleMarker);
+    if (obstacle.getGroup() == ObstacleGroup::ROBOT) {
+      // Skip influence zone visualization for robot obstacles
+      continue;
+    }
     // Create a transparent volume representing the influence zone
     Marker influenceMarker;
     influenceMarker.header.frame_id = this->fixedFrame;
@@ -765,6 +788,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<Potenti
     }
     markerArray.markers.push_back(influenceMarker);
   }
+
   return markerArray;
 }
 
@@ -935,7 +959,7 @@ void PotentialFieldManager::exportFieldDataToCSV(std::shared_ptr<PotentialField>
   std::ofstream obstacles_file(obstacles_filename);
   if (obstacles_file.is_open()) {
     obstacles_file << "obstacle_x,obstacle_y,obstacle_z,type,influence,repulsive_gain,radius,length,width,height\n";
-    for (const auto& obstacle : pf->getObstacles()) {
+    for (const auto& obstacle : pf->getEnvObstacles()) {
       const Eigen::Vector3d& position = obstacle.getPosition();
       const ObstacleGeometry& g = obstacle.getGeometry();
       obstacles_file << position.x() << "," << position.y() << "," << position.z() << ","
