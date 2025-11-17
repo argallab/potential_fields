@@ -100,7 +100,7 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
     std::string frankaHostname = this->declare_parameter("franka_hostname", std::string());
     frankaHostname = this->get_parameter("franka_hostname").as_string();
     this->motionPlugin = std::make_unique<FrankaPlugin>(frankaHostname);
-  }
+}
 #endif // USING_FRANKA
   else if (this->motionPluginType == "xarm") {
     this->motionPlugin = std::make_unique<XArmPlugin>();
