@@ -284,26 +284,3 @@ double PFKinematics::estimateRobotExtentRadius() {
 
   return max_extent; // 0.0 if nothing found
 }
-
-std::vector<double> PFKinematics::getMinClearancesFromJointAngles(const std::vector<double>& jointAngles,
-  const std::vector<PotentialFieldObstacle>& obstacles) {
-  // Lambda to compute min distance between a link obstacle and all environment obstacles
-  auto minClearanceDistance = [&](const PotentialFieldObstacle& linkObstacle) -> double {
-    double minDist = std::numeric_limits<double>::infinity();
-    for (const auto& obst : obstacles) {
-      Eigen::Vector3d normal;
-      double dist = linkObstacle.computeMinimumDistanceTo(obst, normal);
-      if (dist < minDist) {
-        minDist = dist;
-      }
-    }
-    return minDist;
-  };
-  auto robotLinkObstacles = this->buildObstaclesFromTransforms(this->computeLinkTransforms(jointAngles));
-  std::vector<double> minClearances;
-  minClearances.reserve(robotLinkObstacles.size());
-  for (size_t i = 0; i < robotLinkObstacles.size(); ++i) {
-    minClearances.push_back(minClearanceDistance(robotLinkObstacles[i]));
-  }
-  return minClearances;
-}

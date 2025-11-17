@@ -187,7 +187,10 @@ void PotentialFieldObstacle::computeSignedDistanceAndNormal(
   }
 }
 
-std::shared_ptr<coal::CollisionObject> PotentialFieldObstacle::toCoalCollisionObject() const {
+std::shared_ptr<coal::CollisionObject> PotentialFieldObstacle::toCoalCollisionObject() {
+  // First, check the cached COAL collision object
+  if (this->coalCollisionObject) { return this->coalCollisionObject; }
+
   // Create COAL transform from obstacle pose
   coal::Transform3s transform = coal::Transform3s::Identity();
 
@@ -249,98 +252,28 @@ std::shared_ptr<coal::CollisionObject> PotentialFieldObstacle::toCoalCollisionOb
   }
 
   // Create and return collision object
-  return std::make_shared<coal::CollisionObject>(shape, transform);
+  this->coalCollisionObject = std::make_shared<coal::CollisionObject>(shape, transform);
+  return this->coalCollisionObject;
 }
 
-double PotentialFieldObstacle::computeMinimumDistanceTo(
-  const PotentialFieldObstacle& otherObstacle, Eigen::Vector3d& normalToOther) const {
-  // Use COAL library for robust distance computation between arbitrary convex shapes
-  try {
-    // Convert both obstacles to COAL collision objects
-    auto coalObj1 = this->toCoalCollisionObject();
-    auto coalObj2 = otherObstacle.toCoalCollisionObject();
-
-    // Setup distance request with nearest points enabled
-    coal::DistanceRequest request;
-    request.enable_nearest_points = true;
-    request.rel_err = 0.0;  // No relative error tolerance
-    request.abs_err = 0.0;  // No absolute error tolerance
-
-    // Perform distance query
-    coal::DistanceResult result;
-    coal::CoalScalar distance = coal::distance(coalObj1.get(), coalObj2.get(), request, result);
-
-    // Extract nearest points (in world frame)
-    // nearest_points[0] is on this obstacle, nearest_points[1] is on other obstacle
-    const coal::Vec3s& p1 = result.nearest_points[0];
-    const coal::Vec3s& p2 = result.nearest_points[1];
-
-    // Compute normal from this obstacle to other obstacle
-    Eigen::Vector3d point1(p1[0], p1[1], p1[2]);
-    Eigen::Vector3d point2(p2[0], p2[1], p2[2]);
-    Eigen::Vector3d diff = point2 - point1;
-
-    double dist = diff.norm();
-    if (dist > NEAR_ZERO_THRESHOLD) {
-      normalToOther = diff / dist;
-    }
-    else {
-      // Objects are in contact or penetrating, use fallback normal
-      // Try to get a reasonable normal from center-to-center direction
-      Eigen::Vector3d centerDiff = otherObstacle.position - this->position;
-      double centerDist = centerDiff.norm();
-      if (centerDist > NEAR_ZERO_THRESHOLD) {
-        normalToOther = centerDiff / centerDist;
-      }
-      else {
-        // Objects have same center, use arbitrary direction
-        normalToOther = Eigen::Vector3d::UnitX();
-      }
-    }
-
-    return static_cast<double>(distance);
-  }
-  catch (const std::exception& e) {
-    // If COAL fails for any reason, fall back to sampling-based approach
-    // This can happen with degenerate geometries or numerical issues
-    return computeMinimumDistanceSampling(otherObstacle, normalToOther, 10);
-  }
-}
-
-double PotentialFieldObstacle::computeMinimumDistanceSampling(
-  const PotentialFieldObstacle& otherObstacle, Eigen::Vector3d& normalToOther, int numSamplesPerAxis) const {
-  // Sampling-based fallback for complex obstacle pairs
-  double minDistance = std::numeric_limits<double>::max();
-  Eigen::Vector3d bestNormal = Eigen::Vector3d::Zero();
-
-  for (int i = 0; i < numSamplesPerAxis; ++i) {
-    double u = static_cast<double>(i) / static_cast<double>(numSamplesPerAxis - 1);
-    for (int j = 0; j < numSamplesPerAxis; ++j) {
-      double v = static_cast<double>(j) / static_cast<double>(numSamplesPerAxis - 1);
-      for (int k = 0; k < numSamplesPerAxis; ++k) {
-        double w = static_cast<double>(k) / static_cast<double>(numSamplesPerAxis - 1);
-        // Sample point on this obstacle's bounding box
-        Eigen::Vector3d halfDimsThis = this->halfDimensions();
-        Eigen::Vector3d localPointThis(
-          (u - 0.5) * 2.0 * halfDimsThis.x(),
-          (v - 0.5) * 2.0 * halfDimsThis.y(),
-          (w - 0.5) * 2.0 * halfDimsThis.z());
-        Eigen::Vector3d worldPointThis = this->orientation * localPointThis + this->position;
-
-        // Compute signed distance to other obstacle
-        double signedDistanceToOther;
-        Eigen::Vector3d normalToOtherLocal;
-        otherObstacle.computeSignedDistanceAndNormal(worldPointThis, signedDistanceToOther, normalToOtherLocal);
-        double absDistance = std::abs(signedDistanceToOther);
-
-        if (absDistance < minDistance) {
-          minDistance = absDistance;
-          bestNormal = normalToOtherLocal;
-        }
-      }
-    }
-  }
-
-  normalToOther = bestNormal;
-  return minDistance;
+void PotentialFieldObstacle::updateCoalCollisionObjectPose() const {
+  if (!this->coalCollisionObject) { return; }
+  coal::Transform3s transform = coal::Transform3s::Identity();
+  transform.setTranslation(
+    Eigen::Vector3d(
+      static_cast<coal::CoalScalar>(this->position.x()),
+      static_cast<coal::CoalScalar>(this->position.y()),
+      static_cast<coal::CoalScalar>(this->position.z())
+    )
+  );
+  transform.setQuatRotation(
+    coal::Quatf(
+      static_cast<coal::CoalScalar>(this->orientation.w()),
+      static_cast<coal::CoalScalar>(this->orientation.x()),
+      static_cast<coal::CoalScalar>(this->orientation.y()),
+      static_cast<coal::CoalScalar>(this->orientation.z())
+    )
+  );
+  this->coalCollisionObject->setTransform(transform);
+  this->coalCollisionObject->computeAABB();
 }

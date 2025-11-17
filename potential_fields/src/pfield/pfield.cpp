@@ -4,6 +4,8 @@
 #include <algorithm>
 #include <limits>
 
+#include <coal/collision.h>
+
 void PotentialField::initializeKinematics(
   const std::string& urdfFilePath,
   const std::vector<std::string>& jointNames) {
@@ -22,15 +24,26 @@ void PotentialField::updateObstaclesFromKinematics(const std::vector<double>& jo
 
 void PotentialField::addObstacle(PotentialFieldObstacle obstacle) {
   const std::string frameID = obstacle.getFrameID();
-  auto itIndex = this->obstacleIndex.find(frameID);
-  if (itIndex != this->obstacleIndex.end()) {
+  auto itIndex = this->envObstacleIndexMap.find(frameID);
+  if (itIndex != this->envObstacleIndexMap.end()) {
     // Update existing obstacle in place
-    this->obstacles[itIndex->second] = obstacle;
+    if (obstacle.getGroup() == ObstacleGroup::ROBOT) {
+      this->robotObstacles[itIndex->second] = obstacle;
+    }
+    else {
+      this->envObstacles[itIndex->second] = obstacle;
+    }
   }
   else {
     // Append new obstacle and record index
-    this->obstacles.push_back(obstacle);
-    this->obstacleIndex.emplace(frameID, this->obstacles.size() - 1);
+    if (obstacle.getGroup() == ObstacleGroup::ROBOT) {
+      this->robotObstacles.push_back(obstacle);
+      this->robotObstacleIndexMap.emplace(frameID, this->robotObstacles.size() - 1);
+    }
+    else {
+      this->envObstacles.push_back(obstacle);
+      this->envObstacleIndexMap.emplace(frameID, this->envObstacles.size() - 1);
+    }
   }
 }
 
@@ -39,40 +52,72 @@ void PotentialField::addObstacles(const std::vector<PotentialFieldObstacle>& obs
 }
 
 bool PotentialField::removeObstacle(const std::string& obstacleFrameID) {
-  auto itIndex = this->obstacleIndex.find(obstacleFrameID);
-  if (itIndex == this->obstacleIndex.end()) { return false; }
-  size_t idx = itIndex->second;
-  // Swap erase to keep indices valid with minimal moves
-  size_t last = this->obstacles.size() - 1;
-  if (idx != last) {
-    std::swap(this->obstacles[idx], this->obstacles[last]);
-    // Update moved obstacle's index map
-    this->obstacleIndex[this->obstacles[idx].getFrameID()] = idx;
+  // Try environment obstacles first
+  auto itEnv = this->envObstacleIndexMap.find(obstacleFrameID);
+  if (itEnv != this->envObstacleIndexMap.end()) {
+    size_t idx = itEnv->second;
+    size_t last = this->envObstacles.size() - 1;
+    if (idx != last) {
+      std::swap(this->envObstacles[idx], this->envObstacles[last]);
+      // update moved obstacle's index
+      this->envObstacleIndexMap[this->envObstacles[idx].getFrameID()] = idx;
+    }
+    this->envObstacles.pop_back();
+    this->envObstacleIndexMap.erase(itEnv);
+    return true;
   }
-  this->obstacles.pop_back();
-  this->obstacleIndex.erase(itIndex);
-  return true;
+
+  // Check robot obstacles next
+  auto itRobot = this->robotObstacleIndexMap.find(obstacleFrameID);
+  if (itRobot != this->robotObstacleIndexMap.end()) {
+    size_t idx = itRobot->second;
+    size_t last = this->robotObstacles.size() - 1;
+    if (idx != last) {
+      std::swap(this->robotObstacles[idx], this->robotObstacles[last]);
+      // update moved obstacle's index
+      this->robotObstacleIndexMap[this->robotObstacles[idx].getFrameID()] = idx;
+    }
+    this->robotObstacles.pop_back();
+    this->robotObstacleIndexMap.erase(itRobot);
+    return true;
+  }
+
+  // Not found in either map
+  return false;
 }
 
-void PotentialField::clearObstacles() { this->obstacles.clear(); this->obstacleIndex.clear(); }
+void PotentialField::clearObstacles() { this->envObstacles.clear(); this->envObstacleIndexMap.clear(); }
 
 PotentialFieldObstacle PotentialField::getObstacleByID(const std::string& obstacleFrameID) const {
-  auto itIndex = this->obstacleIndex.find(obstacleFrameID);
-  if (itIndex == this->obstacleIndex.end()) {
+  auto itIndex = this->envObstacleIndexMap.find(obstacleFrameID);
+  if (itIndex == this->envObstacleIndexMap.end()) {
     throw std::invalid_argument("Obstacle with the given ID does not exist.");
   }
-  return this->obstacles[itIndex->second];
+  return this->envObstacles[itIndex->second];
+}
+
+std::vector<PotentialFieldObstacle> PotentialField::getObstaclesByGroup(ObstacleGroup group) const {
+  switch (group) {
+  case ObstacleGroup::STATIC:
+  case ObstacleGroup::DYNAMIC:
+    return this->envObstacles;
+  case ObstacleGroup::ROBOT:
+    return this->robotObstacles;
+  default:
+    // For now, return empty list instead of throwing an exception
+    return {};
+  }
 }
 
 bool PotentialField::isPointInsideObstacle(Eigen::Vector3d point) const {
-  for (const auto& obst : this->obstacles) {
+  for (const auto& obst : this->envObstacles) {
     if (obst.withinObstacle(point)) { return true; }
   }
   return false;
 }
 
 bool PotentialField::isPointWithinInfluenceZone(Eigen::Vector3d point) const {
-  for (const auto& obst : this->obstacles) {
+  for (const auto& obst : this->envObstacles) {
     if (obst.withinInfluenceZone(point, this->influenceDistance)) { return true; }
   }
   return false;
@@ -256,11 +301,11 @@ Eigen::Vector3d PotentialField::computeAttractiveForceLinear(const SpatialVector
 }
 
 double PotentialField::minObstacleClearanceAt(const Eigen::Vector3d& point) const {
-  if (this->obstacles.empty()) {
+  if (this->envObstacles.empty()) {
     return std::numeric_limits<double>::infinity();
   }
   double minClearance = std::numeric_limits<double>::infinity();
-  for (const auto& obst : this->obstacles) {
+  for (const auto& obst : this->envObstacles) {
     double signedDistance = 0.0; // signed distance: >0 outside, <0 inside
     Eigen::Vector3d normal = Eigen::Vector3d::Zero();
     obst.computeSignedDistanceAndNormal(point, signedDistance, normal);
@@ -271,7 +316,7 @@ double PotentialField::minObstacleClearanceAt(const Eigen::Vector3d& point) cons
 }
 
 double PotentialField::minClearanceAlongSegment(const Eigen::Vector3d& from, const Eigen::Vector3d& to, int samples) const {
-  if (this->obstacles.empty()) {
+  if (this->envObstacles.empty()) {
     return std::numeric_limits<double>::infinity();
   }
   samples = std::max(2, samples);
@@ -352,8 +397,7 @@ Eigen::Vector3d PotentialField::computeAttractiveMoment(const SpatialVector& que
 
 Eigen::Vector3d PotentialField::computeRepulsiveForceLinear(const SpatialVector& queryPose) const {
   Eigen::Vector3d F = Eigen::Vector3d::Zero();
-  for (const auto& obst : this->obstacles) {
-    // if (!obst.withinInfluenceZone(queryPose.getPosition())) continue;
+  for (const auto& obst : this->envObstacles) {
     // Use true surface signed distance and outward normal for direction and magnitude
     double signedDistance = 0.0; // signed distance: > 0 outside, < 0 inside
     Eigen::Vector3d normalToObstSurface = Eigen::Vector3d::Zero(); // outward normal at closest surface point (world frame)
@@ -381,34 +425,35 @@ Eigen::Vector3d PotentialField::computeRepulsiveForceLinear(const SpatialVector&
   return F;
 }
 
+std::vector<double> PotentialField::computeInverseKinematics(
+  const SpatialVector& targetPose, const std::vector<double>& seedJointAngles) const {
+  std::vector<double> jointAngles;
+  if (this->ikSolver) {
+    Eigen::Isometry3d targetPoseIsometry = Eigen::Isometry3d::Identity();
+    targetPoseIsometry.translate(targetPose.getPosition());
+    targetPoseIsometry.rotate(targetPose.getOrientation());
+    std::string errorMsg;
+    Eigen::Matrix<double, 6, Eigen::Dynamic> J;
+    bool success = this->ikSolver->solve(targetPoseIsometry, seedJointAngles, jointAngles, J, errorMsg);
+    if (!success) {
+      jointAngles = std::vector<double>{}; // Return empty on failure
+    }
+  }
+  return jointAngles;
+}
 
 PlannedPath PotentialField::planPath(
   const SpatialVector& startPose,
+  const std::vector<double>& startJointAngles,
   const double dt,
   const double goalTolerance,
   const size_t maxIterations) {
-  // Helper function to get joint angles at a given pose
-  auto getJointAnglesAtPose = [&](const SpatialVector& sv) -> std::vector<double> {
-    std::vector<double> jointAngles;
-    if (this->ikSolver) {
-      Eigen::Isometry3d targetPose = Eigen::Isometry3d::Identity();
-      targetPose.translate(sv.getPosition());
-      targetPose.rotate(sv.getOrientation());
-      std::vector<double> seed = this->ikSolver->getHomeConfiguration();
-      std::string errorMsg;
-      Eigen::Matrix<double, 6, Eigen::Dynamic> J;
-      bool success = this->ikSolver->solve(targetPose, seed, jointAngles, J, errorMsg);
-      if (!success) {
-        jointAngles = std::vector<double>{}; // Return empty on failure
-      }
-    }
-    return jointAngles;
-  };
 
   // Create path and initialize loop variables
   PlannedPath path;
   const double stepDt = (dt > 0.0) ? dt : 0.1;
   SpatialVector current = startPose;
+  std::vector<double> jointAngles = startJointAngles;
   TaskSpaceTwist prevTwist; // previous applied twist (starts zero)
   double timeStamp = 0.0;
 
@@ -416,11 +461,12 @@ PlannedPath PotentialField::planPath(
     // Perform RK4 integration step to get next pose and the applied twist
     // including removal of opposing repulsive force components and enforcement of motion constraints
     auto [nextPoseRK4, appliedTwist] = this->rungeKuttaStep(current, prevTwist, stepDt);
+    jointAngles = this->computeInverseKinematics(nextPoseRK4, jointAngles);
 
     // Record current state
     path.recordPathPoint(
       current, appliedTwist,
-      getJointAnglesAtPose(current),
+      jointAngles,
       timeStamp
     );
 
@@ -433,7 +479,6 @@ PlannedPath PotentialField::planPath(
     }
 
     // Update obstacles from new JointAngles
-    auto jointAngles = path.jointAngles.back();
     this->updateObstaclesFromKinematics(jointAngles);
 
     // Update loop variables
@@ -451,4 +496,32 @@ PlannedPath PotentialField::planPath(
     path.duration = 0.0;
   }
   return path;
+}
+
+bool PotentialField::isRobotInCollisionWithEnvironment(double clearanceThreshold) const {
+  auto robotObstacles = this->getObstaclesByGroup(ObstacleGroup::ROBOT);
+  auto envObstacles = this->getObstaclesByGroup(ObstacleGroup::STATIC);
+  //TODO(Sharwin24): Handle Dynamic Obstacles?
+
+  // Setup collision request and result before looping over robot obstacles
+  coal::CollisionRequest collisionRequest;
+  if (clearanceThreshold > 0.0) {
+    collisionRequest.security_margin = static_cast<coal::CoalScalar>(clearanceThreshold);
+  }
+  coal::CollisionResult collisionResult;
+
+  for (const auto& robotLink : robotObstacles) {
+    auto robotCollisionObj = robotLink.getCoalCollisionObject();
+    if (!robotCollisionObj) continue;
+    for (const auto& envObst : envObstacles) {
+      auto envCollisionObj = envObst.getCoalCollisionObject();
+      if (!envCollisionObj) continue;
+
+      collisionResult.clear();
+      coal::collide(robotCollisionObj.get(), envCollisionObj.get(), collisionRequest, collisionResult);
+      if (collisionResult.isCollision()) { return true; }
+    }
+  }
+  // Only after checking all robot-environment pairs, return false if no collisions detected
+  return false;
 }

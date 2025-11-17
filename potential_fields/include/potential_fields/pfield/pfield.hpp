@@ -123,7 +123,8 @@ public:
     maxAngularAcceleration(other.maxAngularAcceleration),
     influenceDistance(other.influenceDistance),
     goalPose(other.goalPose),
-    obstacles(other.obstacles) {}
+    envObstacles(other.envObstacles),
+    robotObstacles(other.robotObstacles) {}
 
   /**
    * @brief Constructs a PotentialField with the specified goal position.
@@ -216,22 +217,29 @@ public:
       this->repulsiveGain = other.repulsiveGain;
       this->rotationalAttractiveGain = other.rotationalAttractiveGain;
       this->goalPose = other.goalPose;
-      this->obstacles = other.obstacles;
+      this->envObstacles = other.envObstacles;
+      this->robotObstacles = other.robotObstacles;
     }
     return *this;
   }
 
   bool operator==(const PotentialField& other) const {
     auto obstaclesEqual = [this, &other]() -> bool {
-      if (this->obstacles.size() != other.obstacles.size()) return false;
+      if (this->envObstacles.size() != other.envObstacles.size()) return false;
       // Convert both obstacle lists to unordered_sets for comparison
-      std::unordered_set<PotentialFieldObstacle, PotentialFieldObstacleHash> thisObstaclesSet(
-        this->obstacles.cbegin(), this->obstacles.cend()
+      std::unordered_set<PotentialFieldObstacle, PotentialFieldObstacleHash> thisEnvObstaclesSet(
+        this->envObstacles.cbegin(), this->envObstacles.cend()
       );
-      std::unordered_set<PotentialFieldObstacle, PotentialFieldObstacleHash> otherObstaclesSet(
-        other.obstacles.cbegin(), other.obstacles.cend()
+      std::unordered_set<PotentialFieldObstacle, PotentialFieldObstacleHash> thisRobotObstaclesSet(
+        this->robotObstacles.cbegin(), this->robotObstacles.cend()
       );
-      return thisObstaclesSet == otherObstaclesSet;
+      std::unordered_set<PotentialFieldObstacle, PotentialFieldObstacleHash> otherEnvObstaclesSet(
+        other.envObstacles.cbegin(), other.envObstacles.cend()
+      );
+      std::unordered_set<PotentialFieldObstacle, PotentialFieldObstacleHash> otherRobotObstaclesSet(
+        other.robotObstacles.cbegin(), other.robotObstacles.cend()
+      );
+      return thisEnvObstaclesSet == otherEnvObstaclesSet && thisRobotObstaclesSet == otherRobotObstaclesSet;
     }();
     return this->attractiveGain == other.attractiveGain &&
       this->rotationalAttractiveGain == other.rotationalAttractiveGain &&
@@ -266,7 +274,8 @@ public:
   double getInfluenceDistance() const { return this->influenceDistance; }
   bool isUsingDynamicQuadraticThreshold() const { return this->dynamicQuadraticThresholdEnabled; }
   SpatialVector getGoalPose() const { return this->goalPose; }
-  std::vector<PotentialFieldObstacle> getObstacles() const { return this->obstacles; }
+  std::vector<PotentialFieldObstacle> getEnvObstacles() const { return this->envObstacles; }
+  std::vector<PotentialFieldObstacle> getRobotObstacles() const { return this->robotObstacles; }
 
   // ============ Obstacle Management ============
 
@@ -309,7 +318,23 @@ public:
    */
   void clearObstacles();
 
+  /**
+   * @brief Gets an obstacle by its frame ID.
+   *
+   * @param obstacleFrameID the frame ID of the obstacle to retrieve.
+   * @return PotentialFieldObstacle The obstacle with the specified frame ID.
+   */
   PotentialFieldObstacle getObstacleByID(const std::string& obstacleFrameID) const;
+
+  /**
+   * @brief Gets all of the obstacles belonging to a specific group.
+   *
+   * @note Obstacle groups are [STATIC, DYNAMIC, ROBOT]
+   *
+   * @param group The group to filter obstacles by.
+   * @return std::vector<PotentialFieldObstacle> A vector of obstacles belonging to the specified group.
+   */
+  std::vector<PotentialFieldObstacle> getObstaclesByGroup(ObstacleGroup group) const;
 
   bool isPointInsideObstacle(Eigen::Vector3d point) const;
   bool isPointWithinInfluenceZone(Eigen::Vector3d point) const;
@@ -470,29 +495,6 @@ public:
   // ============ Path Planning ============
 
   /**
-   * @brief Plans a path from the start pose to the goal pose using the potential field.
-   *
-   * @note When stagnation is detected (i.e., minimal position change over a set number of iterations),
-   *       the force computation changes to remove opposing repulsive force components to help escape local minima
-   *       using the removeOpposingForce method.
-   *
-   *
-   * @param startPose The starting pose as a SpatialVector.
-   * @param dt The time step for each iteration of the path planning [s].
-   * @param goalTolerance The tolerance for reaching the goal pose [m].
-   * @param stagnationLimit The number of iterations to consider for stagnation detection, defaults to 100.
-   * @param stagnationThreshold The threshold for detecting stagnation in position change, defaults to 1e-4 [m].
-   * @param maxIters The maximum number of iterations to perform for path planning, defaults to 30000.
-   * @return PlannedPath The planned path containing poses, twists, joint angles, and timestamps.
-   */
-  PlannedPath planPath(
-    const SpatialVector& startPose,
-    const double dt,
-    const double goalTolerance,
-    const size_t maxIters = 30000
-  );
-
-  /**
    * @brief Computes the constrained twist at a given pose using the previous twist and the time step
    *        for velocity and acceleration limiting.
    *
@@ -546,6 +548,42 @@ public:
    */
   double minClearanceAlongSegment(const Eigen::Vector3d& from, const Eigen::Vector3d& to, int samples = 7) const;
 
+  /**
+   * @brief Checks if the robot is within a certain clearance distance from any environment obstacles.
+   *
+   * @param clearanceThreshold The clearance distance to check against [m]
+   * @return true If the robot is in collision with an environment obstacle
+   * @return false If the robot is not in collision with any environment obstacles
+   */
+  bool isRobotInCollisionWithEnvironment(double clearanceThreshold = 0.0) const;
+
+  /**
+ * @brief Plans a path from the start pose to the goal pose using the potential field.
+ *
+ * @note When stagnation is detected (i.e., minimal position change over a set number of iterations),
+ *       the force computation changes to remove opposing repulsive force components to help escape local minima
+ *       using the removeOpposingForce method.
+ *
+ *
+ * @param startPose The starting pose as a SpatialVector.
+ * @param startJointAngles The starting joint angles for the robot [rad].
+ * @param dt The time step for each iteration of the path planning [s].
+ * @param goalTolerance The tolerance for reaching the goal pose [m].
+ * @param stagnationLimit The number of iterations to consider for stagnation detection, defaults to 100.
+ * @param stagnationThreshold The threshold for detecting stagnation in position change, defaults to 1e-4 [m].
+ * @param maxIters The maximum number of iterations to perform for path planning, defaults to 30000.
+ * @return PlannedPath The planned path containing poses, twists, joint angles, and timestamps.
+ */
+  PlannedPath planPath(
+    const SpatialVector& startPose,
+    const std::vector<double>& startJointAngles,
+    const double dt,
+    const double goalTolerance,
+    const size_t maxIters = 30000
+  );
+
+  std::vector<double> computeInverseKinematics(const SpatialVector& targetPose, const std::vector<double>& seedJointAngles) const;
+
 private:
   double attractiveGain; // Gain for attractive force
   double repulsiveGain; // Gain for repulsive force
@@ -556,8 +594,10 @@ private:
   double maxAngularAcceleration; // [rad/s^2]
   double influenceDistance; // [m] global influence distance
   SpatialVector goalPose; // Current GoalPose
-  std::vector<PotentialFieldObstacle> obstacles; // Obstacle list
-  std::unordered_map<std::string, size_t> obstacleIndex; // Fast lookup for obstacle updates/removals by ID
+  std::vector<PotentialFieldObstacle> envObstacles; // Obstacle list
+  std::vector<PotentialFieldObstacle> robotObstacles; // Obstacle list
+  std::unordered_map<std::string, size_t> envObstacleIndexMap; // Fast lookup for obstacle updates/removals by ID
+  std::unordered_map<std::string, size_t> robotObstacleIndexMap; // Fast lookup for obstacle updates/removals by ID
   std::string urdfFileName; // URDF file path for kinematic model
   std::unique_ptr<PFKinematics> pfKinematics; // Kinematics helper for obstacle updates via joint angles
   std::shared_ptr<IKSolver> ikSolver; // Inverse kinematics solver for joint angle computation

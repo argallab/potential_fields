@@ -94,20 +94,6 @@ public:
    */
   double estimateRobotExtentRadius();
 
-  /**
-   * @brief Given joint angles and obstacles, compute minimum clearances between robot links and obstacles
-   *        for each link with collision geometry.
-   *
-   * @note For example a 3-link robot might return [0.05, 0.12, 0.02] (in meters)
-   *
-   * @param jointAngles The joint angles to compute FK for [rad]
-   * @param obstacles The obstacles to compute clearances against
-   * @return std::vector<double> Minimum clearances per link with collision geometry [m]
-   */
-  std::vector<double> getMinClearancesFromJointAngles(
-    const std::vector<double>& jointAngles,
-    const std::vector<PotentialFieldObstacle>& obstacles);
-
 private:
   pinocchio::Model model;
   pinocchio::Data data;

@@ -79,7 +79,7 @@ std::shared_ptr<MeshCollisionData> loadMesh(const std::string& uri) {
   result->triangles.reserve(tris.size());
   for (auto& t : tris) result->triangles.emplace_back(t[0], t[1], t[2]);
   // Pre-create collision object for distance queries
-  result->meshObj = std::make_shared<coal::CollisionObject>(result->bvh, coal::Transform3s::Identity());
+  result->collisionObject = std::make_shared<coal::CollisionObject>(result->bvh, coal::Transform3s::Identity());
   delete shapeMesh;
   {
     std::lock_guard<std::mutex> lk(cacheMutex);
@@ -160,7 +160,7 @@ double computeUnsignedDistanceToMesh(const MeshCollisionData& meshData, const Ei
   coal::CollisionObject ptObj(sphere_ptr, pt_tf);
   coal::DistanceRequest req;
   coal::DistanceResult res;
-  const coal::CollisionObject* meshObjPtr = meshData.meshObj ? meshData.meshObj.get() : nullptr;
+  const coal::CollisionObject* meshObjPtr = meshData.collisionObject ? meshData.collisionObject.get() : nullptr;
   if (!meshObjPtr) {
     coal::CollisionObject temp(meshData.bvh, coal::Transform3s::Identity());
     coal::distance(&temp, &ptObj, req, res);
@@ -173,7 +173,7 @@ double computeUnsignedDistanceToMesh(const MeshCollisionData& meshData, const Ei
 
 bool getClosestPointOnMesh(const MeshCollisionData& meshData, const Eigen::Vector3d& pointInMeshFrame,
   Eigen::Vector3d& closestPoint) {
-  if (!meshData.meshObj) return false;
+  if (!meshData.collisionObject) return false;
 
   // Tiny sphere to query point-to-mesh distance with nearest points.
   const double eps = 1e-6; // small but > 0
@@ -199,7 +199,7 @@ bool getClosestPointOnMesh(const MeshCollisionData& meshData, const Eigen::Vecto
   req.abs_err = 0.0f;
 
   coal::DistanceResult res;
-  const coal::CollisionObject* meshObj = meshData.meshObj.get();
+  const coal::CollisionObject* meshObj = meshData.collisionObject.get();
 
   // Perform the distance query
   auto dist = coal::distance(&sphereObj, meshObj, req, res);

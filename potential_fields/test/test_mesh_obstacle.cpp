@@ -171,7 +171,7 @@ endsolid unit_cube
     data.aabbMax = maxB;
     data.radius = std::sqrt(maxR2);
     data.maxExtent = (maxB - minB).maxCoeff();
-    data.meshObj = std::make_shared<coal::CollisionObject>(data.bvh, coal::Transform3s::Identity());
+    data.collisionObject = std::make_shared<coal::CollisionObject>(data.bvh, coal::Transform3s::Identity());
     return data;
   }
 
@@ -202,7 +202,7 @@ TEST(MeshCollision, LoadMesh_FromAsciiSTL_UnitCube) {
 
   // Make sure COAL objects exist
   ASSERT_TRUE(meshPtr->bvh);
-  ASSERT_TRUE(meshPtr->meshObj);
+  ASSERT_TRUE(meshPtr->collisionObject);
 
   // Quick smoke tests on the helpers
   EXPECT_TRUE(pointInsideMesh(*meshPtr, Eigen::Vector3d(0.0, 0.0, 0.0)));
@@ -370,7 +370,7 @@ TEST(PFObstacle, SignedDistanceAndNormal_MeshCube) {
     ObstacleGeometry(/*r*/0.0, /*L*/1.0, /*W*/1.0, /*H*/1.0));
   auto cubePtr = std::make_shared<MeshCollisionData>(buildUnitCubeMesh());
   // Assign the synthetic mesh directly (allowed by private->public hack at include)
-  meshObs.assignMeshCollisionData(cubePtr);
+  meshObs.setMeshCollisionData(cubePtr);
 
   double sd; Eigen::Vector3d n;
   // Outside along +X
@@ -415,7 +415,7 @@ TEST(MeshCollision, LoadMeshFromFile) {
   auto mesh1 = loadMesh(uri);
   ASSERT_TRUE(mesh1);
   EXPECT_TRUE(mesh1->bvh);
-  EXPECT_TRUE(mesh1->meshObj);
+  EXPECT_TRUE(mesh1->collisionObject);
   EXPECT_GT(mesh1->vertices.size(), 0u);
   EXPECT_GT(mesh1->triangles.size(), 0u);
 

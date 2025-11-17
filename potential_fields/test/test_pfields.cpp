@@ -17,7 +17,7 @@ TEST(PotentialFieldTest, AddAndRemoveObstacles) {
     ObstacleGeometry{1.0f, 0.0f, 0.0f, 0.0f}
   );
   pf.addObstacle(o1);
-  EXPECT_EQ(pf.getObstacles().size(), 1);
+  EXPECT_EQ(pf.getEnvObstacles().size(), 1);
 
   // Overwrite same ID
   PotentialFieldObstacle o1b(
@@ -29,12 +29,12 @@ TEST(PotentialFieldTest, AddAndRemoveObstacles) {
     ObstacleGeometry{1.5f, 0.0f, 0.0f, 0.0f}
   );
   pf.addObstacle(o1b);
-  EXPECT_EQ(pf.getObstacles().size(), 1);
-  EXPECT_EQ(pf.getObstacles()[0].getType(), ObstacleType::SPHERE);
-  EXPECT_EQ(pf.getObstacles()[0].getPosition().x(), 2.0f);
-  EXPECT_EQ(pf.getObstacles()[0].getPosition().y(), 2.0f);
-  EXPECT_EQ(pf.getObstacles()[0].getPosition().z(), 2.0f);
-  EXPECT_EQ(pf.getObstacles()[0].getGeometry().radius, 1.5f);
+  EXPECT_EQ(pf.getEnvObstacles().size(), 1);
+  EXPECT_EQ(pf.getEnvObstacles()[0].getType(), ObstacleType::SPHERE);
+  EXPECT_EQ(pf.getEnvObstacles()[0].getPosition().x(), 2.0f);
+  EXPECT_EQ(pf.getEnvObstacles()[0].getPosition().y(), 2.0f);
+  EXPECT_EQ(pf.getEnvObstacles()[0].getPosition().z(), 2.0f);
+  EXPECT_EQ(pf.getEnvObstacles()[0].getGeometry().radius, 1.5f);
 
 
   // Add another and remove
@@ -46,10 +46,10 @@ TEST(PotentialFieldTest, AddAndRemoveObstacles) {
     ObstacleGroup::STATIC,
     ObstacleGeometry{1.0, 2.0, 8.0, 1.0}
   ));
-  EXPECT_EQ(pf.getObstacles().size(), 2);
+  EXPECT_EQ(pf.getEnvObstacles().size(), 2);
   EXPECT_TRUE(pf.removeObstacle("o2"));
   EXPECT_FALSE(pf.removeObstacle("o99"));  // nonexistent
-  EXPECT_EQ(pf.getObstacles().size(), 1);
+  EXPECT_EQ(pf.getEnvObstacles().size(), 1);
 }
 
 TEST(PotentialFieldTest, ClearObstacles) {
@@ -71,7 +71,7 @@ TEST(PotentialFieldTest, ClearObstacles) {
     ObstacleGeometry{2.0, 0.0, 0.0, 0.0}
   ));
   pf.clearObstacles();
-  EXPECT_TRUE(pf.getObstacles().empty());
+  EXPECT_TRUE(pf.getEnvObstacles().empty());
 }
 
 TEST(PotentialFieldTest, VelocityAtGoalIsZero) {
@@ -569,9 +569,10 @@ TEST(PotentialFieldTest, PlanPathSinglePointWhenAlreadyAtGoal) {
   NullMotionPlugin nullPlugin;
   auto ik = nullPlugin.getIKSolver();
   pf.assignIKSolver(ik);
+  const std::vector<double> startJointAngles = {};
   const double dt = 0.05;
   const double tol = 1e-3; // matches translationalTolerance
-  PlannedPath path = pf.planPath(goal, dt, tol); // startPose == goal
+  PlannedPath path = pf.planPath(goal, startJointAngles, dt, tol); // startPose == goal
   ASSERT_EQ(path.numPoints, 1u);
   ASSERT_EQ(path.poses.size(), 1u);
   ASSERT_EQ(path.twists.size(), 1u);
@@ -590,10 +591,11 @@ TEST(PotentialFieldTest, PlanPathMonotonicConvergenceToGoal) {
   NullMotionPlugin nullPlugin;
   auto ik = nullPlugin.getIKSolver();
   pf.assignIKSolver(ik);
+  const std::vector<double> startJointAngles = {};
   const double dt = 0.1;
   const double tol = 1e-3;
   const size_t maxIters = 500;
-  PlannedPath path = pf.planPath(start, dt, tol, maxIters);
+  PlannedPath path = pf.planPath(start, startJointAngles, dt, tol, maxIters);
   ASSERT_GT(path.numPoints, 1u); // should have progressed
   // Distances should be non-increasing
   double prevDist = (path.poses.front().getPosition() - goal.getPosition()).norm();
@@ -618,10 +620,11 @@ TEST(PotentialFieldTest, PlanPathTimeStampConsistency) {
   NullMotionPlugin nullPlugin;
   auto ik = nullPlugin.getIKSolver();
   pf.assignIKSolver(ik);
+  const std::vector<double> startJointAngles = {};
   const double dt = 0.05;
   const double tol = 1e-3;
   const size_t maxIters = 400;
-  PlannedPath path = pf.planPath(start, dt, tol, maxIters);
+  PlannedPath path = pf.planPath(start, startJointAngles, dt, tol, maxIters);
   ASSERT_EQ(path.dt, dt); // stored dt
   // timeStamps[i] should be approximately i*dt
   for (size_t i = 0; i < path.timeStamps.size(); ++i) {
@@ -642,10 +645,11 @@ TEST(PotentialFieldTest, PlanPathTwistMatchesRK4ConstrainedTwist) {
   NullMotionPlugin nullPlugin;
   auto ik = nullPlugin.getIKSolver();
   pf.assignIKSolver(ik);
+  const std::vector<double> startJointAngles = {};
   const double dt = 0.1;
   const double tol = 1e-3;
   const size_t maxIters = 200;
-  PlannedPath path = pf.planPath(start, dt, tol, maxIters);
+  PlannedPath path = pf.planPath(start, startJointAngles, dt, tol, maxIters);
   ASSERT_EQ(path.poses.size(), path.twists.size());
   TaskSpaceTwist prevLimited; // starts at zero
   for (size_t i = 0; i < path.poses.size(); ++i) {
