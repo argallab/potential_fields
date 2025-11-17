@@ -219,6 +219,7 @@ class SphereRobotDemo(Node):
 
         req = PlanPath.Request()
         req.start = start_pose
+        req.starting_joint_angles = []
         req.goal = goal_pose
         req.delta_time = 0.01  # 10ms time step
         req.goal_tolerance = 0.1  # 10cm tolerance
