@@ -22,11 +22,6 @@ struct CollisionCatalogEntry {
   urdf::CollisionSharedPtr col; // collision element
 };
 
-struct EnvironmentCollisionInfo {
-  std::vector<std::string> linkNames; // Which links this collision happened to
-  std::shared_ptr<coal::CollisionObject> collisionObject; // The COAL collision object pointer to the obstacle
-};
-
 class PFKinematics {
 public:
   PFKinematics() = default;

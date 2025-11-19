@@ -500,10 +500,6 @@ PlannedPath PotentialField::planPath(
   else {
     path.duration = 0.0;
   }
-
-  // Once path is created, go back and mark the sectors with collisions
-  path.collisionSegments = this->identifyPathCollisions(path, /*clearanceThreshold=*/0.0);
-
   return path;
 }
 
@@ -533,40 +529,6 @@ bool PotentialField::isRobotInCollisionWithEnvironment(double clearanceThreshold
   }
   // Only after checking all robot-environment pairs, return false if no collisions detected
   return false;
-}
-
-std::vector<SegmentCollisionInfo> PotentialField::identifyPathCollisions(
-  PlannedPath path, double clearanceThreshold) {
-  std::vector<SegmentCollisionInfo> collisionSegments;
-  if (path.numPoints == 0) return collisionSegments;
-  bool inCollision = false;
-  unsigned int segmentStartIdx = 0;
-  // TODO(Sharwin24): Populate EnvironmentCollisionInfo with details from collision checking
-  // which may need to be obtained during isRobotInCollisionWithEnvironment
-  for (size_t i = 0; i < path.numPoints; ++i) {
-    SpatialVector pose = path.poses[i];
-    // Update obstacles from kinematics at this pose
-    const std::vector<double> jointAngles = path.jointAngles[i];
-    updateObstaclesFromKinematics(jointAngles);
-    bool collisionAtPose = this->isRobotInCollisionWithEnvironment(clearanceThreshold);
-    if (collisionAtPose && !inCollision) {
-      // Starting a new collision segment
-      inCollision = true;
-      segmentStartIdx = i;
-    }
-    else if (!collisionAtPose && inCollision) {
-      // Ending a collision segment
-      inCollision = false;
-      unsigned int segmentEndIdx = i;
-      collisionSegments.emplace_back(segmentStartIdx, segmentEndIdx, EnvironmentCollisionInfo());
-    }
-  }
-  // If still in collision at the end of the path, close the final segment
-  if (inCollision) {
-    unsigned int segmentEndIdx = path.numPoints - 1;
-    collisionSegments.emplace_back(segmentStartIdx, segmentEndIdx, EnvironmentCollisionInfo());
-  }
-  return collisionSegments;
 }
 
 bool PotentialField::createPlannedPathCSV(const PlannedPath& path, const std::string& filePath) const {

@@ -60,22 +60,12 @@ struct TaskSpaceTwist {
   Eigen::Vector3d getAngularVelocity() const { return this->angularVelocity; }
 };
 
-struct SegmentCollisionInfo {
-  unsigned int startIdx; // Start index of the collision segment in the path
-  unsigned int endIdx;   // End index of the collision segment in the path
-  std::vector<EnvironmentCollisionInfo> collisions; // Details of collisions in this segment
-
-  SegmentCollisionInfo(unsigned int startIdx, unsigned int endIdx, std::vector<EnvironmentCollisionInfo> collisions)
-    : startIdx(startIdx), endIdx(endIdx), collisions(std::move(collisions)) {}
-};
-
 struct PlannedPath {
   std::vector<double> timeStamps; // Time stamps for each point in the path [s]
   std::vector<SpatialVector> poses; // End-effector pose
   std::vector<TaskSpaceTwist> twists; // End-effector velocity
   std::vector<std::vector<double>> jointAngles; // Joint angles for each point in the path [rad]
   std::vector<std::vector<double>> jointVelocities; // Joint velocities for each point in the path [rad/s]
-  std::vector<SegmentCollisionInfo> collisionSegments; // Segments of the path with collisions
   unsigned int numPoints; // The number of points in the planned path, should be equal across all vectors
   double duration; // Total duration of the path [s]
   double dt; // Time difference between consecutive points [s]
@@ -608,15 +598,6 @@ public:
     const double goalTolerance,
     const size_t maxIters = 30000
   );
-
-  /**
-   * @brief Identifies segments of the path that are in collision with obstacles.
-   *
-   * @param path The planned path to check for collisions.
-   * @param clearanceThreshold The minimum clearance distance to consider for a collision.
-   * @return std::vector<SegmentCollisionInfo> The list of collision segments along with their details.
-   */
-  std::vector<SegmentCollisionInfo> identifyPathCollisions(PlannedPath path, double clearanceThreshold);
 
   std::vector<double> computeInverseKinematics(const SpatialVector& targetPose, const std::vector<double>& seedJointAngles) const;
 
