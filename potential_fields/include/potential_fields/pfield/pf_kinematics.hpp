@@ -10,6 +10,8 @@
 #include <pinocchio/multibody/data.hpp>
 #include <pinocchio/parsers/urdf.hpp>
 
+#include <coal/collision.h>
+
 #include "pfield/pf_obstacle.hpp"
 #include "urdf/model.h"
 #include "urdf_parser/urdf_parser.h"
@@ -18,6 +20,11 @@ struct CollisionCatalogEntry {
   std::string id;         // unique obstacle id (link::name or link::colN)
   std::string linkName;  // link this collision belongs to
   urdf::CollisionSharedPtr col; // collision element
+};
+
+struct EnvironmentCollisionInfo {
+  std::vector<std::string> linkNames; // Which links this collision happened to
+  std::shared_ptr<coal::CollisionObject> collisionObject; // The COAL collision object pointer to the obstacle
 };
 
 class PFKinematics {

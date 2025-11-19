@@ -60,11 +60,22 @@ struct TaskSpaceTwist {
   Eigen::Vector3d getAngularVelocity() const { return this->angularVelocity; }
 };
 
+struct SegmentCollisionInfo {
+  unsigned int startIdx; // Start index of the collision segment in the path
+  unsigned int endIdx;   // End index of the collision segment in the path
+  std::vector<EnvironmentCollisionInfo> collisions; // Details of collisions in this segment
+
+  SegmentCollisionInfo(unsigned int startIdx, unsigned int endIdx, std::vector<EnvironmentCollisionInfo> collisions)
+    : startIdx(startIdx), endIdx(endIdx), collisions(std::move(collisions)) {}
+};
+
 struct PlannedPath {
+  std::vector<double> timeStamps; // Time stamps for each point in the path [s]
   std::vector<SpatialVector> poses; // End-effector pose
   std::vector<TaskSpaceTwist> twists; // End-effector velocity
   std::vector<std::vector<double>> jointAngles; // Joint angles for each point in the path [rad]
-  std::vector<double> timeStamps; // Time stamps for each point in the path [s]
+  std::vector<std::vector<double>> jointVelocities; // Joint velocities for each point in the path [rad/s]
+  std::vector<SegmentCollisionInfo> collisionSegments; // Segments of the path with collisions
   unsigned int numPoints; // The number of points in the planned path, should be equal across all vectors
   double duration; // Total duration of the path [s]
   double dt; // Time difference between consecutive points [s]
@@ -75,21 +86,37 @@ struct PlannedPath {
   /**
    * @brief Records a path point with the given pose, twist, joint angles, and timestamp.
    *
+   * @param timeStamp The time stamp for the path point [s]
    * @param pose The EE pose at the path point
    * @param twist The EE twist at the path point
    * @param jointAngles The joint angles at the path point [rad]
-   * @param timeStamp The time stamp for the path point [s]
    */
-  void recordPathPoint(const SpatialVector& pose, const TaskSpaceTwist& twist,
-    std::vector<double> jointAngles, double timeStamp) {
+  void recordPathPoint(double timeStamp, const SpatialVector& pose, const TaskSpaceTwist& twist,
+    std::vector<double> jointAngles) {
     this->poses.push_back(pose);
     this->twists.push_back(twist);
     this->jointAngles.push_back(jointAngles);
     this->timeStamps.push_back(timeStamp);
     this->numPoints = static_cast<unsigned int>(this->poses.size());
-    if (this->numPoints > 1) {
+    if (numPoints == 1) {
+      this->dt = 0.0;
+      this->duration = 0.0;
+      this->jointVelocities.clear();
+      // Joint Velocity at first point is zero
+      this->jointVelocities.resize(jointAngles.size(), std::vector<double>(jointAngles.size(), 0.0));
+      this->jointVelocities.push_back(std::vector<double>(jointAngles.size(), 0.0));
+    }
+    else if (this->numPoints > 1) {
       this->dt = this->timeStamps.back() - this->timeStamps[this->numPoints - 2];
       this->duration = this->timeStamps.back() - this->timeStamps.front();
+      // Add an estimation of joint velocities
+      const double dtSec = this->dt > 0.0 ? this->dt : 1.0;
+      const size_t numJoints = this->jointAngles.back().size();
+      std::vector<double> velocities(numJoints, 0.0);
+      for (size_t j = 0; j < numJoints; ++j) {
+        velocities[j] = (this->jointAngles.back()[j] - this->jointAngles[this->numPoints - 2][j]) / dtSec;
+      }
+      this->jointVelocities.insert(this->jointVelocities.cend(), velocities.cbegin(), velocities.cend());
     }
     else {
       this->dt = 0.0;
@@ -582,9 +609,43 @@ public:
     const size_t maxIters = 30000
   );
 
-  std::vector<std::pair<double, double>> identifyPathCollisions(PlannedPath path, double clearanceThreshold);
+  /**
+   * @brief Identifies segments of the path that are in collision with obstacles.
+   *
+   * @param path The planned path to check for collisions.
+   * @param clearanceThreshold The minimum clearance distance to consider for a collision.
+   * @return std::vector<SegmentCollisionInfo> The list of collision segments along with their details.
+   */
+  std::vector<SegmentCollisionInfo> identifyPathCollisions(PlannedPath path, double clearanceThreshold);
 
   std::vector<double> computeInverseKinematics(const SpatialVector& targetPose, const std::vector<double>& seedJointAngles) const;
+
+  /**
+   * @brief Creates a CSV file from a planned path with the following columns:
+   *        Time [s],
+   *        Position X [m], Position Y [m], Position Z [m],
+   *        Orientation Qx, Orientation Qy, Orientation Qz, Orientation Qw,
+   *        Linear Velocity X [m/s], Linear Velocity Y [m/s], Linear Velocity Z [m/s],
+   *        Angular Velocity X [rad/s], Angular Velocity Y [rad/s], Angular Velocity Z [rad/s],
+   *        Minimum Obstacle Clearance [m],
+   *        Number of Joints
+   *        Joint 1 [rad], Joint 2 [rad], ..., Joint N [rad]
+   *
+   * @note The real header looks like:
+   *       time_s, pos_x_m, pos_y_m, pos_z_m,
+   *       q_x, q_y, q_z, q_w,
+   *       vel_x_m_s, vel_y_m_s, vel_z_m_s,
+   *       ang_vel_x_rad_s, ang_vel_y_rad_s, ang_vel_z_rad_s,
+   *       min_obstacle_clearance_m,
+   *       num_joints,
+   *       joint_1_rad, joint_2_rad, ..., joint_N_rad
+   *
+   * @param path The planned path to convert to CSV
+   * @param filePath The file path to save the CSV
+   * @return true If the CSV was created successfully
+   * @return false If there was an error creating the CSV
+   */
+  bool createPlannedPathCSV(const PlannedPath& path, const std::string& filePath) const;
 
 private:
   double attractiveGain; // Gain for attractive force

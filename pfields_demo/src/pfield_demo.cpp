@@ -102,14 +102,6 @@ PFDemo::PFDemo() : Node("pfield_demo") {
         RCLCPP_INFO(this->get_logger(), "(async) First EE linear velocity: (%.6f, %.6f, %.6f)", v.x, v.y, v.z);
       }
 
-      // Save CSV like the python demo
-      try {
-        this->save_planned_path_response(pathPlanResponse);
-      }
-      catch (const std::exception& e) {
-        RCLCPP_ERROR(this->get_logger(), "Failed to save planned path CSV: %s", e.what());
-      }
-
       // Begin streaming EE velocity commands to follow the path
       this->startEEVelocityStreaming(pathPlanResponse->end_effector_velocity_trajectory, dt);
     }

@@ -261,13 +261,6 @@ class SphereRobotDemo(Node):
             self.get_logger().info(
                 f'First EE linear velocity: ({v.x:.6f}, {v.y:.6f}, {v.z:.6f})')
 
-        # Save CSV for offline plotting
-        try:
-            self.save_planned_path_response(res)
-        except Exception as e:
-            self.get_logger().error(
-                f'Failed to save planned path response (async): {e}')
-
     def save_planned_path_response(self, plan_path_response):
         # Save a CSV file with the planned path details for offline plotting.
         # CSV columns:

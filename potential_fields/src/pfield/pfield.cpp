@@ -3,6 +3,8 @@
 #include "pfield/spatial_vector.hpp"
 #include <algorithm>
 #include <limits>
+#include <fstream>
+#include <iostream>
 
 #include <coal/collision.h>
 
@@ -467,9 +469,10 @@ PlannedPath PotentialField::planPath(
 
     // Record current state
     path.recordPathPoint(
-      current, appliedTwist,
-      jointAngles,
-      timeStamp
+      timeStamp,
+      current,
+      appliedTwist,
+      jointAngles
     );
 
     // Check goal after recording
@@ -497,6 +500,10 @@ PlannedPath PotentialField::planPath(
   else {
     path.duration = 0.0;
   }
+
+  // Once path is created, go back and mark the sectors with collisions
+  path.collisionSegments = this->identifyPathCollisions(path, /*clearanceThreshold=*/0.0);
+
   return path;
 }
 
@@ -528,12 +535,14 @@ bool PotentialField::isRobotInCollisionWithEnvironment(double clearanceThreshold
   return false;
 }
 
-std::vector<std::pair<double, double>> PotentialField::identifyPathCollisions(PlannedPath path, double clearanceThreshold) {
-  // Return a list of <startTime, endTime> pairs indicating segments of the path in collision
-  std::vector<std::pair<double, double>> collisionSegments;
+std::vector<SegmentCollisionInfo> PotentialField::identifyPathCollisions(
+  PlannedPath path, double clearanceThreshold) {
+  std::vector<SegmentCollisionInfo> collisionSegments;
   if (path.numPoints == 0) return collisionSegments;
   bool inCollision = false;
-  double segmentStartTime = 0.0;
+  unsigned int segmentStartIdx = 0;
+  // TODO(Sharwin24): Populate EnvironmentCollisionInfo with details from collision checking
+  // which may need to be obtained during isRobotInCollisionWithEnvironment
   for (size_t i = 0; i < path.numPoints; ++i) {
     SpatialVector pose = path.poses[i];
     // Update obstacles from kinematics at this pose
@@ -543,19 +552,107 @@ std::vector<std::pair<double, double>> PotentialField::identifyPathCollisions(Pl
     if (collisionAtPose && !inCollision) {
       // Starting a new collision segment
       inCollision = true;
-      segmentStartTime = path.timeStamps[i];
+      segmentStartIdx = i;
     }
     else if (!collisionAtPose && inCollision) {
       // Ending a collision segment
       inCollision = false;
-      double segmentEndTime = path.timeStamps[i];
-      collisionSegments.emplace_back(segmentStartTime, segmentEndTime);
+      unsigned int segmentEndIdx = i;
+      collisionSegments.emplace_back(segmentStartIdx, segmentEndIdx, EnvironmentCollisionInfo());
     }
   }
   // If still in collision at the end of the path, close the final segment
   if (inCollision) {
-    double segmentEndTime = path.timeStamps.back();
-    collisionSegments.emplace_back(segmentStartTime, segmentEndTime);
+    unsigned int segmentEndIdx = path.numPoints - 1;
+    collisionSegments.emplace_back(segmentStartIdx, segmentEndIdx, EnvironmentCollisionInfo());
   }
   return collisionSegments;
+}
+
+bool PotentialField::createPlannedPathCSV(const PlannedPath& path, const std::string& filePath) const {
+  // Creates a CSV file from the given PlannedPath with the following
+  const unsigned int numJoints = (path.numPoints > 0) ? static_cast<unsigned int>(path.jointAngles[0].size()) : 0;
+  auto createJointHeaders = [numJoints]() -> std::string {
+    std::string jointHeaders;
+    for (unsigned int j = 0; j < numJoints; ++j) {
+      jointHeaders += "joint_" + std::to_string(j) + "_rad,";
+    }
+    if (!jointHeaders.empty()) {
+      // Insert leading comma
+      jointHeaders = "," + jointHeaders;
+      // Remove trailing comma
+      jointHeaders.pop_back();
+    }
+    return jointHeaders;
+  };
+  // CSV Header with dynamic joint columns based on number of joints
+  const std::string header =
+    "time_s,"
+    "pos_x_m,pos_y_m,pos_z_m,"
+    "q_x,q_y,q_z,q_w,"
+    "vel_x_m_s,vel_y_m_s,vel_z_m_s,"
+    "ang_vel_x_rad_s,ang_vel_y_rad_s,ang_vel_z_rad_s,"
+    "min_obstacle_clearance_m,"
+    "num_joints"
+    + createJointHeaders();
+
+  // Open file for writing
+  std::ofstream csvFile(filePath);
+  if (!csvFile.is_open()) {
+    return false;
+  }
+
+  // Write header
+  csvFile << header << "\n";
+
+  // Write data rows
+  for (unsigned int i = 0; i < path.numPoints; ++i) {
+    const SpatialVector& pose = path.poses[i];
+    const TaskSpaceTwist& twist = path.twists[i];
+    const double timeStamp = path.timeStamps[i];
+    const Eigen::Vector3d position = pose.getPosition();
+    const Eigen::Quaterniond orientation = pose.getOrientation();
+
+    // Compute minimum obstacle clearance at this point
+    const double minClearance = this->minObstacleClearanceAt(position);
+
+    // Write: time
+    csvFile << timeStamp << ",";
+
+    // Write: position (x, y, z)
+    csvFile << position.x() << "," << position.y() << "," << position.z() << ",";
+
+    // Write: orientation quaternion (x, y, z, w)
+    csvFile << orientation.x() << "," << orientation.y() << ","
+      << orientation.z() << "," << orientation.w() << ",";
+
+    // Write: linear velocity (x, y, z)
+    csvFile << twist.linearVelocity.x() << "," << twist.linearVelocity.y() << ","
+      << twist.linearVelocity.z() << ",";
+
+    // Write: angular velocity (x, y, z)
+    csvFile << twist.angularVelocity.x() << "," << twist.angularVelocity.y() << ","
+      << twist.angularVelocity.z() << ",";
+
+    // Write: minimum obstacle clearance
+    csvFile << minClearance << ",";
+
+    // Write: number of joints
+    csvFile << numJoints << ",";
+
+    // Write: joint angles
+    if (i < path.jointAngles.size()) {
+      for (unsigned int j = 0; j < numJoints; ++j) {
+        csvFile << path.jointAngles[i][j];
+        if (j < numJoints - 1) {
+          csvFile << ",";
+        }
+      }
+    }
+
+    csvFile << "\n";
+  }
+
+  csvFile.close();
+  return true;
 }
