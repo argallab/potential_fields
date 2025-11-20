@@ -461,22 +461,44 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
 
 MarkerArray PotentialFieldManager::visualizePF(std::shared_ptr<PotentialField> pf) {
   MarkerArray markerArray;
+  auto start = this->now();
   MarkerArray goalMarkerArray = this->createGoalMarker(pf);
   markerArray.markers.insert(markerArray.markers.cend(), goalMarkerArray.markers.cbegin(), goalMarkerArray.markers.cend());
+  auto endGoal = this->now();
   MarkerArray obstacleMarkers = this->createObstacleMarkers(pf);
-  markerArray.markers.insert(markerArray.markers.cend(), obstacleMarkers.markers.cbegin(),
-    obstacleMarkers.markers.cend());
+  markerArray.markers.insert(markerArray.markers.cend(), obstacleMarkers.markers.cbegin(), obstacleMarkers.markers.cend());
+  auto endObstacles = this->now();
+  MarkerArray queryPoseMarkerArray = this->createQueryPoseMarker();
+  markerArray.markers.insert(markerArray.markers.cend(), queryPoseMarkerArray.markers.cbegin(),
+    queryPoseMarkerArray.markers.cend());
+  auto endQueryPose = this->now();
+  MarkerArray thresholdMarkers = this->createThresholdMarkers(pf);
+  markerArray.markers.insert(markerArray.markers.cend(), thresholdMarkers.markers.cbegin(),
+    thresholdMarkers.markers.cend());
+  auto endThreshold = this->now();
   if (this->visualizeFieldVectors) {
     MarkerArray potentialVectorMarkers = this->createPotentialVectorMarkers(pf);
     markerArray.markers.insert(markerArray.markers.cend(), potentialVectorMarkers.markers.cbegin(),
       potentialVectorMarkers.markers.cend());
+    auto endVectors = this->now();
+    RCLCPP_DEBUG_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
+      "PF Visualization Timing: Goal=%.3f ms, Obstacles=%.3f ms, Query Pose=%.3f ms, Threshold=%.3f ms, Velocity Vectors=%.3f ms",
+      (endGoal - start).seconds() * 1000.0,
+      (endObstacles - endGoal).seconds() * 1000.0,
+      (endQueryPose - endObstacles).seconds() * 1000.0,
+      (endThreshold - endQueryPose).seconds() * 1000.0,
+      (endVectors - endThreshold).seconds() * 1000.0
+    );
   }
-  MarkerArray queryPoseMarkerArray = this->createQueryPoseMarker();
-  markerArray.markers.insert(markerArray.markers.cend(), queryPoseMarkerArray.markers.cbegin(),
-    queryPoseMarkerArray.markers.cend());
-  MarkerArray thresholdMarkers = this->createThresholdMarkers(pf);
-  markerArray.markers.insert(markerArray.markers.cend(), thresholdMarkers.markers.cbegin(),
-    thresholdMarkers.markers.cend());
+  else {
+    RCLCPP_DEBUG_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
+      "PF Visualization Timing: Goal=%.3f ms, Obstacles=%.3f ms, Query Pose=%.3f ms, Threshold=%.3f ms",
+      (endGoal - start).seconds() * 1000.0,
+      (endObstacles - endGoal).seconds() * 1000.0,
+      (endQueryPose - endObstacles).seconds() * 1000.0,
+      (endThreshold - endQueryPose).seconds() * 1000.0
+    );
+  }
   return markerArray;
 }
 
