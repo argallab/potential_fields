@@ -6,20 +6,20 @@
 #include <pinocchio/algorithm/kinematics.hpp>
 #include <Eigen/Geometry>
 
-PFKinematics::PFKinematics(const std::string& urdfFileName, const std::vector<std::string>& jointNames) {
+PFKinematics::PFKinematics(const std::string& urdfFileName) {
   if (urdfFileName.empty()) {
-    throw std::invalid_argument("PFKinematics: urdfFileName is empty; expected a path to a URDF file");
+    throw std::invalid_argument("PFKinematics Constructor: urdfFileName is empty; expected a path to a URDF file");
   }
   try {
     pinocchio::urdf::buildModel(urdfFileName, this->model);
   }
   catch (const std::exception& e) {
-    throw std::runtime_error(std::string("PFKinematics: Failed to load URDF model from '") + urdfFileName + "': " + e.what());
+    throw std::runtime_error(std::string("PFKinematics Constructor: Failed to load URDF model from '") + urdfFileName + "': " + e.what());
   }
   this->data = pinocchio::Data(this->model);
   this->robotModel.initFile(urdfFileName);
+  // Build collision catalog (this also initializes caches internally)
   this->collisionCatalog = this->buildCollisionCatalog(this->robotModel);
-  this->initializeCaches(jointNames, this->collisionLinkNames);
 }
 
 void PFKinematics::initializeCaches(
@@ -47,7 +47,8 @@ void PFKinematics::initializeCaches(
     if (!model.existFrame(ln)) continue;
     frameIDCache[k] = model.getFrameId(ln);
   }
-
+  this->numJoints = jointNames.size();
+  this->numLinks = linkNames.size();
   this->cachesReady = true;
 }
 
@@ -96,6 +97,21 @@ std::vector<Eigen::Affine3d> PFKinematics::computeLinkTransforms(const std::vect
 std::vector<CollisionCatalogEntry> PFKinematics::buildCollisionCatalog(urdf::Model& model) {
   std::vector<CollisionCatalogEntry> catalog;
   this->obstacleGeometryTemplates.clear();
+
+  // Extract joint names from the model (only 1-DoF joints)
+  std::vector<std::string> jointNames;
+  jointNames.reserve(model.joints_.size());
+  for (const auto& [jointName, joint] : model.joints_) {
+    if (!joint) { continue; }
+    if (joint->type == urdf::Joint::UNKNOWN || joint->type == urdf::Joint::FIXED) { continue; }
+    if (!this->model.existJointName(jointName)) { continue; }
+    const pinocchio::JointIndex jid = this->model.getJointId(jointName);
+    if (jid >= this->model.joints.size()) { continue; }
+    if (this->model.joints[jid].nq() != 1) { continue; }
+    jointNames.push_back(jointName);
+  }
+
+  // Build collision catalog
   for (const auto& [link_name, link] : model.links_) {
     if (!link) { continue; }
     // Lambda helper to add a collision object to the catalog with the correct naming
@@ -129,6 +145,8 @@ std::vector<CollisionCatalogEntry> PFKinematics::buildCollisionCatalog(urdf::Mod
       addCollisionEntry(link->collision, 0);
     }
   }
+  // Initialize caches with extracted joint names and collision link names
+  this->initializeCaches(jointNames, this->collisionLinkNames);
   return catalog;
 }
 
@@ -202,12 +220,14 @@ PotentialFieldObstacle PFKinematics::obstacleFromCollisionObject(
     throw std::runtime_error("obstacleFromCollisionObject: Unsupported geometry type in collision object");
   }
   ObstacleGeometry obstacleGeom(radius, length, width, height);
+
+  // For mesh obstacles, pass mesh resource and scale to constructor
   PotentialFieldObstacle obstacle(
     frameID, position, orientation, obstacleType, ObstacleGroup::ROBOT,
-    obstacleGeom
+    obstacleGeom,
+    isMesh ? meshResource : std::string(),
+    isMesh ? Eigen::Vector3d(length, width, height) : Eigen::Vector3d::Ones()
   );
-  // If mesh, set mesh resource and scale
-  if (isMesh) { obstacle.setMeshProperties(meshResource, Eigen::Vector3d(length, width, height)); }
   return obstacle;
 }
 
@@ -283,4 +303,73 @@ double PFKinematics::estimateRobotExtentRadius() {
   }
 
   return max_extent; // 0.0 if nothing found
+}
+
+Eigen::MatrixXd PFKinematics::getJacobianAtPoint(const std::string& linkName, const Eigen::Vector3d& pointInWorldFrame,
+  const std::vector<double>& jointAngles) {
+  // 1. Update model state (ensure forward kinematics was called recently or call it here)
+  Eigen::VectorXd q = Eigen::VectorXd::Zero(this->model.nq);
+  for (size_t i = 0; i < jointAngles.size(); ++i) {
+    // Map your jointAngles to Pinocchio q vector (handling indices as you do in computeLinkTransforms)
+    int qi = this->jointQIndices[i];
+    if (qi >= 0) q(qi) = jointAngles[i];
+  }
+
+  // 2. Get the Frame ID
+  if (!model.existFrame(linkName)) {
+    throw std::runtime_error("Link not found: " + linkName);
+  }
+  pinocchio::FrameIndex frameId = model.getFrameId(linkName);
+
+  // 3. Compute the Jacobian at the Frame Origin (Local World Aligned)
+  // J_frame is 6xN (3 linear, 3 angular)
+  pinocchio::Data::Matrix6x J_frame(6, model.nv);
+  J_frame.setZero();
+
+  // computes J in the world frame centered at the joint
+  pinocchio::computeJointJacobians(model, data, q);
+  pinocchio::getFrameJacobian(model, data, frameId, pinocchio::LOCAL_WORLD_ALIGNED, J_frame);
+
+  // 4. Transport Jacobian to the Witness Point
+  // The Jacobian we got tells us how the Frame Origin moves.
+  // We need to know how 'pointInWorldFrame' moves.
+  // v_point = v_origin + w x r  (where r is vector from origin to point)
+
+  Eigen::Vector3d p_origin = data.oMf[frameId].translation();
+  Eigen::Vector3d r = pointInWorldFrame - p_origin; // Vector from link origin to collision point
+
+  // Linear velocity at point P is: J_linear - skew(r) * J_angular
+  Eigen::MatrixXd J_point = J_frame.topRows(3) -
+    pinocchio::skew(r) * J_frame.bottomRows(3);
+
+  return J_point; // Returns a 3xN matrix
+}
+
+SpatialVector PFKinematics::computeEndEffectorPose(const std::vector<double>& jointAngles, const std::string& eeLinkName) {
+  // Convert joint angles to Eigen::VectorXd
+  Eigen::VectorXd q = Eigen::VectorXd::Zero(this->model.nq);
+  for (size_t i = 0; i < jointAngles.size() && i < this->jointQIndices.size(); ++i) {
+    int qi = this->jointQIndices[i];
+    if (qi >= 0 && qi < this->model.nq) {
+      q[qi] = jointAngles[i];
+    }
+  }
+
+  // Compute forward kinematics for all frames
+  pinocchio::framesForwardKinematics(this->model, this->data, q);
+
+  // Get the frame ID for the end-effector link
+  if (!this->model.existFrame(eeLinkName)) {
+    throw std::runtime_error("PFKinematics::computeEndEffectorPose: End-effector link '" + eeLinkName + "' not found in model");
+  }
+  pinocchio::FrameIndex eeFrameId = this->model.getFrameId(eeLinkName);
+
+  // Extract the end-effector transform
+  const pinocchio::SE3& eeTransform = this->data.oMf[eeFrameId];
+
+  // Convert to SpatialVector (position + quaternion)
+  Eigen::Vector3d position = eeTransform.translation();
+  Eigen::Quaterniond orientation(eeTransform.rotation());
+
+  return SpatialVector(position, orientation);
 }
