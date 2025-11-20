@@ -40,6 +40,15 @@
 
 #include "robot_plugins/ik_solver.hpp"
 
+struct PFLimits {
+  double minX; // Minimum X coordinate of the bounding box [m]
+  double maxX; // Maximum X coordinate of the bounding box [m]
+  double minY; // Minimum Y coordinate of the bounding box [m]
+  double maxY; // Maximum Y coordinate of the bounding box [m]
+  double minZ; // Minimum Z coordinate of the bounding box [m]
+  double maxZ; // Maximum Z coordinate of the bounding box [m]
+};
+
 struct TaskSpaceWrench {
   Eigen::Vector3d force{Eigen::Vector3d::Zero()}; // Linear Force [N]
   Eigen::Vector3d torque{Eigen::Vector3d::Zero()}; // Torque [Nm]
@@ -357,6 +366,16 @@ public:
 
   bool isPointInsideObstacle(Eigen::Vector3d point) const;
   bool isPointWithinInfluenceZone(Eigen::Vector3d point) const;
+
+  /**
+   * @brief Computes the spatial limits (bounding box) of the potential field for visualization or analysis.
+   *        The bounds encompass all obstacles, the goal, and the query pose, expanded by a buffer area.
+   *
+   * @param queryPose The current query pose to include in the bounds
+   * @param bufferArea The extra margin to add around the computed limits [m]
+   * @return PFLimits The computed spatial limits
+   */
+  PFLimits computeFieldBounds(const SpatialVector& queryPose, double bufferArea) const;
 
   // ============ Force and Velocity Computation ============
 

@@ -125,6 +125,71 @@ bool PotentialField::isPointWithinInfluenceZone(Eigen::Vector3d point) const {
   return false;
 }
 
+PFLimits PotentialField::computeFieldBounds(const SpatialVector& queryPose, double bufferArea) const {
+  PFLimits limits;
+  // Determine the limits of the potential field based on obstacle positions, goal position, and query pose
+  // Use envObstacles directly since we are inside the class
+  Eigen::Vector3d goalPos = this->goalPose.getPosition();
+  Eigen::Vector3d queryPos = queryPose.getPosition();
+
+  if (this->envObstacles.empty()) {
+    // If no obstacles, set limits around the goal position and query pose
+    limits.minX = std::min(goalPos.x(), queryPos.x());
+    limits.maxX = std::max(goalPos.x(), queryPos.x());
+    limits.minY = std::min(goalPos.y(), queryPos.y());
+    limits.maxY = std::max(goalPos.y(), queryPos.y());
+    limits.minZ = std::min(goalPos.z(), queryPos.z());
+    limits.maxZ = std::max(goalPos.z(), queryPos.z());
+  }
+  else {
+    // Initialize limits with extreme values
+    limits.minX = std::numeric_limits<double>::max();
+    limits.maxX = std::numeric_limits<double>::lowest();
+    limits.minY = std::numeric_limits<double>::max();
+    limits.maxY = std::numeric_limits<double>::lowest();
+    limits.minZ = std::numeric_limits<double>::max();
+    limits.maxZ = std::numeric_limits<double>::lowest();
+
+    // Iterate through obstacles to find overall min/max
+    for (const auto& obst : this->envObstacles) {
+      Eigen::Vector3d pos = obst.getPosition();
+      // Use the bounding sphere radius to account for obstacle size and rotation
+      double radius = obst.halfDimensions().norm();
+
+      if (pos.x() - radius < limits.minX) limits.minX = pos.x() - radius;
+      if (pos.x() + radius > limits.maxX) limits.maxX = pos.x() + radius;
+      if (pos.y() - radius < limits.minY) limits.minY = pos.y() - radius;
+      if (pos.y() + radius > limits.maxY) limits.maxY = pos.y() + radius;
+      if (pos.z() - radius < limits.minZ) limits.minZ = pos.z() - radius;
+      if (pos.z() + radius > limits.maxZ) limits.maxZ = pos.z() + radius;
+    }
+
+    // Expand limits to include the goal position if outside current bounds
+    if (goalPos.x() < limits.minX) limits.minX = goalPos.x();
+    if (goalPos.x() > limits.maxX) limits.maxX = goalPos.x();
+    if (goalPos.y() < limits.minY) limits.minY = goalPos.y();
+    if (goalPos.y() > limits.maxY) limits.maxY = goalPos.y();
+    if (goalPos.z() < limits.minZ) limits.minZ = goalPos.z();
+    if (goalPos.z() > limits.maxZ) limits.maxZ = goalPos.z();
+
+    // Expand limits to include the query pose if outside current bounds
+    if (queryPos.x() < limits.minX) limits.minX = queryPos.x();
+    if (queryPos.x() > limits.maxX) limits.maxX = queryPos.x();
+    if (queryPos.y() < limits.minY) limits.minY = queryPos.y();
+    if (queryPos.y() > limits.maxY) limits.maxY = queryPos.y();
+    if (queryPos.z() < limits.minZ) limits.minZ = queryPos.z();
+    if (queryPos.z() > limits.maxZ) limits.maxZ = queryPos.z();
+  }
+  // Increase the limits by a buffer area for better visualization
+  limits.minX -= bufferArea;
+  limits.maxX += bufferArea;
+  limits.minY -= bufferArea;
+  limits.maxY += bufferArea;
+  limits.minZ -= bufferArea;
+  limits.maxZ += bufferArea;
+  return limits;
+}
+
 Eigen::VectorXd PotentialField::evaluateWholeBodyJointVelocitiesAtConfiguration(
   const std::vector<double>& jointAngles,
   const SpatialVector& eePose) {

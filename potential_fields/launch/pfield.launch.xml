@@ -2,6 +2,7 @@
   <arg name="use_rviz" default="true" description="Whether to launch RViz or not."/>
   <arg name="rviz_config" default="$(find-pkg-share potential_fields)/config/view_pfield.rviz" description="The RVIZ config file (.rviz)"/>
   <arg name="rviz_fixed_frame" default="world" description="The fixed frame for RVIZ"/>
+  <arg name="end_effector_frame" default="ee_link" description="The name of the end-effector link frame"/>
   <arg name="urdf_file_path" default="" description="The absolute filepath to the URDF file for the robot"/>
   <arg name="motion_plugin_type" default="" description="The type of motion plugin to use in PFieldManager (e.g. 'franka')"/>
 
@@ -15,6 +16,7 @@
   <node pkg="potential_fields" exec="pfield_manager" name="pfield_manager" output="screen">
     <param from="$(find-pkg-share potential_fields)/config/pfield_config.yaml"/>
     <param name="fixed_frame" value="$(var rviz_fixed_frame)"/>
+    <param name="end_effector_frame" value="$(var end_effector_frame)"/>
     <param name="urdf_file_path" value="$(var urdf_file_path)"/>
     <param name="motion_plugin_type" value="$(var motion_plugin_type)"/>
   </node>
