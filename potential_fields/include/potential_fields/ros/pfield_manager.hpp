@@ -90,6 +90,7 @@ private:
   double visualizerBufferArea; // Extra area around obstacles and goal to visualize the PF [m]
   double fieldResolution; // Resolution of the potential field grid [m]
   std::string fixedFrame; // RViz fixed frame for visualization and PF computation
+  std::string eeFrame; // End-effector frame name for planning and kinematics
   std::string urdfFileName; // URDF file name
   std::string motionPluginType; // Motion Plugin Type [e.g., "null", "franka", etc.]
   std::shared_ptr<PotentialField> pField; // Potential Field Instance containing main PF functionality
