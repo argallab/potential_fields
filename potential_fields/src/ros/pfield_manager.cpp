@@ -56,6 +56,7 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   this->maxAngularAcceleration = this->declare_parameter("max_angular_acceleration", 1.0); // [rad/s^2]
   this->influenceDistance = this->declare_parameter("influence_distance", 1.0); // Influence distance for obstacle repulsion
   this->fixedFrame = this->declare_parameter("fixed_frame", "world"); // RViz fixed frame
+  this->eeFrame = this->declare_parameter("end_effector_frame", "ee_link"); // End-effector frame name
   this->visualizerBufferArea = this->declare_parameter("visualizer_buffer_area", 1.0); // Extra area to visualize the PF [m]
   this->fieldResolution = this->declare_parameter("field_resolution", 0.5); // Resolution of the potential field grid [m]
   this->urdfFileName = this->declare_parameter("urdf_file_path", std::string());
@@ -71,6 +72,7 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   this->maxAngularAcceleration = this->get_parameter("max_angular_acceleration").as_double();
   this->influenceDistance = this->get_parameter("influence_distance").as_double();
   this->fixedFrame = this->get_parameter("fixed_frame").as_string();
+  this->eeFrame = this->get_parameter("end_effector_frame").as_string();
   this->visualizerBufferArea = this->get_parameter("visualizer_buffer_area").as_double();
   this->fieldResolution = this->get_parameter("field_resolution").as_double();
   this->urdfFileName = this->get_parameter("urdf_file_path").as_string();
@@ -83,7 +85,7 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
     this->maxLinearAcceleration, this->maxAngularAcceleration,
     this->influenceDistance
   );
-  this->pField->useDynamicQuadraticThreshold(true);
+  this->pField->setDynamicQuadraticThreshold(true);
 
   // Initialize the motion plugin
   std::transform(
@@ -121,15 +123,24 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   }
 
   // Once IKSolver is initialized, assign it to the PF instance
-  this->pField->assignIKSolver(this->ikSolver);
+  this->pField->setIKSolver(this->ikSolver);
 
   // Allow the user to not use a URDF
   if (!this->urdfFileName.empty() && this->urdfFileName.ends_with(".urdf")) {
     try {
-      this->pField->initializeKinematics(this->urdfFileName, this->ikSolver->getJointNames());
+      this->pField->initializeKinematics(this->urdfFileName, this->eeFrame);
       RCLCPP_INFO(this->get_logger(), "PF Kinematics initialized from URDF: %s", this->urdfFileName.c_str());
       RCLCPP_INFO(this->get_logger(),
         "PF Kinematics estimated influence distance from robot extend to be: %f", this->pField->getInfluenceDistance());
+
+      // Initialize robot obstacles at zero configuration
+      // Get the number of joints from the kinematics model
+      std::vector<double> zeroJointAngles(this->pField->getNumJoints(), 0.0);
+      RCLCPP_INFO(this->get_logger(), "Initializing robot obstacles with %zu joints at zero configuration",
+        zeroJointAngles.size());
+      this->pField->updateObstaclesFromKinematics(zeroJointAngles);
+      RCLCPP_INFO(this->get_logger(), "Robot collision obstacles initialized. Count: %zu",
+        this->pField->getRobotObstacles().size());
     }
     catch (const std::exception& e) {
       RCLCPP_ERROR(this->get_logger(), "Failed to initialize PF Kinematics from URDF: %s", e.what());
@@ -231,6 +242,8 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   // std::string filename = "pfield_data";
   // this->exportFieldDataToCSV(filename);
 
+  RCLCPP_INFO(this->get_logger(), "PotentialFieldManager fully initialized. Visualization running at %.1f Hz", this->visualizerFrequency);
+
   // Run the timer for visualizing the potential field
   this->timer = this->create_wall_timer(
     std::chrono::duration<double>(1.0 / this->visualizerFrequency),
@@ -244,6 +257,13 @@ void PotentialFieldManager::timerCallback() {
   // Update the query pose position based on integrating the PF velocity
   this->integrateQueryPoseFromField();
   MarkerArray pfieldMarkers = this->visualizePF(this->pField);
+
+  RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 2000,
+    "Publishing %zu markers (%zu robot obstacles, %zu env obstacles)",
+    pfieldMarkers.markers.size(),
+    this->pField->getRobotObstacles().size(),
+    this->pField->getEnvObstacles().size());
+
   this->pFieldMarkerPub->publish(pfieldMarkers);
 }
 
@@ -323,11 +343,11 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
   PlannedPath planningResult;
   try {
     // Plan a path using the request parameters and store the result
-    // Convert starting_joint_angles (std::vector<float>) to std::vector<double> expected by planPath
+    // Convert starting_joint_angles (std::vector<float>) to std::vector<double> expected by planPathFromTaskSpaceWrench
     std::vector<double> startJointAnglesDouble(
       request->starting_joint_angles.cbegin(), request->starting_joint_angles.cend()
     );
-    planningResult = this->pField->planPath(
+    planningResult = this->pField->planPathFromTaskSpaceWrench(
       /*startPose=*/startSV,
       /*startJointAngles=*/startJointAnglesDouble,
       /*dt=*/request->delta_time,
