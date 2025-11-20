@@ -7,19 +7,19 @@
 #include <iostream>
 
 #include <coal/collision.h>
+#include <coal/distance.h>
 
-void PotentialField::initializeKinematics(
-  const std::string& urdfFilePath,
-  const std::vector<std::string>& jointNames) {
+void PotentialField::initializeKinematics(const std::string& urdfFilePath, const std::string& eeLinkName) {
   this->urdfFileName = urdfFilePath;
-  this->pfKinematics = std::make_unique<PFKinematics>(this->urdfFileName, jointNames);
+  this->eeLinkName = eeLinkName;
+  this->pfKinematics = std::make_unique<PFKinematics>(this->urdfFileName);
   const double maxExtent = this->pfKinematics->estimateRobotExtentRadius();
   // Assign influence distance using maximum robot extent or the default, whichever is more generous
   this->influenceDistance = std::max(this->influenceDistance, maxExtent);
 }
 
 void PotentialField::updateObstaclesFromKinematics(const std::vector<double>& jointAngles) {
-  if (!this->pfKinematics) return;
+  if (!this->pfKinematics) { return; }
   std::vector<PotentialFieldObstacle> newObstacles = this->pfKinematics->updateObstaclesFromJointAngles(jointAngles);
   this->addObstacles(newObstacles);
 }
@@ -123,6 +123,30 @@ bool PotentialField::isPointWithinInfluenceZone(Eigen::Vector3d point) const {
     if (obst.withinInfluenceZone(point, this->influenceDistance)) { return true; }
   }
   return false;
+}
+
+Eigen::VectorXd PotentialField::evaluateWholeBodyJointVelocitiesAtConfiguration(
+  const std::vector<double>& jointAngles,
+  const SpatialVector& eePose) {
+  // --- 1. Compute End-Effector Attraction Joint Torques ---
+  Eigen::VectorXd attractionTorques = this->computeEndEffectorAttractionJointTorques(eePose, jointAngles);
+
+  // --- 2. Compute Whole-Body Obstacle Repulsion Joint Torques ---
+  Eigen::VectorXd repulsionTorques = this->computeWholeBodyRepulsionJointTorques(jointAngles);
+
+  // --- 3. Combine Torques ---
+  Eigen::VectorXd totalTorques = attractionTorques + repulsionTorques;
+
+  // --- 4. Convert Joint Torques to Joint Velocities (Admittance Control) ---
+  // Treating joints as simple dampers: q_dot = gain * torque
+  // For more accurate dynamics, you could use: q_dot = M^-1 * tau
+  const double admittanceGain = 0.1;
+  Eigen::VectorXd jointVelocities = totalTorques * admittanceGain;
+
+  // --- 5. Apply Joint Velocity Limits / Saturation ---
+  // TODO(Sharwin24): Implement joint velocity clamping based on robot-specific limits
+
+  return jointVelocities;
 }
 
 TaskSpaceWrench PotentialField::evaluateWrenchAtPose(const SpatialVector& queryPose) const {
@@ -427,6 +451,106 @@ Eigen::Vector3d PotentialField::computeRepulsiveForceLinear(const SpatialVector&
   return F;
 }
 
+Eigen::VectorXd PotentialField::computeEndEffectorAttractionJointTorques(
+  const SpatialVector& eePose, const std::vector<double>& jointAngles) const {
+  // Compute task-space wrench for the end-effector
+  // TaskSpaceWrench eeWrench = this->evaluateWrenchAtPoseWithOpposingForceRemoval(eePose);
+  TaskSpaceWrench eeWrench = this->evaluateWrenchAtPose(eePose);
+
+  // Pack wrench into 6D vector
+  Eigen::VectorXd taskForce(6);
+  taskForce << eeWrench.force, eeWrench.torque;
+
+  // Get end-effector Jacobian (6xN)
+  Eigen::MatrixXd J_ee = this->pfKinematics->getJacobianAtPoint(
+    this->eeLinkName, eePose.getPosition(), jointAngles
+  );
+
+  // Convert task-space force to joint torques: tau = J^T * F
+  return J_ee.transpose() * taskForce;
+}
+
+Eigen::VectorXd PotentialField::computeWholeBodyRepulsionJointTorques(
+  const std::vector<double>& jointAngles) const {
+  // Get robot links and environment obstacles
+  auto robotLinks = this->getObstaclesByGroup(ObstacleGroup::ROBOT);
+  auto envObstacles = this->getObstaclesByGroup(ObstacleGroup::STATIC);
+
+  // Initialize joint torques to zero (size will be set on first Jacobian computation)
+  Eigen::VectorXd jointTorques;
+  bool initialized = false;
+
+  // Setup distance computation request
+  coal::DistanceRequest distReq;
+  distReq.enable_nearest_points = true;
+  coal::DistanceResult distRes;
+
+  // Iterate over all robot link-obstacle pairs
+  for (const auto& link : robotLinks) {
+    for (const auto& obs : envObstacles) {
+      distRes.clear();
+      coal::distance(
+        link.getCoalCollisionObject().get(),
+        obs.getCoalCollisionObject().get(),
+        distReq, distRes
+      );
+
+      // Only consider obstacles within influence distance
+      if (distRes.min_distance < this->influenceDistance) {
+        // Extract nearest points (in world frame)
+        Eigen::Vector3d p_robot(
+          distRes.nearest_points[0][0],
+          distRes.nearest_points[0][1],
+          distRes.nearest_points[0][2]
+        );
+        Eigen::Vector3d p_obs(
+          distRes.nearest_points[1][0],
+          distRes.nearest_points[1][1],
+          distRes.nearest_points[1][2]
+        );
+
+        // Compute repulsive force direction (from obstacle to robot)
+        Eigen::Vector3d direction = p_robot - p_obs;
+        if (direction.norm() < NEAR_ZERO_THRESHOLD) {
+          direction = Eigen::Vector3d::UnitZ(); // Degenerate case fallback
+        }
+        else {
+          direction.normalize();
+        }
+
+        // Compute repulsive force magnitude using Khatib potential
+        const double d = std::max(distRes.min_distance, NEAR_ZERO_THRESHOLD);
+        const double Q = this->influenceDistance;
+        const double magnitude = this->repulsiveGain * (1.0 / d - 1.0 / Q) * (1.0 / (d * d));
+        Eigen::Vector3d F_rep = direction * magnitude;
+
+        // Get Jacobian at the nearest point on this link
+        Eigen::MatrixXd J_link = this->pfKinematics->getJacobianAtPoint(
+          link.getFrameID(), p_robot, jointAngles
+        );
+
+        // Initialize joint torques vector on first iteration
+        if (!initialized) {
+          jointTorques = Eigen::VectorXd::Zero(J_link.cols());
+          initialized = true;
+        }
+
+        // Map repulsive force to joint torques and accumulate
+        // J_link is 3xN (linear Jacobian only for point forces)
+        jointTorques += J_link.transpose() * F_rep;
+      }
+    }
+  }
+
+  // If no repulsive forces were computed, return zero vector
+  if (!initialized) {
+    const size_t numJoints = jointAngles.size();
+    jointTorques = Eigen::VectorXd::Zero(numJoints);
+  }
+
+  return jointTorques;
+}
+
 std::vector<double> PotentialField::computeInverseKinematics(
   const SpatialVector& targetPose, const std::vector<double>& seedJointAngles) const {
   std::vector<double> jointAngles;
@@ -444,12 +568,12 @@ std::vector<double> PotentialField::computeInverseKinematics(
   return jointAngles;
 }
 
-PlannedPath PotentialField::planPath(
+PlannedPath PotentialField::planPathFromTaskSpaceWrench(
   const SpatialVector& startPose,
   const std::vector<double>& startJointAngles,
   const double dt,
   const double goalTolerance,
-  const size_t maxIterations) {
+  const size_t maxIters) {
 
   // Create path and initialize loop variables
   PlannedPath path;
@@ -461,7 +585,7 @@ PlannedPath PotentialField::planPath(
 
   // TODO(Sharwin24): Implement backtracking or escape maneuvers if robot links collide with environment
   // during path planning
-  for (size_t iter = 0; iter < maxIterations; ++iter) {
+  for (size_t iter = 0; iter < maxIters; ++iter) {
     // Perform RK4 integration step to get next pose and the applied twist
     // including removal of opposing repulsive force components and enforcement of motion constraints
     auto [nextPoseRK4, appliedTwist] = this->rungeKuttaStep(current, prevTwist, stepDt);
@@ -500,6 +624,97 @@ PlannedPath PotentialField::planPath(
   else {
     path.duration = 0.0;
   }
+  return path;
+}
+
+PlannedPath PotentialField::planPathFromWholeBodyJointVelocities(
+  const SpatialVector& startPose,
+  const std::vector<double>& startJointAngles,
+  const double dt,
+  const double goalTolerance,
+  const size_t maxIters) {
+
+  // Create path and initialize loop variables
+  PlannedPath path;
+  const double stepDt = (dt > 0.0) ? dt : 0.1;
+  std::vector<double> currentJointAngles = startJointAngles;
+  double timeStamp = 0.0;
+
+  // Compute initial end-effector pose from joint angles using forward kinematics
+  if (!this->pfKinematics) {
+    // Cannot proceed without kinematics
+    path.success = false;
+    return path;
+  }
+
+  SpatialVector currentEEPose = this->pfKinematics->computeEndEffectorPose(currentJointAngles, this->eeLinkName);
+
+  for (size_t iter = 0; iter < maxIters; ++iter) {
+    // --- 1. Update robot obstacles from current joint configuration ---
+    this->updateObstaclesFromKinematics(currentJointAngles);
+
+    // --- 2. Compute whole-body joint velocities considering end-effector attraction and obstacle repulsion ---
+    Eigen::VectorXd jointVelocities = this->evaluateWholeBodyJointVelocitiesAtConfiguration(currentJointAngles, currentEEPose);
+
+    // --- 3. Integrate joint velocities to get next joint configuration ---
+    std::vector<double> nextJointAngles(currentJointAngles.size());
+    for (size_t i = 0; i < currentJointAngles.size(); ++i) {
+      nextJointAngles[i] = currentJointAngles[i] + jointVelocities[i] * stepDt;
+    }
+
+    // --- 4. Compute end-effector pose for the new joint configuration ---
+    SpatialVector nextEEPose = this->pfKinematics->computeEndEffectorPose(nextJointAngles, this->eeLinkName);
+
+    // --- 5. Compute end-effector twist (velocity) from pose change ---
+    Eigen::Vector3d linearVelocity = (nextEEPose.getPosition() - currentEEPose.getPosition()) / stepDt;
+    // For angular velocity, compute from quaternion difference
+    Eigen::Quaterniond q_current = currentEEPose.getOrientation();
+    Eigen::Quaterniond q_next = nextEEPose.getOrientation();
+    Eigen::Quaterniond q_delta = q_next * q_current.conjugate();
+    // Convert to axis-angle for angular velocity
+    Eigen::AngleAxisd angleAxis(q_delta);
+    Eigen::Vector3d angularVelocity = (angleAxis.angle() / stepDt) * angleAxis.axis();
+    TaskSpaceTwist eeTwist(linearVelocity, angularVelocity);
+
+    // --- 6. Record current state in path ---
+    path.recordPathPoint(
+      timeStamp,
+      currentEEPose,
+      eeTwist,
+      currentJointAngles
+    );
+
+    // --- 7. Check goal tolerance ---
+    const double translationalError = (currentEEPose.getPosition() - this->goalPose.getPosition()).norm();
+    const double rotationalError = currentEEPose.angularDistance(this->goalPose);
+    if (translationalError <= goalTolerance && rotationalError <= this->rotationalThreshold) {
+      path.success = true;
+      break;
+    }
+
+    // --- 8. Check for collisions ---
+    if (this->isRobotInCollisionWithEnvironment(0.0)) {
+      // Robot is in collision - path planning failed
+      path.success = false;
+      break;
+    }
+
+    // --- 9. Update loop variables ---
+    currentJointAngles = nextJointAngles;
+    currentEEPose = nextEEPose;
+    timeStamp += stepDt;
+  }
+
+  // Finalize path metadata
+  path.dt = stepDt;
+  path.numPoints = static_cast<unsigned int>(path.poses.size());
+  if (!path.timeStamps.empty()) {
+    path.duration = path.timeStamps.back();
+  }
+  else {
+    path.duration = 0.0;
+  }
+
   return path;
 }
 
