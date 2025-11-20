@@ -240,7 +240,22 @@ std::shared_ptr<coal::CollisionObject> PotentialFieldObstacle::toCoalCollisionOb
 
   case ObstacleType::MESH: {
     if (!this->meshCollisionData || !this->meshCollisionData->bvh) {
-      throw std::runtime_error("Mesh collision data not available for obstacle: " + this->frameID);
+      std::string errorMsg = "Mesh collision data not available for obstacle: " + this->frameID;
+      if (!this->meshResource.empty()) {
+        errorMsg += "\n  Attempted to load mesh from: " + this->meshResource;
+        errorMsg += "\n  Mesh scale: [" + std::to_string(this->meshScale.x()) + ", "
+          + std::to_string(this->meshScale.y()) + ", "
+          + std::to_string(this->meshScale.z()) + "]";
+        errorMsg += "\n  Possible causes:";
+        errorMsg += "\n    - Mesh file does not exist at the specified path";
+        errorMsg += "\n    - ROS package path is not resolved (package:// URI requires ROS environment)";
+        errorMsg += "\n    - Mesh file format is not supported or corrupted";
+        errorMsg += "\n    - Insufficient permissions to read the mesh file";
+      }
+      else {
+        errorMsg += "\n  No mesh resource path was provided";
+      }
+      throw std::runtime_error(errorMsg);
     }
     // Use the existing BVH from mesh collision data
     shape = this->meshCollisionData->bvh;
