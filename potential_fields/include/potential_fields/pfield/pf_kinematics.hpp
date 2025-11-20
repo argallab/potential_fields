@@ -25,7 +25,7 @@ struct CollisionCatalogEntry {
 class PFKinematics {
 public:
   PFKinematics() = default;
-  PFKinematics(const std::string& urdfFileName, const std::vector<std::string>& jointNames);
+  PFKinematics(const std::string& urdfFileName);
   ~PFKinematics() = default;
 
   pinocchio::Model& getModel() { return this->model; }
@@ -76,6 +76,8 @@ public:
   bool areCachesInitialized() const { return this->cachesReady; }
   const std::vector<std::string>& cachedJointNames() const { return this->jointNamesCache; }
   const std::vector<std::string>& cachedLinkNames() const { return this->linkNamesCache; }
+  size_t getNumJoints() const { return this->numJoints; }
+  size_t getNumLinks() const { return this->numLinks; }
 
   /**
    * @brief Estimate a conservative bounding-sphere radius of the robot from its URDF
@@ -96,12 +98,26 @@ public:
    */
   double estimateRobotExtentRadius();
 
+  Eigen::MatrixXd getJacobianAtPoint(const std::string& linkName, const Eigen::Vector3d& pointInWorldFrame,
+    const std::vector<double>& jointAngles);
+
+  /**
+   * @brief Computes the end-effector pose from joint angles using forward kinematics
+   *
+   * @param jointAngles The joint configuration [rad]
+   * @param eeLinkName The name of the end-effector link
+   * @return SpatialVector The computed end-effector pose (position + orientation)
+   */
+  SpatialVector computeEndEffectorPose(const std::vector<double>& jointAngles, const std::string& eeLinkName);
+
 private:
   pinocchio::Model model;
   pinocchio::Data data;
   urdf::Model robotModel;
   std::vector<std::string> jointNamesCache;
   std::vector<std::string> linkNamesCache;
+  size_t numJoints;
+  size_t numLinks;
   std::vector<int> jointQIndices; // idx_q per cached joint (or -1 if not found/unsupported)
   std::vector<int> frameIDCache;       // frame id per cached link (or -1 if not found)
   std::vector<std::string> collisionLinkNames; // Names of links with collision geometry

@@ -106,7 +106,7 @@ struct PlannedPath {
       for (size_t j = 0; j < numJoints; ++j) {
         velocities[j] = (this->jointAngles.back()[j] - this->jointAngles[this->numPoints - 2][j]) / dtSec;
       }
-      this->jointVelocities.insert(this->jointVelocities.cend(), velocities.cbegin(), velocities.cend());
+      this->jointVelocities.push_back(velocities);
     }
     else {
       this->dt = 0.0;
@@ -265,8 +265,7 @@ public:
   }
   bool operator!=(const PotentialField& other) const { return !(*this == other); }
 
-  void initializeKinematics(const std::string& urdfFilePath, const std::vector<std::string>& jointNames);
-  void assignIKSolver(std::shared_ptr<IKSolver> ikSolver) { this->ikSolver = ikSolver; }
+  void initializeKinematics(const std::string& urdfFilePath, const std::string& eeLinkName);
 
   // ============ Getters and Setters ============
   void setAttractiveGain(double newAttractiveGain) { this->attractiveGain = newAttractiveGain; }
@@ -280,7 +279,8 @@ public:
   void setMaxAngularAcceleration(double newMaxAngularAcceleration) { this->maxAngularAcceleration = newMaxAngularAcceleration; }
   void setInfluenceDistance(double newInfluenceDistance) { this->influenceDistance = newInfluenceDistance; }
   void setGoalPose(SpatialVector newGoalPose) { this->goalPose = newGoalPose; }
-  void useDynamicQuadraticThreshold(bool enabled) { this->dynamicQuadraticThresholdEnabled = enabled; }
+  void setIKSolver(std::shared_ptr<IKSolver> ikSolver) { this->ikSolver = ikSolver; }
+  void setDynamicQuadraticThreshold(bool enabled) { this->dynamicQuadraticThresholdEnabled = enabled; }
   double getAttractiveGain() const { return this->attractiveGain; }
   double getRepulsiveGain() const { return this->repulsiveGain; }
   double getRotationalAttractiveGain() const { return this->rotationalAttractiveGain; }
@@ -289,6 +289,8 @@ public:
   double getMaxLinearAcceleration() const { return this->maxLinearAcceleration; }
   double getMaxAngularAcceleration() const { return this->maxAngularAcceleration; }
   double getInfluenceDistance() const { return this->influenceDistance; }
+  size_t getNumJoints() const { return this->pfKinematics ? this->pfKinematics->getNumJoints() : 0; }
+  size_t getNumLinks() const { return this->pfKinematics ? this->pfKinematics->getNumLinks() : 0; }
   bool isUsingDynamicQuadraticThreshold() const { return this->dynamicQuadraticThresholdEnabled; }
   SpatialVector getGoalPose() const { return this->goalPose; }
   std::vector<PotentialFieldObstacle> getEnvObstacles() const { return this->envObstacles; }
@@ -357,6 +359,10 @@ public:
   bool isPointWithinInfluenceZone(Eigen::Vector3d point) const;
 
   // ============ Force and Velocity Computation ============
+
+  Eigen::VectorXd evaluateWholeBodyJointVelocitiesAtConfiguration(
+    const std::vector<double>& jointAngles,
+    const SpatialVector& eePose);
 
   /**
    * @brief Given a 3D position, computes the task-space wrench
@@ -509,6 +515,31 @@ public:
    */
   Eigen::Vector3d computeRepulsiveForceLinear(const SpatialVector& queryPose) const;
 
+  /**
+   * @brief Computes joint torques for end-effector attraction to the goal pose.
+   *
+   * @note Uses the evaluateWrenchAtPose method to compute
+   *       task-space forces, then maps them to joint space via the end-effector Jacobian transpose.
+   *
+   * @param eePose The current end-effector pose
+   * @param jointAngles The current joint configuration [rad]
+   * @return Eigen::VectorXd Joint torques for end-effector attraction [Nm]
+   */
+  Eigen::VectorXd computeEndEffectorAttractionJointTorques(
+    const SpatialVector& eePose, const std::vector<double>& jointAngles) const;
+
+  /**
+   * @brief Computes joint torques for whole-body obstacle repulsion.
+   *
+   * @note Iterates over all robot links and environment obstacles, computing repulsive forces
+   *       at the nearest points and mapping them to joint space via link Jacobian transposes.
+   *       Uses COAL distance queries and the Khatib repulsive potential formulation.
+   *
+   * @param jointAngles The current joint configuration [rad]
+   * @return Eigen::VectorXd Joint torques for whole-body obstacle avoidance [Nm]
+   */
+  Eigen::VectorXd computeWholeBodyRepulsionJointTorques(const std::vector<double>& jointAngles) const;
+
   // ============ Path Planning ============
 
   /**
@@ -577,10 +608,9 @@ public:
   /**
  * @brief Plans a path from the start pose to the goal pose using the potential field.
  *
- * @note When stagnation is detected (i.e., minimal position change over a set number of iterations),
- *       the force computation changes to remove opposing repulsive force components to help escape local minima
- *       using the removeOpposingForce method.
- *
+ * @note The path is planned by iteratively evaluating the velocity field at the current pose,
+ *       applying motion constraints, and integrating (RK4) to find the next pose until the goal is reached.
+ *       The IK solver is used to translate end-effector poses to joint angles at each step.
  *
  * @param startPose The starting pose as a SpatialVector.
  * @param startJointAngles The starting joint angles for the robot [rad].
@@ -591,7 +621,31 @@ public:
  * @param maxIters The maximum number of iterations to perform for path planning, defaults to 30000.
  * @return PlannedPath The planned path containing poses, twists, joint angles, and timestamps.
  */
-  PlannedPath planPath(
+  PlannedPath planPathFromTaskSpaceWrench(
+    const SpatialVector& startPose,
+    const std::vector<double>& startJointAngles,
+    const double dt,
+    const double goalTolerance,
+    const size_t maxIters = 30000
+  );
+
+  /**
+   * @brief Plans a path from the start pose to the goal pose using whole-body joint velocities.
+   *
+   * @note This method computes joint velocities by considering both end-effector attraction
+   *       to the goal and whole-body obstacle repulsion. Unlike planPathFromTaskSpaceWrench,
+   *       this method directly integrates joint velocities rather than task-space velocities,
+   *       providing better whole-body collision avoidance. Forward kinematics is used to
+   *       compute the end-effector pose at each step from the integrated joint configuration.
+   *
+   * @param startPose The starting end-effector pose as a SpatialVector (used for validation).
+   * @param startJointAngles The starting joint angles for the robot [rad].
+   * @param dt The time step for each iteration of the path planning [s].
+   * @param goalTolerance The tolerance for reaching the goal pose [m].
+   * @param maxIters The maximum number of iterations to perform for path planning, defaults to 30000.
+   * @return PlannedPath The planned path containing poses, twists, joint angles, and timestamps.
+   */
+  PlannedPath planPathFromWholeBodyJointVelocities(
     const SpatialVector& startPose,
     const std::vector<double>& startJointAngles,
     const double dt,
@@ -643,6 +697,7 @@ private:
   std::unordered_map<std::string, size_t> envObstacleIndexMap; // Fast lookup for obstacle updates/removals by ID
   std::unordered_map<std::string, size_t> robotObstacleIndexMap; // Fast lookup for obstacle updates/removals by ID
   std::string urdfFileName; // URDF file path for kinematic model
+  std::string eeLinkName; // End-effector link name for kinematic model, IK, and planning
   std::unique_ptr<PFKinematics> pfKinematics; // Kinematics helper for obstacle updates via joint angles
   std::shared_ptr<IKSolver> ikSolver; // Inverse kinematics solver for joint angle computation
   const double translationalTolerance = 1e-3; // Threshold for distances to the goal and obstacles [m]
