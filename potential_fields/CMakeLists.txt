@@ -197,6 +197,12 @@ if(BUILD_TESTING)
     test/test_pf_obstacles.cpp
   )
   target_link_libraries(test_pf_obstacles pfield_lib)
+
+  ament_add_gtest(test_visualization_profiling
+    test/test_visualization_profiling.cpp
+  )
+  target_link_libraries(test_visualization_profiling pfield_lib)
+
   install(
     TARGETS test_spatial_vector
     DESTINATION lib/${PROJECT_NAME}
@@ -211,6 +217,10 @@ if(BUILD_TESTING)
   )
   install(
     TARGETS test_pf_obstacles
+    DESTINATION lib/${PROJECT_NAME}
+  )
+  install(
+    TARGETS test_visualization_profiling
     DESTINATION lib/${PROJECT_NAME}
   )
 
