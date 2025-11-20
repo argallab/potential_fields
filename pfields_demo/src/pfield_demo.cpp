@@ -17,8 +17,10 @@ PFDemo::PFDemo() : Node("pfield_demo") {
   RCLCPP_INFO(this->get_logger(), "PFDemo Initialized");
 
   this->fixedFrame = this->declare_parameter("fixed_frame", "world"); // RViz fixed frame
+  this->eeLinkName = this->declare_parameter("ee_link_name", "link_tcp"); // End-effector link name
   // Get parameters from yaml file
   this->fixedFrame = this->get_parameter("fixed_frame").as_string();
+  this->eeLinkName = this->get_parameter("ee_link_name").as_string();
 
   this->goalPosePub = this->create_publisher<geometry_msgs::msg::PoseStamped>("/pfield/planning_goal_pose", 10);
 
@@ -44,69 +46,74 @@ PFDemo::PFDemo() : Node("pfield_demo") {
   // Initialize demo service
   this->runPlanPathDemoService = this->create_service<std_srvs::srv::Empty>(
     "/pfield_demo/run_plan_path_demo",
-    [this](
-      [[maybe_unused]] const std_srvs::srv::Empty::Request::SharedPtr request,
-      [[maybe_unused]] std_srvs::srv::Empty::Response::SharedPtr response) {
-    RCLCPP_INFO(this->get_logger(), "Running plan path demo...");
+    std::bind(&PFDemo::handleRunPlanPathDemo, this, std::placeholders::_1, std::placeholders::_2)
+  );
+}
 
-    // Create a request for the plan_path service
-    auto pathPlanRequest = std::make_shared<PlanPath::Request>();
-    // Define start and goal poses
-    geometry_msgs::msg::PoseStamped startPose;
-    startPose.header.stamp = this->now();
-    startPose.header.frame_id = this->fixedFrame;
-    startPose.pose = this->getEndEffectorPose();
+void PFDemo::handleRunPlanPathDemo(
+  [[maybe_unused]] const std_srvs::srv::Empty::Request::SharedPtr request,
+  [[maybe_unused]] std_srvs::srv::Empty::Response::SharedPtr response) {
+  RCLCPP_INFO(this->get_logger(), "Running plan path demo...");
 
-    geometry_msgs::msg::PoseStamped goalPose;
-    goalPose.header.stamp = this->now();
-    goalPose.header.frame_id = this->fixedFrame;
-    goalPose.pose = startPose.pose;
-    goalPose.pose.position.x += 0.225; // Move +X 225mm
-    goalPose.pose.position.y += 0.05; // Move +Y 50mm
+  // Create a request for the plan_path service
+  auto pathPlanRequest = std::make_shared<PlanPath::Request>();
+  // Define start and goal poses
+  geometry_msgs::msg::PoseStamped startPose;
+  startPose.header.stamp = this->now();
+  startPose.header.frame_id = this->fixedFrame;
+  startPose.pose = this->getEndEffectorPose();
 
-    pathPlanRequest->start = startPose;
-    pathPlanRequest->goal = goalPose;
-    pathPlanRequest->delta_time = 0.02; // 2 ms between waypoints
-    pathPlanRequest->goal_tolerance = 0.001; // 1 mm tolerance
-    pathPlanRequest->max_iterations = 30000; // Max iterations for planning
-    const double dt = pathPlanRequest->delta_time;
+  geometry_msgs::msg::PoseStamped goalPose;
+  goalPose.header.stamp = this->now();
+  goalPose.header.frame_id = this->fixedFrame;
+  goalPose.pose = startPose.pose;
+  goalPose.pose.position.x += 0.225; // Move +X 225mm
+  goalPose.pose.position.y += 0.05; // Move +Y 50mm
 
-    // Publish the goal pose
-    this->goalPosePub->publish(goalPose);
+  pathPlanRequest->start = startPose;
+  pathPlanRequest->goal = goalPose;
+  pathPlanRequest->delta_time = 0.02; // 2 ms between waypoints
+  pathPlanRequest->goal_tolerance = 0.001; // 1 mm tolerance
+  pathPlanRequest->max_iterations = 30000; // Max iterations for planning
+  const double dt = pathPlanRequest->delta_time;
 
-    RCLCPP_INFO(this->get_logger(), "Sending plan_path request (async)...");
+  // Publish the goal pose
+  this->goalPosePub->publish(goalPose);
 
-    // Send request asynchronously and attach a callback to process the result
-    this->planPathClient->async_send_request(
-      pathPlanRequest,
-      [this, dt](rclcpp::Client<PlanPath>::SharedFuture future) {
-      auto pathPlanResponse = future.get();
-      if (!pathPlanResponse) {
-        RCLCPP_ERROR(this->get_logger(), "plan_path service returned an empty response (async)");
-        return;
-      }
+  RCLCPP_INFO(this->get_logger(), "Sending plan_path request (async)...");
 
-      // Log a small summary of the returned trajectories to help debug crashes
-      size_t ee_path_len = pathPlanResponse->end_effector_path.poses.size();
-      size_t jt_points = pathPlanResponse->joint_trajectory.points.size();
-      size_t ee_vels = pathPlanResponse->end_effector_velocity_trajectory.size();
-      RCLCPP_INFO(this->get_logger(), "(async) Received plan_path response: success=%s, end_effector_path.len=%zu, joint_trajectory.points=%zu, ee_velocity_traj=%zu",
-        pathPlanResponse->success ? "true" : "false", ee_path_len, jt_points, ee_vels);
+  // Send request asynchronously and attach a callback to process the result
+  this->planPathClient->async_send_request(
+    pathPlanRequest,
+    [this, dt](ServiceResponseFuture<PlanPath> future) { this->handlePlanPathResponse(future, dt); }
+  );
+}
 
-      if (ee_path_len > 0) {
-        const auto& p = pathPlanResponse->end_effector_path.poses.front().pose.position;
-        RCLCPP_INFO(this->get_logger(), "(async) First EE pose: (%.4f, %.4f, %.4f)", p.x, p.y, p.z);
-      }
-      if (ee_vels > 0) {
-        const auto& v = pathPlanResponse->end_effector_velocity_trajectory.front().twist.linear;
-        RCLCPP_INFO(this->get_logger(), "(async) First EE linear velocity: (%.6f, %.6f, %.6f)", v.x, v.y, v.z);
-      }
+void PFDemo::handlePlanPathResponse(rclcpp::Client<PlanPath>::SharedFuture future, double dt) {
+  auto pathPlanResponse = future.get();
+  if (!pathPlanResponse) {
+    RCLCPP_ERROR(this->get_logger(), "plan_path service returned an empty response (async)");
+    return;
+  }
 
-      // Begin streaming EE velocity commands to follow the path
-      this->startEEVelocityStreaming(pathPlanResponse->end_effector_velocity_trajectory, dt);
-    }
-    );
-  });
+  // Log a small summary of the returned trajectories to help debug crashes
+  size_t ee_path_len = pathPlanResponse->end_effector_path.poses.size();
+  size_t jt_points = pathPlanResponse->joint_trajectory.points.size();
+  size_t ee_vels = pathPlanResponse->end_effector_velocity_trajectory.size();
+  RCLCPP_INFO(this->get_logger(), "(async) Received plan_path response: success=%s, end_effector_path.len=%zu, joint_trajectory.points=%zu, ee_velocity_traj=%zu",
+    pathPlanResponse->success ? "true" : "false", ee_path_len, jt_points, ee_vels);
+
+  if (ee_path_len > 0) {
+    const auto& p = pathPlanResponse->end_effector_path.poses.front().pose.position;
+    RCLCPP_INFO(this->get_logger(), "(async) First EE pose: (%.4f, %.4f, %.4f)", p.x, p.y, p.z);
+  }
+  if (ee_vels > 0) {
+    const auto& v = pathPlanResponse->end_effector_velocity_trajectory.front().twist.linear;
+    RCLCPP_INFO(this->get_logger(), "(async) First EE linear velocity: (%.6f, %.6f, %.6f)", v.x, v.y, v.z);
+  }
+
+  // Begin streaming EE velocity commands to follow the path
+  // this->startEEVelocityStreaming(pathPlanResponse->end_effector_velocity_trajectory, dt);
 }
 
 void PFDemo::createAndPublishObstacles() {
@@ -133,9 +140,8 @@ void PFDemo::createAndPublishObstacles() {
 geometry_msgs::msg::Pose PFDemo::getEndEffectorPose() {
   while (!this->tfBuffer->canTransform(this->fixedFrame, this->fixedFrame, tf2::TimePointZero, tf2::durationFromSec(0.1))) {}
   // Use the TF Listener to get the Pose of the `link_tcp` frame from the `world` frame
-  const std::string EE_TF_FRAME = "link_tcp";
   try {
-    auto tf = this->tfBuffer->lookupTransform(this->fixedFrame, EE_TF_FRAME, tf2::TimePointZero);
+    auto tf = this->tfBuffer->lookupTransform(this->fixedFrame, this->eeLinkName, tf2::TimePointZero);
     geometry_msgs::msg::Pose eePose;
     eePose.position.x = tf.transform.translation.x;
     eePose.position.y = tf.transform.translation.y;
@@ -145,14 +151,14 @@ geometry_msgs::msg::Pose PFDemo::getEndEffectorPose() {
     eePose.orientation.z = tf.transform.rotation.z;
     eePose.orientation.w = tf.transform.rotation.w;
     RCLCPP_INFO(this->get_logger(),
-      "Found TF (%s -> %s): (%.2f, %.2f, %.2f) [mm]", this->fixedFrame.c_str(), EE_TF_FRAME.c_str(),
+      "Found TF (%s -> %s): (%.2f, %.2f, %.2f) [mm]", this->fixedFrame.c_str(), this->eeLinkName.c_str(),
       eePose.position.x, eePose.position.y, eePose.position.z
     );
     return eePose;
   }
   catch (const tf2::TransformException& ex) {
     RCLCPP_ERROR(this->get_logger(),
-      "Failed to find TF (%s -> %s): %s", this->fixedFrame.c_str(), EE_TF_FRAME.c_str(), ex.what()
+      "Failed to find TF (%s -> %s): %s", this->fixedFrame.c_str(), this->eeLinkName.c_str(), ex.what()
     );
     return geometry_msgs::msg::Pose();
   }
@@ -222,176 +228,6 @@ void PFDemo::eeVelocityTimerCallback() {
   // Re-stamp for more accurate stamps
   cmd.header.stamp = this->now();
   this->eeVelocityPub->publish(cmd);
-}
-
-// Helper: save PlanPath response to CSV in data/ with same layout as pf_demo.py
-void PFDemo::save_planned_path_response(const std::shared_ptr<PlanPath::Response>& res) {
-  using std::chrono::nanoseconds;
-  // ensure data directory exists
-  std::filesystem::path data_dir("data");
-  if (!std::filesystem::exists(data_dir)) {
-    std::error_code ec;
-    std::filesystem::create_directories(data_dir, ec);
-    if (ec) {
-      RCLCPP_WARN(this->get_logger(), "Could not create data directory: %s", ec.message().c_str());
-    }
-  }
-
-  // prepare series
-  const auto& path_poses = res->end_effector_path.poses;
-  const auto& ee_vels = res->end_effector_velocity_trajectory;
-  const auto& jt = res->joint_trajectory;
-  const auto jt_points = jt.points;
-
-  size_t n_path = path_poses.size();
-  size_t n_vel = ee_vels.size();
-  size_t n_jt = jt_points.size();
-
-  std::vector<std::string> joint_names;
-  if (!jt.joint_names.empty()) {
-    joint_names = jt.joint_names;
-  }
-  size_t n_joints = joint_names.size();
-
-  // compute times (fallback logic mirrors python)
-  std::vector<double> times;
-  if (n_path > 0 && (path_poses[0].header.stamp.sec != 0 || path_poses[0].header.stamp.nanosec != 0)) {
-    double t0 = path_poses[0].header.stamp.sec + path_poses[0].header.stamp.nanosec * 1e-9;
-    for (const auto& p : path_poses) {
-      double ts = p.header.stamp.sec + p.header.stamp.nanosec * 1e-9;
-      times.push_back(ts - t0);
-    }
-  }
-  else if (n_vel > 0 && (ee_vels[0].header.stamp.sec != 0 || ee_vels[0].header.stamp.nanosec != 0)) {
-    double t0 = ee_vels[0].header.stamp.sec + ee_vels[0].header.stamp.nanosec * 1e-9;
-    for (const auto& v : ee_vels) {
-      double ts = v.header.stamp.sec + v.header.stamp.nanosec * 1e-9;
-      times.push_back(ts - t0);
-    }
-  }
-  else if (n_jt > 0) {
-    // use time_from_start if available
-    double t0 = 0.0;
-    if (jt_points[0].time_from_start.sec != 0 || jt_points[0].time_from_start.nanosec != 0) {
-      t0 = jt_points[0].time_from_start.sec + jt_points[0].time_from_start.nanosec * 1e-9;
-    }
-    for (const auto& pt : jt_points) {
-      double tfs = pt.time_from_start.sec + pt.time_from_start.nanosec * 1e-9;
-      times.push_back(tfs - t0);
-    }
-  }
-  else {
-    double est_dt = 0.1;
-    size_t maxlen = std::max({n_path, n_vel, n_jt, (size_t)1});
-    times.resize(maxlen);
-    for (size_t i = 0; i < maxlen; ++i) times[i] = i * est_dt;
-  }
-
-  size_t n_rows = std::max({times.size(), n_path, n_vel, n_jt});
-
-  // prepare CSV filename
-  auto now = std::chrono::system_clock::now();
-  auto t = std::chrono::system_clock::to_time_t(now);
-  std::tm tm = *std::localtime(&t);
-  std::ostringstream ss;
-  ss << std::put_time(&tm, "%Y%m%d_%H%M%S");
-  std::string filename = (data_dir / ("planned_path_" + ss.str() + ".csv")).string();
-
-  std::ofstream csv(filename);
-  if (!csv.is_open()) {
-    RCLCPP_ERROR(this->get_logger(), "Failed to open CSV file for writing: %s", filename.c_str());
-    return;
-  }
-
-  // header
-  std::vector<std::string> header = {"time_s", "ee_px", "ee_py", "ee_pz", "ee_qx", "ee_qy", "ee_qz", "ee_qw", "ee_vx", "ee_vy", "ee_vz"};
-  if (!joint_names.empty()) {
-    for (const auto& jn : joint_names) header.push_back(jn);
-  }
-  else {
-    // placeholder joint names to match python behavior
-    size_t cols = (n_rows > 0 ? n_joints : 0);
-    for (size_t i = 0; i < cols; ++i) header.push_back("joint_" + std::to_string(i));
-  }
-
-  // write header
-  for (size_t i = 0; i < header.size(); ++i) {
-    if (i) csv << ',';
-    csv << header[i];
-  }
-  csv << '\n';
-
-  // iterate rows, mirroring python's last-known logic
-  std::vector<double> last_joints(n_joints, std::numeric_limits<double>::quiet_NaN());
-  bool has_last_pose = false;
-  geometry_msgs::msg::Pose last_pose;
-  bool has_last_vel = false;
-  geometry_msgs::msg::Vector3 last_vel; last_vel.x = last_vel.y = last_vel.z = 0.0;
-
-  for (size_t i = 0; i < n_rows; ++i) {
-    double tval = (i < times.size()) ? times[i] : (times.empty() ? i * 0.1 : (times.back() + (i - times.size() + 1) * 0.1));
-
-    geometry_msgs::msg::Pose pose;
-    if (i < n_path) {
-      pose = path_poses[i].pose;
-      last_pose = pose;
-      has_last_pose = true;
-    }
-    else if (has_last_pose) {
-      pose = last_pose;
-    }
-    else {
-      // default empty pose leaves zeros
-    }
-
-    geometry_msgs::msg::Vector3 vel;
-    if (i < n_vel) {
-      vel = ee_vels[i].twist.linear;
-      last_vel = vel;
-      has_last_vel = true;
-    }
-    else if (has_last_vel) {
-      vel = last_vel;
-    }
-    else {
-      vel.x = vel.y = vel.z = 0.0;
-    }
-
-    // joints
-    std::vector<double> joints_row(n_joints, std::numeric_limits<double>::quiet_NaN());
-    if (i < n_jt) {
-      const auto& positions = jt_points[i].positions;
-      for (size_t j = 0; j < n_joints; ++j) {
-        if (j < positions.size()) {
-          joints_row[j] = positions[j];
-          last_joints[j] = positions[j];
-        }
-        else {
-          if (!std::isnan(last_joints[j])) joints_row[j] = last_joints[j];
-        }
-      }
-    }
-    else {
-      for (size_t j = 0; j < n_joints; ++j) {
-        if (!std::isnan(last_joints[j])) joints_row[j] = last_joints[j];
-      }
-    }
-
-    // write row
-    csv << tval << ','
-      << pose.position.x << ',' << pose.position.y << ',' << pose.position.z << ','
-      << pose.orientation.x << ',' << pose.orientation.y << ',' << pose.orientation.z << ',' << pose.orientation.w << ','
-      << vel.x << ',' << vel.y << ',' << vel.z;
-
-    for (size_t j = 0; j < n_joints; ++j) {
-      csv << ',';
-      if (!std::isnan(joints_row[j])) csv << joints_row[j];
-    }
-    csv << '\n';
-  }
-
-  csv.close();
-  RCLCPP_INFO(this->get_logger(), "Saved planned path CSV to %s", std::filesystem::absolute(filename).string().c_str());
 }
 
 int main(int argc, char* argv[]) {

@@ -24,6 +24,7 @@ public:
   ~PFDemo() = default;
 private:
   std::string fixedFrame; // RViz fixed frame for visualization
+  std::string eeLinkName; // End-effector link name
 
   // Create a service client for planning paths
   rclcpp::Client<PlanPath>::SharedPtr planPathClient;
@@ -33,12 +34,18 @@ private:
   rclcpp::Service<std_srvs::srv::Empty>::SharedPtr runPlanPathDemoService;
   std::shared_ptr<tf2_ros::Buffer> tfBuffer; // TF buffer for listening to Robot TFs
   std::shared_ptr<tf2_ros::TransformListener> tfListener; // TF listener for Robot TFs to populate buffer
-  
+
   void createAndPublishObstacles();
   geometry_msgs::msg::Pose getEndEffectorPose();
-  
-  // Save a PlanPath response to CSV (same format as pf_demo.py)
-  void save_planned_path_response(const std::shared_ptr<potential_fields_interfaces::srv::PlanPath::Response>& res);
+
+  // Service callback handlers
+  void handleRunPlanPathDemo(
+    const std_srvs::srv::Empty::Request::SharedPtr request,
+    std_srvs::srv::Empty::Response::SharedPtr response);
+
+  void handlePlanPathResponse(
+    rclcpp::Client<PlanPath>::SharedFuture future,
+    double dt);
 
   // Timer-based streaming of end-effector velocity commands
   void startEEVelocityStreaming(const std::vector<geometry_msgs::msg::TwistStamped>& eeVels, double dt);
