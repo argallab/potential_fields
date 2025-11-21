@@ -10,7 +10,6 @@
 
 # Immediate TODOs
 - Test Whole Body Velocity Path Planning with PF and Xarm
-- Allow PF with no goal, only obstacles (for avoidance behavior)
 - Include installation instructions for fcl, pinnochio, libfranka and other external dependencies in README
 - Fix DOCKER image to include all dependencies and build colcon build out of the box
   - Split into separate images for PF and robot dependencies
