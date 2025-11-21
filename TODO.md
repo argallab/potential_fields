@@ -9,16 +9,17 @@
 ---
 
 # Immediate TODOs
+- Test Whole Body Velocity Path Planning with PF and Xarm
 - Allow PF with no goal, only obstacles (for avoidance behavior)
 - Include installation instructions for fcl, pinnochio, libfranka and other external dependencies in README
 - Fix DOCKER image to include all dependencies and build colcon build out of the box
   - Split into separate images for PF and robot dependencies
 - Use `ros-jazzy-coal` as dependency for COAL. Clean up library usage for mesh collisions.
-
-# Future TODOs and Refactors
 - Investigate Configuration Space planning with the PF
   - Principles of Robot Motion, Choset et al.
   - Modern Robotics, Lynch and Park
+
+# Future TODOs and Refactors
 - namespace pfield c++ library and externalize from ROS package
   - Allow optional robot dependencies in pfield_lib CMakeLists.txt
   - ROS package should simply link with pfield_lib like a standard library
