@@ -92,6 +92,7 @@ private:
   TaskSpaceTwist prevQueryTwist; // Previous query twist for acceleration limiting
   rclcpp::Time lastQueryUpdate;  // Timestamp of last query pose integration step
   TaskSpaceTwist prevTwist; // Previous twist for acceleration limiting
+  std::vector<double> currentJointAngles; // Current joint angles for robot obstacle visualization
 
   rclcpp::TimerBase::SharedPtr timer; // Timer to periodically update the potential field
   rclcpp::Publisher<MarkerArray>::SharedPtr pFieldMarkerPub; // Publisher for PF Markers

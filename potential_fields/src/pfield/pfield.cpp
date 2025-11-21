@@ -15,7 +15,8 @@ void PotentialField::initializeKinematics(const std::string& urdfFilePath, const
   this->pfKinematics = std::make_unique<PFKinematics>(this->urdfFileName);
   const double maxExtent = this->pfKinematics->estimateRobotExtentRadius();
   // Assign influence distance using maximum robot extent or the default, whichever is more generous
-  this->influenceDistance = std::max(this->influenceDistance, maxExtent);
+  // TODO(Sharwin24): Uncomment this once the estimateRobotExtenRadius function is fixed and verified to be accurate
+  // this->influenceDistance = std::max(this->influenceDistance, maxExtent);
 }
 
 void PotentialField::updateObstaclesFromKinematics(const std::vector<double>& jointAngles) {
@@ -26,23 +27,26 @@ void PotentialField::updateObstaclesFromKinematics(const std::vector<double>& jo
 
 void PotentialField::addObstacle(PotentialFieldObstacle obstacle) {
   const std::string frameID = obstacle.getFrameID();
-  auto itIndex = this->envObstacleIndexMap.find(frameID);
-  if (itIndex != this->envObstacleIndexMap.end()) {
-    // Update existing obstacle in place
-    if (obstacle.getGroup() == ObstacleGroup::ROBOT) {
+  if (obstacle.getGroup() == ObstacleGroup::ROBOT) {
+    auto itIndex = this->robotObstacleIndexMap.find(frameID);
+    if (itIndex != this->robotObstacleIndexMap.end()) {
+      // Update existing robot obstacle
       this->robotObstacles[itIndex->second] = obstacle;
     }
     else {
-      this->envObstacles[itIndex->second] = obstacle;
-    }
-  }
-  else {
-    // Append new obstacle and record index
-    if (obstacle.getGroup() == ObstacleGroup::ROBOT) {
+      // Append new robot obstacle
       this->robotObstacles.push_back(obstacle);
       this->robotObstacleIndexMap.emplace(frameID, this->robotObstacles.size() - 1);
     }
+  }
+  else {
+    auto itIndex = this->envObstacleIndexMap.find(frameID);
+    if (itIndex != this->envObstacleIndexMap.end()) {
+      // Update existing environment obstacle
+      this->envObstacles[itIndex->second] = obstacle;
+    }
     else {
+      // Append new environment obstacle
       this->envObstacles.push_back(obstacle);
       this->envObstacleIndexMap.emplace(frameID, this->envObstacles.size() - 1);
     }
@@ -647,9 +651,6 @@ PlannedPath PotentialField::planPathFromTaskSpaceWrench(
   std::vector<double> jointAngles = startJointAngles;
   TaskSpaceTwist prevTwist; // previous applied twist (starts zero)
   double timeStamp = 0.0;
-
-  // TODO(Sharwin24): Implement backtracking or escape maneuvers if robot links collide with environment
-  // during path planning
   for (size_t iter = 0; iter < maxIters; ++iter) {
     // Perform RK4 integration step to get next pose and the applied twist
     // including removal of opposing repulsive force components and enforcement of motion constraints
@@ -814,10 +815,10 @@ bool PotentialField::isRobotInCollisionWithEnvironment(double clearanceThreshold
 bool PotentialField::createPlannedPathCSV(const PlannedPath& path, const std::string& filePath) const {
   // Creates a CSV file from the given PlannedPath with the following
   const unsigned int numJoints = (path.numPoints > 0) ? static_cast<unsigned int>(path.jointAngles[0].size()) : 0;
-  auto createJointHeaders = [numJoints]() -> std::string {
+  auto jointPositionHeaders = [numJoints]() -> std::string {
     std::string jointHeaders;
     for (unsigned int j = 0; j < numJoints; ++j) {
-      jointHeaders += "joint_" + std::to_string(j) + "_rad,";
+      jointHeaders += "joint_" + std::to_string(j + 1) + "_rad,";
     }
     if (!jointHeaders.empty()) {
       // Insert leading comma
@@ -826,6 +827,19 @@ bool PotentialField::createPlannedPathCSV(const PlannedPath& path, const std::st
       jointHeaders.pop_back();
     }
     return jointHeaders;
+  };
+  auto jointVelocityHeaders = [numJoints]() -> std::string {
+    std::string jointVelHeaders;
+    for (unsigned int j = 0; j < numJoints; ++j) {
+      jointVelHeaders += "joint_vel_" + std::to_string(j + 1) + "_rad_s,";
+    }
+    if (!jointVelHeaders.empty()) {
+      // Insert leading comma
+      jointVelHeaders = "," + jointVelHeaders;
+      // Remove trailing comma
+      jointVelHeaders.pop_back();
+    }
+    return jointVelHeaders;
   };
   // CSV Header with dynamic joint columns based on number of joints
   const std::string header =
@@ -836,7 +850,7 @@ bool PotentialField::createPlannedPathCSV(const PlannedPath& path, const std::st
     "ang_vel_x_rad_s,ang_vel_y_rad_s,ang_vel_z_rad_s,"
     "min_obstacle_clearance_m,"
     "num_joints"
-    + createJointHeaders();
+    + jointPositionHeaders() + jointVelocityHeaders();
 
   // Open file for writing
   std::ofstream csvFile(filePath);
@@ -886,6 +900,17 @@ bool PotentialField::createPlannedPathCSV(const PlannedPath& path, const std::st
     if (i < path.jointAngles.size()) {
       for (unsigned int j = 0; j < numJoints; ++j) {
         csvFile << path.jointAngles[i][j];
+        if (j < numJoints - 1) {
+          csvFile << ",";
+        }
+      }
+    }
+
+    // Write: joint velocities
+    if (i < path.jointVelocities.size()) {
+      csvFile << ",";
+      for (unsigned int j = 0; j < numJoints; ++j) {
+        csvFile << path.jointVelocities[i][j];
         if (j < numJoints - 1) {
           csvFile << ",";
         }

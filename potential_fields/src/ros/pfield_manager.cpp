@@ -96,7 +96,7 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
     this->motionPluginType.begin(),
     [](unsigned char c) { return std::tolower(c); }
   );
-  if (this->motionPluginType.empty()) {
+  if (this->motionPluginType.empty() || this->motionPluginType == "null") {
     this->motionPlugin = std::make_unique<NullMotionPlugin>();
   }
 #ifdef USING_FRANKA
@@ -127,22 +127,16 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   // Once IKSolver is initialized, assign it to the PF instance
   this->pField->setIKSolver(this->ikSolver);
 
+  // Initialize currentJointAngles
+  this->currentJointAngles.resize(this->pField->getNumJoints(), 0.0);
+
   // Allow the user to not use a URDF
   if (!this->urdfFileName.empty() && this->urdfFileName.ends_with(".urdf")) {
     try {
       this->pField->initializeKinematics(this->urdfFileName, this->eeFrame);
       RCLCPP_INFO(this->get_logger(), "PF Kinematics initialized from URDF: %s", this->urdfFileName.c_str());
       RCLCPP_INFO(this->get_logger(),
-        "PF Kinematics estimated influence distance from robot extend to be: %f", this->pField->getInfluenceDistance());
-
-      // Initialize robot obstacles at zero configuration
-      // Get the number of joints from the kinematics model
-      std::vector<double> zeroJointAngles(this->pField->getNumJoints(), 0.0);
-      RCLCPP_INFO(this->get_logger(), "Initializing robot obstacles with %zu joints at zero configuration",
-        zeroJointAngles.size());
-      this->pField->updateObstaclesFromKinematics(zeroJointAngles);
-      RCLCPP_INFO(this->get_logger(), "Robot collision obstacles initialized. Count: %zu",
-        this->pField->getRobotObstacles().size());
+        "PF Kinematics estimated influence distance from robot extend to be: %.4f [m]", this->pField->getInfluenceDistance());
     }
     catch (const std::exception& e) {
       RCLCPP_ERROR(this->get_logger(), "Failed to initialize PF Kinematics from URDF: %s", e.what());
@@ -156,7 +150,9 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   // Use reliable and transient_local QoS for RViz MarkerArray publisher
   auto markerPubQos = rclcpp::QoS(rclcpp::KeepLast(200)).reliable().transient_local();
   this->pFieldMarkerPub = this->create_publisher<MarkerArray>("pfield/markers", markerPubQos);
-  RCLCPP_INFO(this->get_logger(), "PF Markers publishing on: %s", this->pFieldMarkerPub->get_topic_name());
+  RCLCPP_INFO(this->get_logger(), "PF Markers publishing on '%s' at %.1f Hz", this->pFieldMarkerPub->get_topic_name(),
+    this->visualizerFrequency
+  );
 
   // Setup goal pose subscriber
   auto goalPoseQos = rclcpp::QoS(rclcpp::KeepLast(10)).reliable();
@@ -244,12 +240,6 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   // std::string filename = "pfield_data";
   // this->exportFieldDataToCSV(filename);
 
-  RCLCPP_INFO(
-    this->get_logger(),
-    "PotentialFieldManager fully initialized. Visualization running at %.1f Hz,",
-    this->visualizerFrequency
-  );
-
   // Run the timer for visualizing the potential field
   this->timer = this->create_wall_timer(
     std::chrono::duration<double>(1.0 / this->visualizerFrequency),
@@ -258,8 +248,6 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
 }
 
 void PotentialFieldManager::timerCallback() {
-  // Get updated obstacles from PFKinematics and update internal PF
-  // this->pField->updateObstaclesFromKinematics(this->motionPlugin->getCurrentJointAngles());
   // Update the query pose position based on integrating the PF velocity
   this->integrateQueryPoseFromField();
   MarkerArray pfieldMarkers = this->visualizePF(this->pField);
@@ -277,7 +265,16 @@ void PotentialFieldManager::integrateQueryPoseFromField() {
     this->queryPose.getPosition(), twist.linearVelocity, dt);
   Eigen::Quaterniond nextOrientation = this->pField->integrateAngularVelocity(
     this->queryPose.getOrientation(), twist.angularVelocity, dt);
+  // Update the query pose
   this->queryPose = SpatialVector(nextPosition, nextOrientation);
+  // Update robot obstacles based on query pose using IK
+  if (this->ikSolver) {
+    std::vector<double> newJoints = this->pField->computeInverseKinematics(this->queryPose, this->currentJointAngles);
+    if (!newJoints.empty()) {
+      this->currentJointAngles = newJoints;
+      this->pField->updateObstaclesFromKinematics(this->currentJointAngles);
+    }
+  }
   // Supply velocity-limited twist as previous for next acceleration limiting
   this->prevQueryTwist = twist;
 }
@@ -346,13 +343,40 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
     std::vector<double> startJointAnglesDouble(
       request->starting_joint_angles.cbegin(), request->starting_joint_angles.cend()
     );
-    planningResult = this->pField->planPathFromTaskSpaceWrench(
-      /*startPose=*/startSV,
-      /*startJointAngles=*/startJointAnglesDouble,
-      /*dt=*/request->delta_time,
-      /*goalTolerance=*/request->goal_tolerance,
-      /*maxIterations=*/request->max_iterations
-    );
+    if (request->planning_method == "task_space") {
+      RCLCPP_INFO(this->get_logger(), "Using Task-Space Wrench Planning");
+      planningResult = this->pField->planPathFromTaskSpaceWrench(
+        /*startPose=*/startSV,
+        /*startJointAngles=*/startJointAnglesDouble,
+        /*dt=*/request->delta_time,
+        /*goalTolerance=*/request->goal_tolerance,
+        /*maxIterations=*/request->max_iterations
+      );
+    }
+    else if (request->planning_method == "whole_body") {
+      RCLCPP_INFO(this->get_logger(), "Using Whole-Body Joint Velocity Planning");
+      planningResult = this->pField->planPathFromWholeBodyJointVelocities(
+        /*startPose=*/startSV,
+        /*startJointAngles=*/startJointAnglesDouble,
+        /*dt=*/request->delta_time,
+        /*goalTolerance=*/request->goal_tolerance,
+        /*maxIterations=*/request->max_iterations
+      );
+    }
+    else {
+      // Default to Task Space Wrench
+      if (!request->planning_method.empty() && request->planning_method != "task_space") {
+        RCLCPP_WARN(this->get_logger(), "Unknown planning method '%s'", request->planning_method.c_str());
+      }
+      RCLCPP_INFO(this->get_logger(), "Using Task-Space Wrench Planning");
+      planningResult = this->pField->planPathFromTaskSpaceWrench(
+        /*startPose=*/startSV,
+        /*startJointAngles=*/startJointAnglesDouble,
+        /*dt=*/request->delta_time,
+        /*goalTolerance=*/request->goal_tolerance,
+        /*maxIterations=*/request->max_iterations
+      );
+    }
   }
   catch (const std::exception& e) {
     RCLCPP_ERROR(this->get_logger(), "Exception during path planning: %s", e.what());
@@ -608,14 +632,40 @@ MarkerArray PotentialFieldManager::createThresholdMarkers(std::shared_ptr<Potent
 
 MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<PotentialField> pf) {
   MarkerArray markerArray;
+
+  // Clear previous markers to prevent trails
+  Marker deleteRobot;
+  deleteRobot.action = Marker::DELETEALL;
+  deleteRobot.ns = "robot_obstacles";
+  markerArray.markers.push_back(deleteRobot);
+
+  Marker deleteEnv;
+  deleteEnv.action = Marker::DELETEALL;
+  deleteEnv.ns = "environment_obstacles";
+  markerArray.markers.push_back(deleteEnv);
+
+  Marker deleteInf;
+  deleteInf.action = Marker::DELETEALL;
+  deleteInf.ns = "environment_influence_zones";
+  markerArray.markers.push_back(deleteInf);
+
   std::vector<PotentialFieldObstacle> envObstacles = pf->getEnvObstacles();
   std::vector<PotentialFieldObstacle> robotObstacles = pf->getRobotObstacles();
   // Combine both environment and robot obstacles for visualization
   std::vector<PotentialFieldObstacle> obstacles;
   obstacles.insert(obstacles.end(), envObstacles.begin(), envObstacles.end());
   obstacles.insert(obstacles.end(), robotObstacles.begin(), robotObstacles.end());
+
+  std::unordered_set<int> usedIDs;
+
   for (const auto& obstacle : obstacles) {
     int hashID = createHashID(obstacle);
+    // Ensure unique ID in this array
+    while (usedIDs.count(hashID)) {
+      hashID++;
+    }
+    usedIDs.insert(hashID);
+
     Marker obstacleMarker;
     obstacleMarker.header.frame_id = this->fixedFrame;
     obstacleMarker.header.stamp = this->now();
