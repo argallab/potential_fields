@@ -19,7 +19,8 @@ XArmIKSolver::XArmIKSolver() : IKSolver("xarm_ik_solver") {
   std::string urdf_path;
   try {
     urdf_path = ament_index_cpp::get_package_share_directory("pfields_demo") + "/urdf/xarm7.urdf";
-  } catch (const std::exception& e) {
+  }
+  catch (const std::exception& e) {
     std::cerr << "Error finding pfields_demo package: " << e.what() << std::endl;
     return;
   }
@@ -55,7 +56,6 @@ bool XArmIKSolver::solve(
   std::vector<double>& solution,
   Eigen::Matrix<double, 6, Eigen::Dynamic>& J,
   std::string& errorMsg) {
-  
   if (!initialized_) {
     errorMsg = "XArmIKSolver not initialized (failed to load URDF or KDL chain)";
     return false;
@@ -64,9 +64,10 @@ bool XArmIKSolver::solve(
   // Use provided seed if valid, otherwise fall back to home configuration
   KDL::JntArray q(kdl_chain_.getNrOfJoints());
   if (seed.size() == kdl_chain_.getNrOfJoints()) {
-    for(unsigned int i=0; i<kdl_chain_.getNrOfJoints(); ++i) q(i) = seed[i];
-  } else {
-    for(unsigned int i=0; i<kdl_chain_.getNrOfJoints(); ++i) q(i) = homeJointAngles[i];
+    for (unsigned int i = 0; i < kdl_chain_.getNrOfJoints(); ++i) q(i) = seed[i];
+  }
+  else {
+    for (unsigned int i = 0; i < kdl_chain_.getNrOfJoints(); ++i) q(i) = homeJointAngles[i];
   }
 
   int max_iter = 500;
@@ -80,22 +81,22 @@ bool XArmIKSolver::solve(
       errorMsg = "FK solver failed";
       return false;
     }
-    
+
     // Error
     Eigen::Vector3d p_target = targetPose.translation();
     Eigen::Vector3d p_current(current_pose.p.x(), current_pose.p.y(), current_pose.p.z());
     Eigen::Vector3d p_err = p_target - p_current;
-    
+
     Eigen::Quaterniond q_target(targetPose.rotation());
-    
+
     Eigen::Matrix3d R_current;
-    for(int i=0; i<3; ++i)
-      for(int j=0; j<3; ++j)
-        R_current(i,j) = current_pose.M(i,j);
+    for (int i = 0; i < 3; ++i)
+      for (int j = 0; j < 3; ++j)
+        R_current(i, j) = current_pose.M(i, j);
 
     Eigen::Quaterniond q_current(R_current);
     if (q_current.dot(q_target) < 0) q_current.coeffs() *= -1;
-    
+
     Eigen::AngleAxisd aa(q_target * q_current.inverse());
     Eigen::Vector3d r_err = aa.axis() * aa.angle();
 
@@ -105,8 +106,8 @@ bool XArmIKSolver::solve(
     if (err.norm() < tol) {
       // Converged
       solution.resize(kdl_chain_.getNrOfJoints());
-      for(unsigned int i=0; i<kdl_chain_.getNrOfJoints(); ++i) solution[i] = q(i);
-      
+      for (unsigned int i = 0; i < kdl_chain_.getNrOfJoints(); ++i) solution[i] = q(i);
+
       KDL::Jacobian J_kdl(kdl_chain_.getNrOfJoints());
       jac_solver_->JntToJac(q, J_kdl);
       J = J_kdl.data;
@@ -123,13 +124,17 @@ bool XArmIKSolver::solve(
     std::vector<int> jparse_singular_index(J_eigen.rows(), 0);
     Eigen::MatrixXd U_safety, U_new_proj, U_new_sing;
     Eigen::VectorXd S_new_safety, S_new_proj, Phi;
-    
-    Jparse_calculation(J_eigen, J_parse, J_safety_nullspace, jparse_singular_index, U_safety, S_new_safety, U_new_proj, S_new_proj, U_new_sing, Phi, gamma_, singular_direction_gain_position_, singular_direction_gain_angular_);
+
+    Jparse_calculation(
+      J_eigen, J_parse, J_safety_nullspace, jparse_singular_index, U_safety,
+      S_new_safety, U_new_proj, S_new_proj, U_new_sing, Phi, gamma_,
+      singular_direction_gain_position_, singular_direction_gain_angular_
+    );
 
     // Update q
     Eigen::VectorXd dq = J_parse * err;
-    
-    for(unsigned int i=0; i<kdl_chain_.getNrOfJoints(); ++i) {
+
+    for (unsigned int i = 0; i < kdl_chain_.getNrOfJoints(); ++i) {
       q(i) += lambda * dq(i);
     }
   }
@@ -139,14 +144,14 @@ bool XArmIKSolver::solve(
 }
 
 bool XArmIKSolver::computeJacobian(
-    const std::vector<double>& jointPositions,
-    Eigen::Matrix<double, 6, Eigen::Dynamic>& J) {
+  const std::vector<double>& jointPositions,
+  Eigen::Matrix<double, 6, Eigen::Dynamic>& J) {
   if (!initialized_) return false;
   if (jointPositions.size() != kdl_chain_.getNrOfJoints()) return false;
-  
+
   KDL::JntArray q(kdl_chain_.getNrOfJoints());
-  for(unsigned int i=0; i<kdl_chain_.getNrOfJoints(); ++i) q(i) = jointPositions[i];
-  
+  for (unsigned int i = 0; i < kdl_chain_.getNrOfJoints(); ++i) q(i) = jointPositions[i];
+
   KDL::Jacobian J_kdl(kdl_chain_.getNrOfJoints());
   jac_solver_->JntToJac(q, J_kdl);
   J = J_kdl.data;
@@ -167,7 +172,20 @@ Eigen::MatrixXd XArmIKSolver::pseudoInverse(const Eigen::MatrixXd& J, double tol
   return svd.matrixV() * S_pinv * svd.matrixU().transpose();
 }
 
-void XArmIKSolver::Jparse_calculation(const Eigen::MatrixXd& J, Eigen::MatrixXd& J_parse, Eigen::MatrixXd& J_safety_nullspace, std::vector<int>& jparse_singular_index, Eigen::MatrixXd& U_safety, Eigen::VectorXd& S_new_safety, Eigen::MatrixXd& U_new_proj, Eigen::VectorXd& S_new_proj, Eigen::MatrixXd& U_new_sing, Eigen::VectorXd& Phi, double& gamma, double& singular_direction_gain_position, double& singular_direction_gain_angular) {
+void XArmIKSolver::Jparse_calculation(
+  const Eigen::MatrixXd& J,
+  Eigen::MatrixXd& J_parse,
+  Eigen::MatrixXd& J_safety_nullspace,
+  std::vector<int>& jparse_singular_index,
+  Eigen::MatrixXd& U_safety,
+  Eigen::VectorXd& S_new_safety,
+  Eigen::MatrixXd& U_new_proj,
+  Eigen::VectorXd& S_new_proj,
+  Eigen::MatrixXd& U_new_sing,
+  Eigen::VectorXd& Phi,
+  double& gamma,
+  double& singular_direction_gain_position,
+  double& singular_direction_gain_angular) {
   /*
   Steps are as follows:
   1. Find the SVD of J
@@ -300,7 +318,6 @@ void XArmIKSolver::Jparse_calculation(const Eigen::MatrixXd& J, Eigen::MatrixXd&
 
   //8. Find the null space of J_safety
   J_safety_nullspace = Eigen::MatrixXd::Identity(J_safety.cols(), J_safety.cols()) - J_safety_pinv * J_safety;
-
 }
 
 XArmPlugin::XArmPlugin() : MotionPlugin("xarm_motion_plugin") {

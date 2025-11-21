@@ -377,6 +377,7 @@ std::pair<SpatialVector, TaskSpaceTwist> PotentialField::rungeKuttaStep(const Sp
 }
 
 Eigen::Vector3d PotentialField::computeAttractiveForceLinear(const SpatialVector& queryPose) const {
+  if (!this->goalSet) return Eigen::Vector3d::Zero();
   // Choset Attractive Potential: F = zeta * (q - q_goal)
   const Eigen::Vector3d direction = queryPose.getPosition() - this->goalPose.getPosition();
   const double magnitude = direction.norm();
@@ -428,7 +429,7 @@ double PotentialField::minClearanceAlongSegment(const Eigen::Vector3d& from, con
 double PotentialField::computeDynamicQuadraticThreshold(const SpatialVector& queryPose) const {
   // Baseline from existing parameter
   double baseline = this->defaultDStarThreshold;
-  if (!this->isUsingDynamicQuadraticThreshold()) { return baseline; }
+  if (!this->isUsingDynamicQuadraticThreshold() || !this->goalSet) { return baseline; }
 
   // Clearance near goal and along straight-line path to goal
   const Eigen::Vector3d goalPosition = this->goalPose.getPosition();
@@ -466,6 +467,7 @@ double PotentialField::computeDynamicQuadraticThreshold(const SpatialVector& que
 }
 
 Eigen::Vector3d PotentialField::computeAttractiveMoment(const SpatialVector& queryPose) const {
+  if (!this->goalSet) return Eigen::Vector3d::Zero();
   // Quaternion error that rotates current -> goal (shortest path)
   Eigen::Quaterniond quatError = (
     this->goalPose.getOrientation() * queryPose.getOrientation().conjugate()
@@ -643,7 +645,6 @@ PlannedPath PotentialField::planPathFromTaskSpaceWrench(
   const double dt,
   const double goalTolerance,
   const size_t maxIters) {
-
   // Create path and initialize loop variables
   PlannedPath path;
   const double stepDt = (dt > 0.0) ? dt : 0.1;
@@ -699,7 +700,6 @@ PlannedPath PotentialField::planPathFromWholeBodyJointVelocities(
   const double dt,
   const double goalTolerance,
   const size_t maxIters) {
-
   // Create path and initialize loop variables
   PlannedPath path;
   const double stepDt = (dt > 0.0) ? dt : 0.1;

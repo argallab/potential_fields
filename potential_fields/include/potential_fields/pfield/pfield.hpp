@@ -136,7 +136,8 @@ public:
     maxLinearAcceleration(DEFAULT_MAX_LINEAR_ACCELERATION),
     maxAngularAcceleration(DEFAULT_MAX_ANGULAR_ACCELERATION),
     influenceDistance(DEFAULT_INFLUENCE_DISTANCE),
-    goalPose(SpatialVector(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity())) {}
+    goalPose(SpatialVector(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity())),
+    goalSet(false) {}
   ~PotentialField() = default;
 
   PotentialField(const PotentialField& other) :
@@ -149,6 +150,7 @@ public:
     maxAngularAcceleration(other.maxAngularAcceleration),
     influenceDistance(other.influenceDistance),
     goalPose(other.goalPose),
+    goalSet(other.goalSet),
     envObstacles(other.envObstacles),
     robotObstacles(other.robotObstacles) {}
 
@@ -167,7 +169,8 @@ public:
     maxLinearAcceleration(DEFAULT_MAX_LINEAR_ACCELERATION),
     maxAngularAcceleration(DEFAULT_MAX_ANGULAR_ACCELERATION),
     influenceDistance(DEFAULT_INFLUENCE_DISTANCE),
-    goalPose(goalPose) {}
+    goalPose(goalPose),
+    goalSet(true) {}
 
   PotentialField(SpatialVector goalPose, double attractiveGain, double repulsiveGain, double rotationalAttractiveGain) :
     attractiveGain(attractiveGain),
@@ -178,7 +181,8 @@ public:
     maxLinearAcceleration(DEFAULT_MAX_LINEAR_ACCELERATION),
     maxAngularAcceleration(DEFAULT_MAX_ANGULAR_ACCELERATION),
     influenceDistance(DEFAULT_INFLUENCE_DISTANCE),
-    goalPose(goalPose) {}
+    goalPose(goalPose),
+    goalSet(true) {}
 
   PotentialField(double attractiveGain, double repulsiveGain, double rotationalAttractiveGain) :
     attractiveGain(attractiveGain),
@@ -189,7 +193,8 @@ public:
     maxLinearAcceleration(DEFAULT_MAX_LINEAR_ACCELERATION),
     maxAngularAcceleration(DEFAULT_MAX_ANGULAR_ACCELERATION),
     influenceDistance(DEFAULT_INFLUENCE_DISTANCE),
-    goalPose(SpatialVector(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity())) {}
+    goalPose(SpatialVector(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity())),
+    goalSet(false) {}
 
   PotentialField(
     double attractiveGain, double repulsiveGain, double rotationalAttractiveGain,
@@ -203,7 +208,8 @@ public:
     maxLinearAcceleration(DEFAULT_MAX_LINEAR_ACCELERATION),
     maxAngularAcceleration(DEFAULT_MAX_ANGULAR_ACCELERATION),
     influenceDistance(influenceDistance),
-    goalPose(SpatialVector(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity())) {}
+    goalPose(SpatialVector(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity())),
+    goalSet(false) {}
 
   PotentialField(
     double attractiveGain, double repulsiveGain, double rotationalAttractiveGain,
@@ -218,7 +224,8 @@ public:
     maxLinearAcceleration(maxLinearAcceleration),
     maxAngularAcceleration(maxAngularAcceleration),
     influenceDistance(influenceDistance),
-    goalPose(SpatialVector(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity())) {}
+    goalPose(SpatialVector(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity())),
+    goalSet(false) {}
 
   PotentialField(
     SpatialVector goalPose,
@@ -234,7 +241,8 @@ public:
     maxLinearAcceleration(maxLinearAcceleration),
     maxAngularAcceleration(maxAngularAcceleration),
     influenceDistance(influenceDistance),
-    goalPose(goalPose) {}
+    goalPose(goalPose),
+    goalSet(true) {}
 
 
   PotentialField& operator=(const PotentialField& other) {
@@ -243,6 +251,7 @@ public:
       this->repulsiveGain = other.repulsiveGain;
       this->rotationalAttractiveGain = other.rotationalAttractiveGain;
       this->goalPose = other.goalPose;
+      this->goalSet = other.goalSet;
       this->envObstacles = other.envObstacles;
       this->robotObstacles = other.robotObstacles;
     }
@@ -270,6 +279,7 @@ public:
     return this->attractiveGain == other.attractiveGain &&
       this->rotationalAttractiveGain == other.rotationalAttractiveGain &&
       this->goalPose == other.goalPose &&
+      this->goalSet == other.goalSet &&
       obstaclesEqual;
   }
   bool operator!=(const PotentialField& other) const { return !(*this == other); }
@@ -287,7 +297,8 @@ public:
   void setMaxLinearAcceleration(double newMaxLinearAcceleration) { this->maxLinearAcceleration = newMaxLinearAcceleration; }
   void setMaxAngularAcceleration(double newMaxAngularAcceleration) { this->maxAngularAcceleration = newMaxAngularAcceleration; }
   void setInfluenceDistance(double newInfluenceDistance) { this->influenceDistance = newInfluenceDistance; }
-  void setGoalPose(SpatialVector newGoalPose) { this->goalPose = newGoalPose; }
+  void setGoalPose(SpatialVector newGoalPose) { this->goalPose = newGoalPose; this->goalSet = true; }
+  void clearGoalPose() { this->goalSet = false; }
   void setIKSolver(std::shared_ptr<IKSolver> ikSolver) { this->ikSolver = ikSolver; }
   void setDynamicQuadraticThreshold(bool enabled) { this->dynamicQuadraticThresholdEnabled = enabled; }
   double getAttractiveGain() const { return this->attractiveGain; }
@@ -301,6 +312,7 @@ public:
   size_t getNumJoints() const { return this->pfKinematics ? this->pfKinematics->getNumJoints() : 0; }
   size_t getNumLinks() const { return this->pfKinematics ? this->pfKinematics->getNumLinks() : 0; }
   bool isUsingDynamicQuadraticThreshold() const { return this->dynamicQuadraticThresholdEnabled; }
+  bool isGoalSet() const { return this->goalSet; }
   SpatialVector getGoalPose() const { return this->goalPose; }
   std::vector<PotentialFieldObstacle> getEnvObstacles() const { return this->envObstacles; }
   std::vector<PotentialFieldObstacle> getRobotObstacles() const { return this->robotObstacles; }
@@ -711,6 +723,7 @@ private:
   double maxAngularAcceleration; // [rad/s^2]
   double influenceDistance; // [m] global influence distance
   SpatialVector goalPose; // Current GoalPose
+  bool goalSet = false; // Whether a goal pose has been set
   std::vector<PotentialFieldObstacle> envObstacles; // Obstacle list
   std::vector<PotentialFieldObstacle> robotObstacles; // Obstacle list
   std::unordered_map<std::string, size_t> envObstacleIndexMap; // Fast lookup for obstacle updates/removals by ID

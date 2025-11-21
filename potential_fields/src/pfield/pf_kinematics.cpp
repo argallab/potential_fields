@@ -14,7 +14,9 @@ PFKinematics::PFKinematics(const std::string& urdfFileName) {
     pinocchio::urdf::buildModel(urdfFileName, this->model);
   }
   catch (const std::exception& e) {
-    throw std::runtime_error(std::string("PFKinematics Constructor: Failed to load URDF model from '") + urdfFileName + "': " + e.what());
+    throw std::runtime_error(
+      std::string("PFKinematics Constructor: Failed to load URDF model from '") + urdfFileName + "': " + e.what()
+    );
   }
   this->data = pinocchio::Data(this->model);
   this->robotModel.initFile(urdfFileName);

@@ -59,7 +59,7 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   this->eeFrame = this->declare_parameter("end_effector_frame", "ee_link"); // End-effector frame name
   this->visualizerBufferArea = this->declare_parameter("visualizer_buffer_area", 1.0); // Extra area to visualize the PF [m]
   this->fieldResolution = this->declare_parameter("field_resolution", 0.5); // Resolution of the potential field grid [m]
-  this->visualizeFieldVectors = this->declare_parameter("visualize_field_vectors", false); // Whether to visualize the potential field vectors
+  this->visualizeFieldVectors = this->declare_parameter("visualize_field_vectors", false); // Whether to visualize the PF vectors
   this->urdfFileName = this->declare_parameter("urdf_file_path", std::string());
   this->motionPluginType = this->declare_parameter("motion_plugin_type", std::string()); // Motion Plugin Type [e.g. "franka"]
   // Get parameters from yaml file
@@ -601,6 +601,7 @@ MarkerArray PotentialFieldManager::createQueryPoseMarker() {
 
 MarkerArray PotentialFieldManager::createThresholdMarkers(std::shared_ptr<PotentialField> pf) {
   MarkerArray markerArray;
+  if (!pf->isGoalSet()) { return markerArray; }
   // Create a translucent sphere representing the dStarThreshold around the goal
   const SpatialVector goalPose = pf->getGoalPose();
   Marker thresholdMarker;
@@ -842,6 +843,8 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<Potenti
 
 MarkerArray PotentialFieldManager::createGoalMarker(std::shared_ptr<PotentialField> pf) {
   // Create a green sphere marker
+  MarkerArray markerArray;
+  if (!pf->isGoalSet()) { return markerArray; }
   Marker goalMarker;
   goalMarker.header.frame_id = this->fixedFrame;
   goalMarker.header.stamp = this->now();

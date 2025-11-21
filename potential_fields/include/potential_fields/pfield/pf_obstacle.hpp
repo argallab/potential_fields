@@ -160,7 +160,11 @@ public:
         meshCollisionData.reset();
       }
     }
-    this->toCoalCollisionObject();
+    // Only attempt to create the COAL object if we have valid data.
+    // For MESH types, this means meshCollisionData must be loaded.
+    if (type != ObstacleType::MESH || meshCollisionData) {
+      this->toCoalCollisionObject();
+    }
   }
 
   PotentialFieldObstacle(const PotentialFieldObstacle& other) :

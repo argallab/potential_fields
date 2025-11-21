@@ -66,7 +66,11 @@ private:
 
   // Helper methods
   Eigen::MatrixXd pseudoInverse(const Eigen::MatrixXd& J, double tol = 1e-6);
-  void Jparse_calculation(const Eigen::MatrixXd& J, Eigen::MatrixXd& J_parse, Eigen::MatrixXd& J_safety_nullspace, std::vector<int>& jparse_singular_index, Eigen::MatrixXd& U_safety, Eigen::VectorXd& S_new_safety, Eigen::MatrixXd& U_new_proj, Eigen::VectorXd& S_new_proj, Eigen::MatrixXd& U_new_sing, Eigen::VectorXd& Phi, double& gamma, double& singular_direction_gain_position, double& singular_direction_gain_angular);
+  void Jparse_calculation(
+    const Eigen::MatrixXd& J, Eigen::MatrixXd& J_parse, Eigen::MatrixXd& J_safety_nullspace,
+    std::vector<int>& jparse_singular_index, Eigen::MatrixXd& U_safety, Eigen::VectorXd& S_new_safety,
+    Eigen::MatrixXd& U_new_proj, Eigen::VectorXd& S_new_proj, Eigen::MatrixXd& U_new_sing, Eigen::VectorXd& Phi,
+    double& gamma, double& singular_direction_gain_position, double& singular_direction_gain_angular);
 };
 
 class XArmPlugin : public MotionPlugin {

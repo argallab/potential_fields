@@ -94,12 +94,21 @@ TEST(PotentialFieldTest, AttractiveFieldPullsTowardGoal) {
 
 TEST(PotentialFieldTest, AttractiveGainScaling) {
   PotentialField pf(3.0, 0.0, 0.0, 0.0, 10.0, 1.0, 5.0, 5.0);
+  pf.setGoalPose(SpatialVector(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity()));
   SpatialVector query(Eigen::Vector3d(2.0, 0.0, 0.0));
   TaskSpaceTwist vel = pf.evaluateVelocityAtPose(query);
   // With d* = 1.0 (fixed, dynamic disabled), distance(=2) > d* so we are in the conical region.
   // Expected force magnitude = gain * d* = 3 * 1 = 3 toward the goal (negative x).
   EXPECT_NEAR(vel.getLinearVelocity().x(), -3.0, 1e-6);
   EXPECT_NEAR(vel.getLinearVelocity().y(), 0.0, 1e-6);
+}
+
+TEST(PotentialFieldTest, NoGoalNoAttraction) {
+  PotentialField pf(1.0, 0.0, 0.0); // Attractive gain 1.0, but no goal set
+  SpatialVector query(Eigen::Vector3d(2.0, 0.0, 0.0));
+  TaskSpaceTwist vel = pf.evaluateVelocityAtPose(query);
+  EXPECT_EQ(vel.getLinearVelocity(), Eigen::Vector3d::Zero());
+  EXPECT_EQ(vel.getAngularVelocity(), Eigen::Vector3d::Zero());
 }
 
 TEST(PotentialFieldTest, RepulsiveFieldPushesAwayFromObstacle) {

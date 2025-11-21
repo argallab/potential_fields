@@ -25,7 +25,7 @@ struct CollisionCatalogEntry {
 class PFKinematics {
 public:
   PFKinematics() = default;
-  PFKinematics(const std::string& urdfFileName);
+  explicit PFKinematics(const std::string& urdfFileName);
   ~PFKinematics() = default;
 
   pinocchio::Model& getModel() { return this->model; }
