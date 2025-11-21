@@ -14,6 +14,9 @@ float32 goal_tolerance
 # Max iterations for the planner (Default is 30000)
 int32 max_iterations
 
+# Planning method to use: "task_space" (default) or "whole_body"
+string planning_method
+
 ---
 bool success
 nav_msgs/Path end_effector_path

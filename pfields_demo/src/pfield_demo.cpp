@@ -61,7 +61,14 @@ void PFDemo::handleRunPlanPathDemo(
   geometry_msgs::msg::PoseStamped startPose;
   startPose.header.stamp = this->now();
   startPose.header.frame_id = this->fixedFrame;
-  startPose.pose = this->getEndEffectorPose();
+  // startPose.pose = this->getEndEffectorPose();
+  startPose.pose.position.x = 0.39;
+  startPose.pose.position.y = 0.0;
+  startPose.pose.position.z = 0.2935;
+  startPose.pose.orientation.x = 0.0;
+  startPose.pose.orientation.y = 0.0;
+  startPose.pose.orientation.z = 0.0;
+  startPose.pose.orientation.w = 1.0;
 
   geometry_msgs::msg::PoseStamped goalPose;
   goalPose.header.stamp = this->now();
@@ -71,10 +78,12 @@ void PFDemo::handleRunPlanPathDemo(
   goalPose.pose.position.y += 0.05; // Move +Y 50mm
 
   pathPlanRequest->start = startPose;
+  pathPlanRequest->starting_joint_angles = std::vector<float>(7, 0.0); // 7-DOF at zero position
   pathPlanRequest->goal = goalPose;
   pathPlanRequest->delta_time = 0.02; // 2 ms between waypoints
   pathPlanRequest->goal_tolerance = 0.001; // 1 mm tolerance
   pathPlanRequest->max_iterations = 30000; // Max iterations for planning
+  pathPlanRequest->planning_method = "task_space"; // Use task-space planning
   const double dt = pathPlanRequest->delta_time;
 
   // Publish the goal pose
