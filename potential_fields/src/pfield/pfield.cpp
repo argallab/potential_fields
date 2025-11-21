@@ -533,10 +533,9 @@ Eigen::VectorXd PotentialField::computeEndEffectorAttractionJointTorques(
   taskForce << eeWrench.force, eeWrench.torque;
 
   // Get end-effector Jacobian (6xN)
-  Eigen::MatrixXd J_ee = this->pfKinematics->getJacobianAtPoint(
+  Eigen::MatrixXd J_ee = this->pfKinematics->getSpatialJacobianAtPoint(
     this->eeLinkName, eePose.getPosition(), jointAngles
   );
-
   // Convert task-space force to joint torques: tau = J^T * F
   return J_ee.transpose() * taskForce;
 }
@@ -595,9 +594,17 @@ Eigen::VectorXd PotentialField::computeWholeBodyRepulsionJointTorques(
         const double magnitude = this->repulsiveGain * (1.0 / d - 1.0 / Q) * (1.0 / (d * d));
         Eigen::Vector3d F_rep = direction * magnitude;
 
+        // Extract the actual link name from the obstacle ID (format: "linkName::collisionName")
+        std::string obstacleID = link.getFrameID();
+        std::string linkName = obstacleID;
+        size_t separatorPos = obstacleID.find("::");
+        if (separatorPos != std::string::npos) {
+          linkName = obstacleID.substr(0, separatorPos);
+        }
+
         // Get Jacobian at the nearest point on this link
         Eigen::MatrixXd J_link = this->pfKinematics->getJacobianAtPoint(
-          link.getFrameID(), p_robot, jointAngles
+          linkName, p_robot, jointAngles
         );
 
         // Initialize joint torques vector on first iteration
@@ -715,7 +722,12 @@ PlannedPath PotentialField::planPathFromWholeBodyJointVelocities(
 
   SpatialVector currentEEPose = this->pfKinematics->computeEndEffectorPose(currentJointAngles, this->eeLinkName);
 
+  std::cout << "[DEBUG] planPathFromWholeBodyJointVelocities: Starting planning loop. MaxIters=" << maxIters << std::endl;
+
   for (size_t iter = 0; iter < maxIters; ++iter) {
+    if (iter % 1000 == 0) {
+      std::cout << "[DEBUG] planPathFromWholeBodyJointVelocities: Iteration " << iter << std::endl;
+    }
     // --- 1. Update robot obstacles from current joint configuration ---
     this->updateObstaclesFromKinematics(currentJointAngles);
 

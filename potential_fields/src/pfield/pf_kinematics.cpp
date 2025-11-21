@@ -347,6 +347,47 @@ Eigen::MatrixXd PFKinematics::getJacobianAtPoint(const std::string& linkName, co
   return J_point; // Returns a 3xN matrix
 }
 
+Eigen::MatrixXd PFKinematics::getSpatialJacobianAtPoint(const std::string& linkName, const Eigen::Vector3d& pointInWorldFrame,
+  const std::vector<double>& jointAngles) {
+  // 1. Update model state (ensure forward kinematics was called recently or call it here)
+  Eigen::VectorXd q = Eigen::VectorXd::Zero(this->model.nq);
+  for (size_t i = 0; i < jointAngles.size(); ++i) {
+    int qi = this->jointQIndices[i];
+    if (qi >= 0) q(qi) = jointAngles[i];
+  }
+
+  // 2. Get the Frame ID
+  if (!model.existFrame(linkName)) {
+    throw std::runtime_error("Link not found: " + linkName);
+  }
+  pinocchio::FrameIndex frameId = model.getFrameId(linkName);
+
+  // 3. Compute the Jacobian at the Frame Origin (Local World Aligned)
+  // J_frame is 6xN (3 linear, 3 angular)
+  pinocchio::Data::Matrix6x J_frame(6, model.nv);
+  J_frame.setZero();
+
+  // computes J in the world frame centered at the joint
+  pinocchio::computeJointJacobians(model, data, q);
+  pinocchio::getFrameJacobian(model, data, frameId, pinocchio::LOCAL_WORLD_ALIGNED, J_frame);
+
+  // 4. Transport Jacobian to the Witness Point
+  Eigen::Vector3d p_origin = data.oMf[frameId].translation();
+  Eigen::Vector3d r = pointInWorldFrame - p_origin; // Vector from link origin to point
+
+  // Linear velocity at point P is: J_linear - skew(r) * J_angular
+  Eigen::MatrixXd J_linear = J_frame.topRows(3) -
+    pinocchio::skew(r) * J_frame.bottomRows(3);
+  Eigen::MatrixXd J_angular = J_frame.bottomRows(3);
+
+  // Combine into 6xN spatial Jacobian
+  Eigen::MatrixXd J_spatial(6, model.nv);
+  J_spatial.topRows(3) = J_linear;
+  J_spatial.bottomRows(3) = J_angular;
+
+  return J_spatial;
+}
+
 SpatialVector PFKinematics::computeEndEffectorPose(const std::vector<double>& jointAngles, const std::string& eeLinkName) {
   // Convert joint angles to Eigen::VectorXd
   Eigen::VectorXd q = Eigen::VectorXd::Zero(this->model.nq);

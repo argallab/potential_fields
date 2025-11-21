@@ -102,6 +102,17 @@ public:
     const std::vector<double>& jointAngles);
 
   /**
+   * @brief Computes the 6D Spatial Jacobian at a point attached to a link
+   *
+   * @param linkName The name of the link
+   * @param pointInWorldFrame The point in world coordinates where the Jacobian is evaluated
+   * @param jointAngles The joint configuration
+   * @return Eigen::MatrixXd The 6xN Jacobian matrix [v; w]
+   */
+  Eigen::MatrixXd getSpatialJacobianAtPoint(const std::string& linkName, const Eigen::Vector3d& pointInWorldFrame,
+    const std::vector<double>& jointAngles);
+
+  /**
    * @brief Computes the end-effector pose from joint angles using forward kinematics
    *
    * @param jointAngles The joint configuration [rad]

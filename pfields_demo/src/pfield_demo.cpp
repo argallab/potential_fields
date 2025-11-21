@@ -83,7 +83,7 @@ void PFDemo::handleRunPlanPathDemo(
   pathPlanRequest->delta_time = 0.02; // 2 ms between waypoints
   pathPlanRequest->goal_tolerance = 0.001; // 1 mm tolerance
   pathPlanRequest->max_iterations = 30000; // Max iterations for planning
-  pathPlanRequest->planning_method = "task_space"; // Use task-space planning
+  pathPlanRequest->planning_method = "whole_body";
   const double dt = pathPlanRequest->delta_time;
 
   // Publish the goal pose
