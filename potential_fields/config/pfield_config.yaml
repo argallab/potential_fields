@@ -12,4 +12,3 @@ pfield_manager:
     visualize_field_vectors: false # Whether to visualize the potential field vectors (Slows down computation if true)
     visualizer_buffer_area: 0.5 # Extra area around obstacles and goal to visualize the PF [m]
     field_resolution: 1.0 # Resolution to show PF velocity arrows in RViz [m]
-    motion_plugin_type: "null" # Motion plugin to use (e.g., "null", "franka", "xarm")

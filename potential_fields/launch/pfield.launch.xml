@@ -15,6 +15,7 @@
   <!-- Potential Field Manager -->
   <node pkg="potential_fields" exec="pfield_manager" name="pfield_manager" output="screen">
     <param from="$(find-pkg-share potential_fields)/config/pfield_config.yaml"/>
+    <!-- Non PF config args are passed in directly -->
     <param name="fixed_frame" value="$(var rviz_fixed_frame)"/>
     <param name="end_effector_frame" value="$(var end_effector_frame)"/>
     <param name="urdf_file_path" value="$(var urdf_file_path)"/>
