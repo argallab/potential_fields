@@ -15,6 +15,7 @@ float32 goal_tolerance
 int32 max_iterations
 
 # Planning method to use: "task_space" (default) or "whole_body"
+# TODO(Sharwin24): Initialize srv variables with these definitions as well as a default to task_space
 string planning_method
 
 ---
