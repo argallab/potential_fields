@@ -65,17 +65,20 @@ void PFDemo::handleRunPlanPathDemo(
   startPose.pose.position.x = 0.39;
   startPose.pose.position.y = 0.0;
   startPose.pose.position.z = 0.2935;
-  startPose.pose.orientation.x = 0.0;
+  // Z axis pointing down, X axis forward
+  startPose.pose.orientation.x = 1.0;
   startPose.pose.orientation.y = 0.0;
   startPose.pose.orientation.z = 0.0;
-  startPose.pose.orientation.w = 1.0;
+  startPose.pose.orientation.w = 0.0;
 
   geometry_msgs::msg::PoseStamped goalPose;
   goalPose.header.stamp = this->now();
   goalPose.header.frame_id = this->fixedFrame;
   goalPose.pose = startPose.pose;
   goalPose.pose.position.x += 0.225; // Move +X 225mm
-  goalPose.pose.position.y += 0.05; // Move +Y 50mm
+  goalPose.pose.position.y += 0.12; // Move +Y 120mm
+  goalPose.pose.position.y += 0.12; // Move +Y 120mm
+  goalPose.pose.position.z += 0.05; // Move +Z 50mm
 
   pathPlanRequest->start = startPose;
   pathPlanRequest->starting_joint_angles = std::vector<float>(7, 0.0); // 7-DOF at zero position
@@ -83,7 +86,7 @@ void PFDemo::handleRunPlanPathDemo(
   pathPlanRequest->delta_time = 0.02; // 2 ms between waypoints
   pathPlanRequest->goal_tolerance = 0.001; // 1 mm tolerance
   pathPlanRequest->max_iterations = 30000; // Max iterations for planning
-  pathPlanRequest->planning_method = "whole_body";
+  pathPlanRequest->planning_method = "whole_body"; // "task_space" or "whole_body"
   const double dt = pathPlanRequest->delta_time;
 
   // Publish the goal pose
