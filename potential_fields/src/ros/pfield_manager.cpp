@@ -456,14 +456,6 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
       startSV.getPosition().x(), startSV.getPosition().y(), startSV.getPosition().z()
     );
     this->queryPose = startSV;
-    // Create a CSV file of the planned path for analysis
-    const std::string csvFilePath = "data/planned_path.csv";
-    if (!this->pField->createPlannedPathCSV(planningResult, csvFilePath)) {
-      RCLCPP_WARN(this->get_logger(), "Failed to create planned path CSV at %s", csvFilePath.c_str());
-    }
-    else {
-      RCLCPP_INFO(this->get_logger(), "Planned path CSV created at %s", csvFilePath.c_str());
-    }
   }
   if (!response->success) {
     // If planning failed, log final pose and distance to goal
@@ -479,6 +471,14 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
       finalPose.getPosition().x(), finalPose.getPosition().y(), finalPose.getPosition().z(),
       distanceToGoal
     );
+  }
+  // Create a CSV file of the planned path for analysis
+  const std::string csvFilePath = "data/planned_path.csv";
+  if (!this->pField->createPlannedPathCSV(planningResult, csvFilePath)) {
+    RCLCPP_WARN(this->get_logger(), "Failed to create planned path CSV at %s", csvFilePath.c_str());
+  }
+  else {
+    RCLCPP_INFO(this->get_logger(), "Planned path CSV created at %s", csvFilePath.c_str());
   }
 }
 

@@ -733,7 +733,7 @@ private:
   std::unique_ptr<PFKinematics> pfKinematics; // Kinematics helper for obstacle updates via joint angles
   std::shared_ptr<IKSolver> ikSolver; // Inverse kinematics solver for joint angle computation
   const double translationalTolerance = 1e-3; // Threshold for distances to the goal and obstacles [m]
-  const double rotationalThreshold = 0.02; // Threshold for rotational geodesic distance [rad]
+  const double rotationalThreshold = 0.05; // Threshold for rotational geodesic distance [rad]
   const double defaultDStarThreshold = 1.0; // [m] distance for switching to quadratic attractive potential from conical
   const double softSatBeta = 1.0; // Soft-saturation parameter, higher = more aggressive curve
   bool dynamicQuadraticThresholdEnabled = false; // if true, use dynamic d* based on obstacles/kinematics

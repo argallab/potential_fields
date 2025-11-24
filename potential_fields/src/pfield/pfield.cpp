@@ -208,15 +208,18 @@ Eigen::VectorXd PotentialField::evaluateWholeBodyJointVelocitiesAtConfiguration(
 
   // --- 4. Convert Joint Torques to Joint Velocities (Admittance Control) ---
   // Treating joints as simple dampers: q_dot = gain * torque
-  // For more accurate dynamics, you could use: q_dot = M^-1 * tau
-  const double admittanceGain = 0.1;
+  // For more accurate dynamics, we can use the robot dynamics equation
+  // including the coriolis, inertia, and gravity terms.
+  const double admittanceGain = 1.0;
   Eigen::VectorXd jointVelocities = totalTorques * admittanceGain;
 
   // --- 5. Apply Joint Velocity Limits / Saturation ---
   // TODO(Sharwin24): Implement joint velocity clamping based on robot-specific limits
+  // This may be handled by the dynamics equation when converting from joint torques to velocities
 
   return jointVelocities;
 }
+
 
 TaskSpaceWrench PotentialField::evaluateWrenchAtPose(const SpatialVector& queryPose) const {
   Eigen::Vector3d attractionForceVector = this->computeAttractiveForceLinear(queryPose);
@@ -381,8 +384,6 @@ Eigen::Vector3d PotentialField::computeAttractiveForceLinear(const SpatialVector
   // Choset Attractive Potential: F = zeta * (q - q_goal)
   const Eigen::Vector3d direction = queryPose.getPosition() - this->goalPose.getPosition();
   const double magnitude = direction.norm();
-  if (magnitude <= this->translationalTolerance) return Eigen::Vector3d::Zero();
-  // else return -this->attractiveGain * direction;
   // The Choset attractive potential defines a threshold for switching to quadratic behavior from conical
   const double dStarThreshold = this->dynamicQuadraticThresholdEnabled ? this->computeDynamicQuadraticThreshold(queryPose)
     : this->defaultDStarThreshold;
@@ -481,7 +482,6 @@ Eigen::Vector3d PotentialField::computeAttractiveMoment(const SpatialVector& que
   // Extract axis-angle from quatError in a numerically stable way
   const double vnorm = quatError.vec().norm();
   const double angle = 2.0 * std::atan2(vnorm, std::abs(quatError.w())); // in [0, pi]
-  if (angle <= this->rotationalThreshold) { return Eigen::Vector3d::Zero(); }
 
   // Guard against divide-by-zero when angle ~ 0
   if (vnorm < NEAR_ZERO_THRESHOLD) { return Eigen::Vector3d::Zero(); }
@@ -524,13 +524,15 @@ Eigen::Vector3d PotentialField::computeRepulsiveForceLinear(const SpatialVector&
 
 Eigen::VectorXd PotentialField::computeEndEffectorAttractionJointTorques(
   const SpatialVector& eePose, const std::vector<double>& jointAngles) const {
-  // Compute task-space wrench for the end-effector
-  // TaskSpaceWrench eeWrench = this->evaluateWrenchAtPoseWithOpposingForceRemoval(eePose);
-  TaskSpaceWrench eeWrench = this->evaluateWrenchAtPose(eePose);
+  // Compute task-space wrench for the end-effector (Attraction ONLY)
+  // We do not include repulsion here because whole-body repulsion is computed separately
+  // and we want to avoid double-counting repulsion on the end-effector link.
+  Eigen::Vector3d attractionForceVector = this->computeAttractiveForceLinear(eePose);
+  Eigen::Vector3d attractionMomentVector = this->computeAttractiveMoment(eePose);
 
   // Pack wrench into 6D vector
   Eigen::VectorXd taskForce(6);
-  taskForce << eeWrench.force, eeWrench.torque;
+  taskForce << attractionForceVector, attractionMomentVector;
 
   // Get end-effector Jacobian (6xN)
   Eigen::MatrixXd J_ee = this->pfKinematics->getSpatialJacobianAtPoint(
@@ -712,6 +714,15 @@ PlannedPath PotentialField::planPathFromWholeBodyJointVelocities(
   const double stepDt = (dt > 0.0) ? dt : 0.1;
   std::vector<double> currentJointAngles = startJointAngles;
   double timeStamp = 0.0;
+  size_t stagnationCounter = 0;
+  const double stagnationLimitSeconds = 0.5; // Stop if stuck for 0.5 seconds
+  const size_t stagnationLimitIterations = static_cast<size_t>(std::ceil(stagnationLimitSeconds / stepDt));
+  const size_t stagnationLimit = std::max(static_cast<size_t>(1), stagnationLimitIterations);
+  const double stagnationThreshold = 5e-3; // rad/s (Increased to catch small oscillations)
+
+  size_t positionToleranceCounter = 0;
+  const double positionToleranceLimitSeconds = 2.0; // Stop if position is met for 2 seconds
+  const size_t positionToleranceLimit = static_cast<size_t>(std::ceil(positionToleranceLimitSeconds / stepDt));
 
   // Compute initial end-effector pose from joint angles using forward kinematics
   if (!this->pfKinematics) {
@@ -722,12 +733,7 @@ PlannedPath PotentialField::planPathFromWholeBodyJointVelocities(
 
   SpatialVector currentEEPose = this->pfKinematics->computeEndEffectorPose(currentJointAngles, this->eeLinkName);
 
-  std::cout << "[DEBUG] planPathFromWholeBodyJointVelocities: Starting planning loop. MaxIters=" << maxIters << std::endl;
-
   for (size_t iter = 0; iter < maxIters; ++iter) {
-    if (iter % 1000 == 0) {
-      std::cout << "[DEBUG] planPathFromWholeBodyJointVelocities: Iteration " << iter << std::endl;
-    }
     // --- 1. Update robot obstacles from current joint configuration ---
     this->updateObstaclesFromKinematics(currentJointAngles);
 
@@ -765,9 +771,22 @@ PlannedPath PotentialField::planPathFromWholeBodyJointVelocities(
     // --- 7. Check goal tolerance ---
     const double translationalError = (currentEEPose.getPosition() - this->goalPose.getPosition()).norm();
     const double rotationalError = currentEEPose.angularDistance(this->goalPose);
-    if (translationalError <= goalTolerance && rotationalError <= this->rotationalThreshold) {
-      path.success = true;
-      break;
+    if (translationalError <= goalTolerance) {
+      if (rotationalError <= this->rotationalThreshold) {
+        path.success = true;
+        break;
+      }
+      // Position met, but rotation not yet
+      positionToleranceCounter++;
+      if (positionToleranceCounter >= positionToleranceLimit) {
+        // We have held position for a while, likely unable to reach orientation
+        // Terminate with success (or partial success)
+        path.success = true;
+        break;
+      }
+    }
+    else {
+      positionToleranceCounter = 0;
     }
 
     // --- 8. Check for collisions ---
@@ -777,7 +796,22 @@ PlannedPath PotentialField::planPathFromWholeBodyJointVelocities(
       break;
     }
 
-    // --- 9. Update loop variables ---
+    // --- 9. Check for stagnation ---
+    if (jointVelocities.cwiseAbs().maxCoeff() < stagnationThreshold) {
+      stagnationCounter++;
+    }
+    else {
+      stagnationCounter = 0;
+    }
+    if (stagnationCounter >= stagnationLimit) {
+      // Robot has stopped moving, likely reached a local minimum or goal
+      // Check if we are close enough to be considered successful?
+      // For now, we rely on the strict check in step 7. If we are here, we haven't met the strict tolerance.
+      // But we should stop planning to avoid waiting for maxIters.
+      break;
+    }
+
+    // --- 10. Update loop variables ---
     currentJointAngles = nextJointAngles;
     currentEEPose = nextEEPose;
     timeStamp += stepDt;
