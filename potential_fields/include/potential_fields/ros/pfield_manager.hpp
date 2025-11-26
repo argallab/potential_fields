@@ -54,15 +54,6 @@ using PlanPath = potential_fields_interfaces::srv::PlanPath;
 using ComputeAutonomyVector = potential_fields_interfaces::srv::ComputeAutonomyVector;
 using JointState = sensor_msgs::msg::JointState;
 
-struct PFLimits {
-  double minX; // Minimum X coordinate of the bounding box [m]
-  double maxX; // Maximum X coordinate of the bounding box [m]
-  double minY; // Minimum Y coordinate of the bounding box [m]
-  double maxY; // Maximum Y coordinate of the bounding box [m]
-  double minZ; // Minimum Z coordinate of the bounding box [m]
-  double maxZ; // Maximum Z coordinate of the bounding box [m]
-};
-
 class PotentialFieldManager : public rclcpp::Node {
 public:
   PotentialFieldManager();
@@ -89,7 +80,9 @@ private:
   double influenceDistance; // Influence distance for obstacle repulsion [m]
   double visualizerBufferArea; // Extra area around obstacles and goal to visualize the PF [m]
   double fieldResolution; // Resolution of the potential field grid [m]
+  bool visualizeFieldVectors; // Whether to visualize the potential field vectors
   std::string fixedFrame; // RViz fixed frame for visualization and PF computation
+  std::string eeFrame; // End-effector frame name for planning and kinematics
   std::string urdfFileName; // URDF file name
   std::string motionPluginType; // Motion Plugin Type [e.g., "null", "franka", etc.]
   std::shared_ptr<PotentialField> pField; // Potential Field Instance containing main PF functionality
@@ -99,6 +92,7 @@ private:
   TaskSpaceTwist prevQueryTwist; // Previous query twist for acceleration limiting
   rclcpp::Time lastQueryUpdate;  // Timestamp of last query pose integration step
   TaskSpaceTwist prevTwist; // Previous twist for acceleration limiting
+  std::vector<double> currentJointAngles; // Current joint angles for robot obstacle visualization
 
   rclcpp::TimerBase::SharedPtr timer; // Timer to periodically update the potential field
   rclcpp::Publisher<MarkerArray>::SharedPtr pFieldMarkerPub; // Publisher for PF Markers
@@ -116,16 +110,6 @@ private:
   void handlePlanPath(const PlanPath::Request::SharedPtr request, PlanPath::Response::SharedPtr response);
   void handleComputeAutonomyVector(
     const ComputeAutonomyVector::Request::SharedPtr request, ComputeAutonomyVector::Response::SharedPtr response);
-
-  /**
-   * @brief Given a potential field, computes its spatial limits for visualization (bounding box)
-   *
-   * @note Could be used for adaptive computations in the future
-   *
-   * @param pf The potential field instance
-   * @return PFLimits The spatial limits of the potential field
-   */
-  PFLimits getPFLimits(std::shared_ptr<PotentialField> pf);
 
   /**
    * @brief Given a potential field, generate all visualization markers

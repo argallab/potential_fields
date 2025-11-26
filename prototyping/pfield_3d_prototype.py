@@ -740,19 +740,22 @@ def plot_kinematics(title: str,
         goal_orientation_tolerance: orientation tolerance for goal reached [rad]
 
 
-    Plot a 3x2 grid of time-series:
+    Plot a 4x2 grid of time-series:
       (row 1, col 1) position components (x,y,z) + dashed |p|
-      (row 1, col 2) angular velocity components (wx,wy,wz) + dashed |w| (if present)
+      (row 1, col 2) distance-to-goal (if goal given) else |p|
       (row 2, col 1) linear velocity components (vx,vy,vz) + dashed |v|
-      (row 2, col 2) distance-to-goal (if goal given) else |p|
+      (row 2, col 2) min_clearance_m if present
       (row 3, col 1) linear acceleration components (ax,ay,az) + dashed |a|
-      (row 3, col 2) min_clearance_m if present
+      (row 3, col 2) joint positions vs time (if present)
+      (row 4, col 1) angular velocity components (wx,wy,wz) + dashed |w| (if present)
+      (row 4, col 2) joint velocities vs time (if present)
 
     Expected keys in res:
       - "t": time array [N]
       - "x", "y", "z": position components [N]
       - "vx", "vy", "vz": linear velocity components [N]
       - optionally: "wx","wy","wz" (or CSV-style "ee_wx" etc.) and "min_clearance_m".
+      - optionally: "joint_positions" [N x num_joints], "joint_velocities" [N x num_joints]
     """
 
     t = np.asarray(res.get("t", []), dtype=float)
@@ -790,6 +793,14 @@ def plot_kinematics(title: str,
     min_clear = None if min_clear is None else np.asarray(
         min_clear, dtype=float)
 
+    # Joint data
+    joint_pos = res.get("joint_positions")
+    joint_vel = res.get("joint_velocities")
+    if joint_pos is not None:
+        joint_pos = np.asarray(joint_pos, dtype=float)
+    if joint_vel is not None:
+        joint_vel = np.asarray(joint_vel, dtype=float)
+
     if t.size == 0:
         raise ValueError("Result dictionary is missing time array 't'.")
 
@@ -802,8 +813,8 @@ def plot_kinematics(title: str,
     vel_mag = np.sqrt(vx*vx + vy*vy + vz*vz)
     acc_mag = np.sqrt(ax*ax + ay*ay + az*az)
 
-    # Build 3x2 grid
-    fig, axes = plt.subplots(3, 2, sharex=True, figsize=(12, 9))
+    # Build 4x2 grid
+    fig, axes = plt.subplots(4, 2, sharex=True, figsize=(12, 12))
     fig.suptitle(f"{title}", fontsize=16)
 
     # Row 1, Col 1: Position components (+|p|)
@@ -816,46 +827,20 @@ def plot_kinematics(title: str,
     ax11.grid(True, linestyle=':')
     ax11.legend(loc='best', fontsize=9)
 
-    # Row 1, Col 2: Angular velocity components (+|w|) if present
+    # Row 1, Col 2: Distance to goal (if provided) else |p|
     ax12 = axes[0, 1]
-    if wx is not None and wy is not None and wz is not None:
-        ax12.plot(t, wx, label='wx')
-        ax12.plot(t, wy, label='wy')
-        ax12.plot(t, wz, label='wz')
-        wmag = np.sqrt(wx*wx + wy*wy + wz*wz)
-        ax12.plot(t, wmag, '--', color='k', linewidth=1.2, label='|w|')
-        ax12.set_ylabel('Angular vel [rad/s]')
-        ax12.legend(loc='best', fontsize=9)
-    else:
-        ax12.text(0.5, 0.5, 'No angular velocity provided', transform=ax12.transAxes,
-                  ha='center', va='center', fontsize=10, color='gray')
-        ax12.set_ylabel('Angular vel [rad/s]')
-    ax12.grid(True, linestyle=':')
-
-    # Row 2, Col 1: Linear velocity components (+|v|)
-    ax21 = axes[1, 0]
-    ax21.plot(t, vx, label='vx')
-    ax21.plot(t, vy, label='vy')
-    ax21.plot(t, vz, label='vz')
-    ax21.plot(t, vel_mag, '--', color='k', linewidth=1.2, label='|v|')
-    ax21.set_ylabel('Velocity [m/s]')
-    ax21.grid(True, linestyle=':')
-    ax21.legend(loc='best', fontsize=9)
-
-    # Row 2, Col 2: Distance to goal (if provided) else |p|
-    ax22 = axes[1, 1]
     if goal is not None:
         g = np.asarray(goal, dtype=float).reshape(3,)
         d_goal = np.sqrt((x - g[0])**2 + (y - g[1])**2 + (z - g[2])**2)
-        line_d, = ax22.plot(t, d_goal, color='C3', label='‖p - goal‖')
-        ax22.set_ylabel('Dist→Goal [m]')
+        line_d, = ax12.plot(t, d_goal, color='C3', label='‖p - goal‖')
+        ax12.set_ylabel('Dist→Goal [m]')
         # Add vertical dashed line when distance first satisfies tolerance
         try:
             mask_pos = d_goal <= float(goal_tolerance)
             if np.any(mask_pos):
                 idx_pos = int(np.argmax(mask_pos))  # first True index
                 t_pos = float(t[idx_pos])
-                ax22.axvline(t_pos, color='C3', linestyle='--', alpha=0.6,
+                ax12.axvline(t_pos, color='C3', linestyle='--', alpha=0.6,
                              label=f'pos tol ≤ {goal_tolerance:g}')
         except Exception:
             pass
@@ -896,30 +881,51 @@ def plot_kinematics(title: str,
             qe_z = qw_g*qz - qx_g*qy + qy_g*qx - qz_g*qw
             vec_norm = np.sqrt(qe_x*qe_x + qe_y*qe_y + qe_z*qe_z)
             angle_to_goal = 2.0*np.arctan2(vec_norm, np.abs(qe_w))
-            ax22b = ax22.twinx()
-            line_a, = ax22b.plot(t, angle_to_goal, color='C4',
+            ax12b = ax12.twinx()
+            line_a, = ax12b.plot(t, angle_to_goal, color='C4',
                                  label='angle_to_goal [rad]')
-            ax22b.set_ylabel('Angle→Goal [rad]')
+            ax12b.set_ylabel('Angle→Goal [rad]')
             # Add vertical dashed line when angular distance first satisfies tolerance
             try:
                 mask_ang = angle_to_goal <= float(goal_orientation_tolerance)
                 if np.any(mask_ang):
                     idx_ang = int(np.argmax(mask_ang))
                     t_ang = float(t[idx_ang])
-                    ax22b.axvline(t_ang, color='C4', linestyle='--', alpha=0.6,
+                    ax12b.axvline(t_ang, color='C4', linestyle='--', alpha=0.6,
                                   label=f'ang tol ≤ {goal_orientation_tolerance:g}')
             except Exception:
                 pass
             # Merge legends
-            h1, l1 = ax22.get_legend_handles_labels()
-            h2, l2 = ax22b.get_legend_handles_labels()
-            ax22.legend(h1+h2, l1+l2, loc='best', fontsize=9)
+            h1, l1 = ax12.get_legend_handles_labels()
+            h2, l2 = ax12b.get_legend_handles_labels()
+            ax12.legend(h1+h2, l1+l2, loc='best', fontsize=9)
         else:
-            ax22.legend(loc='best', fontsize=9)
+            ax12.legend(loc='best', fontsize=9)
     else:
-        ax22.plot(t, pos_mag, color='C7', label='|p|')
-        ax22.set_ylabel('|p| [m]')
+        ax12.plot(t, pos_mag, color='C7', label='|p|')
+        ax12.set_ylabel('|p| [m]')
+        ax12.legend(loc='best', fontsize=9)
+    ax12.grid(True, linestyle=':')
+
+    # Row 2, Col 1: Linear velocity components (+|v|)
+    ax21 = axes[1, 0]
+    ax21.plot(t, vx, label='vx')
+    ax21.plot(t, vy, label='vy')
+    ax21.plot(t, vz, label='vz')
+    ax21.plot(t, vel_mag, '--', color='k', linewidth=1.2, label='|v|')
+    ax21.set_ylabel('Velocity [m/s]')
+    ax21.grid(True, linestyle=':')
+    ax21.legend(loc='best', fontsize=9)
+
+    # Row 2, Col 2: Min clearance (if present)
+    ax22 = axes[1, 1]
+    if min_clear is not None:
+        ax22.plot(t, min_clear, color='C2', label='min_clearance')
         ax22.legend(loc='best', fontsize=9)
+    else:
+        ax22.text(0.5, 0.5, 'No min_clearance provided', transform=ax22.transAxes,
+                  ha='center', va='center', fontsize=10, color='gray')
+    ax22.set_ylabel('Clearance [m]')
     ax22.grid(True, linestyle=':')
 
     # Row 3, Col 1: Linear acceleration components (+|a|)
@@ -929,21 +935,52 @@ def plot_kinematics(title: str,
     ax31.plot(t, az, label='az')
     ax31.plot(t, acc_mag, '--', color='k', linewidth=1.2, label='|a|')
     ax31.set_ylabel('Accel [m/s^2]')
-    ax31.set_xlabel('Time [s]')
     ax31.grid(True, linestyle=':')
     ax31.legend(loc='best', fontsize=9)
 
-    # Row 3, Col 2: Min clearance (if present)
+    # Row 3, Col 2: Joint Positions
     ax32 = axes[2, 1]
-    if min_clear is not None:
-        ax32.plot(t, min_clear, color='C2', label='min_clearance')
-        ax32.legend(loc='best', fontsize=9)
+    if joint_pos is not None:
+        num_joints = joint_pos.shape[1]
+        for j in range(num_joints):
+            ax32.plot(t, joint_pos[:, j], label=f'q{j+1}')
+        ax32.set_ylabel('Joint Pos [rad]')
+        ax32.legend(loc='best', fontsize=8, ncol=2)
     else:
-        ax32.text(0.5, 0.5, 'No min_clearance provided', transform=ax32.transAxes,
+        ax32.text(0.5, 0.5, 'No joint positions provided', transform=ax32.transAxes,
                   ha='center', va='center', fontsize=10, color='gray')
-    ax32.set_ylabel('Clearance [m]')
-    ax32.set_xlabel('Time [s]')
     ax32.grid(True, linestyle=':')
+
+    # Row 4, Col 1: Angular velocity components (+|w|) if present
+    ax41 = axes[3, 0]
+    if wx is not None and wy is not None and wz is not None:
+        ax41.plot(t, wx, label='wx')
+        ax41.plot(t, wy, label='wy')
+        ax41.plot(t, wz, label='wz')
+        wmag = np.sqrt(wx*wx + wy*wy + wz*wz)
+        ax41.plot(t, wmag, '--', color='k', linewidth=1.2, label='|w|')
+        ax41.set_ylabel('Angular vel [rad/s]')
+        ax41.legend(loc='best', fontsize=9)
+    else:
+        ax41.text(0.5, 0.5, 'No angular velocity provided', transform=ax41.transAxes,
+                  ha='center', va='center', fontsize=10, color='gray')
+        ax41.set_ylabel('Angular vel [rad/s]')
+    ax41.grid(True, linestyle=':')
+    ax41.set_xlabel('Time [s]')
+
+    # Row 4, Col 2: Joint Velocities
+    ax42 = axes[3, 1]
+    if joint_vel is not None:
+        num_joints = joint_vel.shape[1]
+        for j in range(num_joints):
+            ax42.plot(t, joint_vel[:, j], label=f'dq{j+1}')
+        ax42.set_ylabel('Joint Vel [rad/s]')
+        ax42.legend(loc='best', fontsize=8, ncol=2)
+    else:
+        ax42.text(0.5, 0.5, 'No joint velocities provided', transform=ax42.transAxes,
+                  ha='center', va='center', fontsize=10, color='gray')
+    ax42.grid(True, linestyle=':')
+    ax42.set_xlabel('Time [s]')
 
     # Create a text box for the description if provided
     if description:

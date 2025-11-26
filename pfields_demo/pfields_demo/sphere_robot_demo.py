@@ -219,6 +219,7 @@ class SphereRobotDemo(Node):
 
         req = PlanPath.Request()
         req.start = start_pose
+        req.starting_joint_angles = []
         req.goal = goal_pose
         req.delta_time = 0.01  # 10ms time step
         req.goal_tolerance = 0.1  # 10cm tolerance
@@ -259,13 +260,6 @@ class SphereRobotDemo(Node):
             v = res.end_effector_velocity_trajectory[0].twist.linear
             self.get_logger().info(
                 f'First EE linear velocity: ({v.x:.6f}, {v.y:.6f}, {v.z:.6f})')
-
-        # Save CSV for offline plotting
-        try:
-            self.save_planned_path_response(res)
-        except Exception as e:
-            self.get_logger().error(
-                f'Failed to save planned path response (async): {e}')
 
     def save_planned_path_response(self, plan_path_response):
         # Save a CSV file with the planned path details for offline plotting.

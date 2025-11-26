@@ -7,6 +7,11 @@
 #include <iostream>
 #include <vector>
 
+#include <kdl/chain.hpp>
+#include <kdl/chainfksolverpos_recursive.hpp>
+#include <kdl/chainjnttojacsolver.hpp>
+#include <kdl/jntarray.hpp>
+
 #include "motion_plugin.hpp"
 
 class XArmIKSolver : public IKSolver {
@@ -28,13 +33,10 @@ public:
   bool solve(const Eigen::Isometry3d& targetPose, const std::vector<double>& seed,
     std::vector<double>& solution, Eigen::Matrix<double, 6, Eigen::Dynamic>& J, std::string& errorMsg) override;
 
-  // Jacobian-only computation to satisfy IKSolver interface,
-  // but XArm Jacobian needs targetPose so this function is not implemented
+  // Jacobian-only computation to satisfy IKSolver interface
   bool computeJacobian(
-    [[maybe_unused]] const std::vector<double>& jointPositions,
-    [[maybe_unused]] Eigen::Matrix<double, 6, Eigen::Dynamic>& J) override {
-    return false;
-  }
+    const std::vector<double>& jointPositions,
+    Eigen::Matrix<double, 6, Eigen::Dynamic>& J) override;
 
   std::vector<std::string> getJointNames() const override {
     return {"xarm_joint1", "xarm_joint2", "xarm_joint3", "xarm_joint4",
@@ -47,9 +49,28 @@ public:
 
 private:
   // The joint angles of the XArm in the "home" position [rad]
-  const std::array<double, 7> homeJointAngles = {0,0,0,0,0,0,0};
+  const std::array<double, 7> homeJointAngles = {0, 0, 0, 0, 0, 0, 0};
   // The homogeneous transform from the robot's base link [O] to the end-effector [E] in the "home" position
   Eigen::Matrix4d homeTransformOE;
+
+  // KDL members
+  KDL::Chain kdl_chain_;
+  std::unique_ptr<KDL::ChainFkSolverPos_recursive> fk_solver_;
+  std::unique_ptr<KDL::ChainJntToJacSolver> jac_solver_;
+  bool initialized_ = false;
+
+  // Jparse parameters
+  double gamma_ = 0.2;
+  double singular_direction_gain_position_ = 1.0;
+  double singular_direction_gain_angular_ = 1.0;
+
+  // Helper methods
+  Eigen::MatrixXd pseudoInverse(const Eigen::MatrixXd& J, double tol = 1e-6);
+  void Jparse_calculation(
+    const Eigen::MatrixXd& J, Eigen::MatrixXd& J_parse, Eigen::MatrixXd& J_safety_nullspace,
+    std::vector<int>& jparse_singular_index, Eigen::MatrixXd& U_safety, Eigen::VectorXd& S_new_safety,
+    Eigen::MatrixXd& U_new_proj, Eigen::VectorXd& S_new_proj, Eigen::MatrixXd& U_new_sing, Eigen::VectorXd& Phi,
+    double& gamma, double& singular_direction_gain_position, double& singular_direction_gain_angular);
 };
 
 class XArmPlugin : public MotionPlugin {

@@ -11,9 +11,19 @@
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 
+#include <coal/collision_object.h>
+#include <coal/shape/geometric_shapes.h>
+#include <coal/math/transform.h>
+
 #include "spatial_vector.hpp"
 #include "mesh_collision.hpp"
 
+/**
+ * @brief Enumeration of different obstacle types.
+ *
+ * @note Each type determines which parameters in ObstacleGeometry are used.
+ *
+ */
 enum class ObstacleType {
   SPHERE, // [center, radius]
   BOX, // [center, length, width, height]
@@ -24,7 +34,7 @@ enum class ObstacleType {
 enum class ObstacleGroup {
   STATIC, // Static environment obstacles
   DYNAMIC, // Dynamic environment obstacles
-  ROBOT // The Robot itself as an obstacle, used for self-collision avoidance
+  ROBOT // The Robot links themselves, used for collision avoidance
 };
 
 inline std::string obstacleTypeToString(const ObstacleType& type) {
@@ -150,6 +160,11 @@ public:
         meshCollisionData.reset();
       }
     }
+    // Only attempt to create the COAL object if we have valid data.
+    // For MESH types, this means meshCollisionData must be loaded.
+    if (type != ObstacleType::MESH || meshCollisionData) {
+      this->toCoalCollisionObject();
+    }
   }
 
   PotentialFieldObstacle(const PotentialFieldObstacle& other) :
@@ -164,6 +179,7 @@ public:
     meshScale(other.meshScale) {
     // Shallow copy of shared mesh data
     this->meshCollisionData = other.meshCollisionData;
+    this->toCoalCollisionObject();
   }
 
   PotentialFieldObstacle(PotentialFieldObstacle&& other) noexcept :
@@ -177,6 +193,7 @@ public:
     meshResource(std::move(other.meshResource)),
     meshScale(std::move(other.meshScale)) {
     this->meshCollisionData = std::move(other.meshCollisionData);
+    this->toCoalCollisionObject();
   }
 
   PotentialFieldObstacle& operator=(const PotentialFieldObstacle& other) {
@@ -191,9 +208,15 @@ public:
       this->meshResource = other.meshResource;
       this->meshScale = other.meshScale;
       this->meshCollisionData = other.meshCollisionData; // share existing (may be null)
+      this->toCoalCollisionObject();
     }
     return *this;
   }
+
+  bool operator==(const PotentialFieldObstacle& other) const {
+    return this->position == other.position && this->geometry == other.geometry;
+  }
+  bool operator!=(const PotentialFieldObstacle& other) const { return !(*this == other); }
 
   std::string getFrameID() const { return this->frameID; }
   ObstacleGroup getGroup() const { return this->group; }
@@ -201,19 +224,26 @@ public:
   Eigen::Quaterniond getOrientation() const { return this->orientation; }
   ObstacleType getType() const { return this->type; }
   ObstacleGeometry getGeometry() const { return this->geometry; }
-
   const std::string& getMeshResource() const { return this->meshResource; }
   Eigen::Vector3d getMeshScale() const { return this->meshScale; }
+  std::shared_ptr<coal::CollisionObject> getCoalCollisionObject() const { return this->coalCollisionObject; }
 
   void setPose(const Eigen::Vector3d newPosition, const Eigen::Quaterniond newOrientation) {
     this->position = newPosition;
     this->orientation = newOrientation;
     this->orientationConjugate = newOrientation.conjugate();
+    this->updateCoalCollisionObjectPose();
   }
-  void setPosition(Eigen::Vector3d newPosition) { this->position = newPosition; }
+
+  void setPosition(Eigen::Vector3d newPosition) {
+    this->position = newPosition;
+    this->updateCoalCollisionObjectPose();
+  }
+
   void setOrientation(Eigen::Quaterniond newOrientation) {
     this->orientation = newOrientation;
     this->orientationConjugate = newOrientation.conjugate();
+    this->updateCoalCollisionObjectPose();
   }
 
   void setMeshProperties(const std::string& meshResource, const Eigen::Vector3d& meshScale) {
@@ -229,15 +259,10 @@ public:
     }
   }
 
-  void assignMeshCollisionData(const std::shared_ptr<MeshCollisionData>& meshData) { this->meshCollisionData = meshData; }
+  void setMeshCollisionData(const std::shared_ptr<MeshCollisionData>& meshData) { this->meshCollisionData = meshData; }
 
   bool withinInfluenceZone(Eigen::Vector3d worldPoint, double influenceDistance) const;
   bool withinObstacle(Eigen::Vector3d worldPoint) const;
-
-  bool operator==(const PotentialFieldObstacle& other) const {
-    return this->position == other.position && this->geometry == other.geometry;
-  }
-  bool operator!=(const PotentialFieldObstacle& other) const { return !(*this == other); }
 
   /**
    * @brief Rotate the given point to the obstacle's frame of reference
@@ -267,6 +292,19 @@ public:
    */
   void computeSignedDistanceAndNormal(const Eigen::Vector3d& worldPoint, double& signedDistance, Eigen::Vector3d& normal) const;
 
+  /**
+   * @brief Creates a COAL collision object from this obstacle for distance/collision queries
+   *
+   * @return std::shared_ptr<coal::CollisionObject> The COAL collision object representing this obstacle
+   */
+  std::shared_ptr<coal::CollisionObject> toCoalCollisionObject();
+
+  /**
+   * @brief Updates the COAL collision object pose to match the obstacle's current pose
+   *
+   */
+  void updateCoalCollisionObjectPose() const;
+
 private:
   std::string frameID; // Frame ID for the obstacle
   Eigen::Vector3d position; // Center Position of the obstacle in 3D space
@@ -275,10 +313,11 @@ private:
   ObstacleType type; // Type of the obstacle
   ObstacleGroup group; // Obstacle group/category
   ObstacleGeometry geometry; // Geometry of the obstacle, containing relevant dimensions
-
   std::string meshResource; // URI or file path to the mesh resource (e.g., package://, file://)
   Eigen::Vector3d meshScale; // Scale for mesh visualization if using MESH_RESOURCE
   std::shared_ptr<MeshCollisionData> meshCollisionData; // populated when mesh resource loaded (shared to avoid deep copies)
+  std::shared_ptr<coal::CollisionObject> coalCollisionObject; // Cached COAL collision object for distance queries
+  std::shared_ptr<coal::CollisionGeometry> coalCollisionGeometry; // Cached COAL collision geometry for distance queries
 };
 
 struct PotentialFieldObstacleHash {

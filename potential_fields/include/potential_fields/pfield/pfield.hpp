@@ -40,6 +40,15 @@
 
 #include "robot_plugins/ik_solver.hpp"
 
+struct PFLimits {
+  double minX; // Minimum X coordinate of the bounding box [m]
+  double maxX; // Maximum X coordinate of the bounding box [m]
+  double minY; // Minimum Y coordinate of the bounding box [m]
+  double maxY; // Maximum Y coordinate of the bounding box [m]
+  double minZ; // Minimum Z coordinate of the bounding box [m]
+  double maxZ; // Maximum Z coordinate of the bounding box [m]
+};
+
 struct TaskSpaceWrench {
   Eigen::Vector3d force{Eigen::Vector3d::Zero()}; // Linear Force [N]
   Eigen::Vector3d torque{Eigen::Vector3d::Zero()}; // Torque [Nm]
@@ -61,10 +70,11 @@ struct TaskSpaceTwist {
 };
 
 struct PlannedPath {
+  std::vector<double> timeStamps; // Time stamps for each point in the path [s]
   std::vector<SpatialVector> poses; // End-effector pose
   std::vector<TaskSpaceTwist> twists; // End-effector velocity
   std::vector<std::vector<double>> jointAngles; // Joint angles for each point in the path [rad]
-  std::vector<double> timeStamps; // Time stamps for each point in the path [s]
+  std::vector<std::vector<double>> jointVelocities; // Joint velocities for each point in the path [rad/s]
   unsigned int numPoints; // The number of points in the planned path, should be equal across all vectors
   double duration; // Total duration of the path [s]
   double dt; // Time difference between consecutive points [s]
@@ -75,21 +85,37 @@ struct PlannedPath {
   /**
    * @brief Records a path point with the given pose, twist, joint angles, and timestamp.
    *
+   * @param timeStamp The time stamp for the path point [s]
    * @param pose The EE pose at the path point
    * @param twist The EE twist at the path point
    * @param jointAngles The joint angles at the path point [rad]
-   * @param timeStamp The time stamp for the path point [s]
    */
-  void recordPathPoint(const SpatialVector& pose, const TaskSpaceTwist& twist,
-    std::vector<double> jointAngles, double timeStamp) {
+  void recordPathPoint(double timeStamp, const SpatialVector& pose, const TaskSpaceTwist& twist,
+    std::vector<double> jointAngles) {
     this->poses.push_back(pose);
     this->twists.push_back(twist);
     this->jointAngles.push_back(jointAngles);
     this->timeStamps.push_back(timeStamp);
     this->numPoints = static_cast<unsigned int>(this->poses.size());
-    if (this->numPoints > 1) {
+    if (numPoints == 1) {
+      this->dt = 0.0;
+      this->duration = 0.0;
+      this->jointVelocities.clear();
+      // Joint Velocity at first point is zero
+      this->jointVelocities.resize(jointAngles.size(), std::vector<double>(jointAngles.size(), 0.0));
+      this->jointVelocities.push_back(std::vector<double>(jointAngles.size(), 0.0));
+    }
+    else if (this->numPoints > 1) {
       this->dt = this->timeStamps.back() - this->timeStamps[this->numPoints - 2];
       this->duration = this->timeStamps.back() - this->timeStamps.front();
+      // Add an estimation of joint velocities
+      const double dtSec = this->dt > 0.0 ? this->dt : 1.0;
+      const size_t numJoints = this->jointAngles.back().size();
+      std::vector<double> velocities(numJoints, 0.0);
+      for (size_t j = 0; j < numJoints; ++j) {
+        velocities[j] = (this->jointAngles.back()[j] - this->jointAngles[this->numPoints - 2][j]) / dtSec;
+      }
+      this->jointVelocities.push_back(velocities);
     }
     else {
       this->dt = 0.0;
@@ -110,7 +136,8 @@ public:
     maxLinearAcceleration(DEFAULT_MAX_LINEAR_ACCELERATION),
     maxAngularAcceleration(DEFAULT_MAX_ANGULAR_ACCELERATION),
     influenceDistance(DEFAULT_INFLUENCE_DISTANCE),
-    goalPose(SpatialVector(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity())) {}
+    goalPose(SpatialVector(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity())),
+    goalSet(false) {}
   ~PotentialField() = default;
 
   PotentialField(const PotentialField& other) :
@@ -123,7 +150,9 @@ public:
     maxAngularAcceleration(other.maxAngularAcceleration),
     influenceDistance(other.influenceDistance),
     goalPose(other.goalPose),
-    obstacles(other.obstacles) {}
+    goalSet(other.goalSet),
+    envObstacles(other.envObstacles),
+    robotObstacles(other.robotObstacles) {}
 
   /**
    * @brief Constructs a PotentialField with the specified goal position.
@@ -140,7 +169,8 @@ public:
     maxLinearAcceleration(DEFAULT_MAX_LINEAR_ACCELERATION),
     maxAngularAcceleration(DEFAULT_MAX_ANGULAR_ACCELERATION),
     influenceDistance(DEFAULT_INFLUENCE_DISTANCE),
-    goalPose(goalPose) {}
+    goalPose(goalPose),
+    goalSet(true) {}
 
   PotentialField(SpatialVector goalPose, double attractiveGain, double repulsiveGain, double rotationalAttractiveGain) :
     attractiveGain(attractiveGain),
@@ -151,7 +181,8 @@ public:
     maxLinearAcceleration(DEFAULT_MAX_LINEAR_ACCELERATION),
     maxAngularAcceleration(DEFAULT_MAX_ANGULAR_ACCELERATION),
     influenceDistance(DEFAULT_INFLUENCE_DISTANCE),
-    goalPose(goalPose) {}
+    goalPose(goalPose),
+    goalSet(true) {}
 
   PotentialField(double attractiveGain, double repulsiveGain, double rotationalAttractiveGain) :
     attractiveGain(attractiveGain),
@@ -162,7 +193,8 @@ public:
     maxLinearAcceleration(DEFAULT_MAX_LINEAR_ACCELERATION),
     maxAngularAcceleration(DEFAULT_MAX_ANGULAR_ACCELERATION),
     influenceDistance(DEFAULT_INFLUENCE_DISTANCE),
-    goalPose(SpatialVector(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity())) {}
+    goalPose(SpatialVector(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity())),
+    goalSet(false) {}
 
   PotentialField(
     double attractiveGain, double repulsiveGain, double rotationalAttractiveGain,
@@ -176,7 +208,8 @@ public:
     maxLinearAcceleration(DEFAULT_MAX_LINEAR_ACCELERATION),
     maxAngularAcceleration(DEFAULT_MAX_ANGULAR_ACCELERATION),
     influenceDistance(influenceDistance),
-    goalPose(SpatialVector(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity())) {}
+    goalPose(SpatialVector(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity())),
+    goalSet(false) {}
 
   PotentialField(
     double attractiveGain, double repulsiveGain, double rotationalAttractiveGain,
@@ -191,7 +224,8 @@ public:
     maxLinearAcceleration(maxLinearAcceleration),
     maxAngularAcceleration(maxAngularAcceleration),
     influenceDistance(influenceDistance),
-    goalPose(SpatialVector(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity())) {}
+    goalPose(SpatialVector(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity())),
+    goalSet(false) {}
 
   PotentialField(
     SpatialVector goalPose,
@@ -207,7 +241,8 @@ public:
     maxLinearAcceleration(maxLinearAcceleration),
     maxAngularAcceleration(maxAngularAcceleration),
     influenceDistance(influenceDistance),
-    goalPose(goalPose) {}
+    goalPose(goalPose),
+    goalSet(true) {}
 
 
   PotentialField& operator=(const PotentialField& other) {
@@ -216,32 +251,49 @@ public:
       this->repulsiveGain = other.repulsiveGain;
       this->rotationalAttractiveGain = other.rotationalAttractiveGain;
       this->goalPose = other.goalPose;
-      this->obstacles = other.obstacles;
+      this->goalSet = other.goalSet;
+      this->envObstacles = other.envObstacles;
+      this->robotObstacles = other.robotObstacles;
     }
     return *this;
   }
 
   bool operator==(const PotentialField& other) const {
     auto obstaclesEqual = [this, &other]() -> bool {
-      if (this->obstacles.size() != other.obstacles.size()) return false;
+      if (this->envObstacles.size() != other.envObstacles.size()) return false;
       // Convert both obstacle lists to unordered_sets for comparison
-      std::unordered_set<PotentialFieldObstacle, PotentialFieldObstacleHash> thisObstaclesSet(
-        this->obstacles.cbegin(), this->obstacles.cend()
+      std::unordered_set<PotentialFieldObstacle, PotentialFieldObstacleHash> thisEnvObstaclesSet(
+        this->envObstacles.cbegin(), this->envObstacles.cend()
       );
-      std::unordered_set<PotentialFieldObstacle, PotentialFieldObstacleHash> otherObstaclesSet(
-        other.obstacles.cbegin(), other.obstacles.cend()
+      std::unordered_set<PotentialFieldObstacle, PotentialFieldObstacleHash> thisRobotObstaclesSet(
+        this->robotObstacles.cbegin(), this->robotObstacles.cend()
       );
-      return thisObstaclesSet == otherObstaclesSet;
+      std::unordered_set<PotentialFieldObstacle, PotentialFieldObstacleHash> otherEnvObstaclesSet(
+        other.envObstacles.cbegin(), other.envObstacles.cend()
+      );
+      std::unordered_set<PotentialFieldObstacle, PotentialFieldObstacleHash> otherRobotObstaclesSet(
+        other.robotObstacles.cbegin(), other.robotObstacles.cend()
+      );
+      return thisEnvObstaclesSet == otherEnvObstaclesSet && thisRobotObstaclesSet == otherRobotObstaclesSet;
     }();
     return this->attractiveGain == other.attractiveGain &&
       this->rotationalAttractiveGain == other.rotationalAttractiveGain &&
       this->goalPose == other.goalPose &&
+      this->goalSet == other.goalSet &&
       obstaclesEqual;
   }
   bool operator!=(const PotentialField& other) const { return !(*this == other); }
 
-  void initializeKinematics(const std::string& urdfFilePath, const std::vector<std::string>& jointNames);
-  void assignIKSolver(std::shared_ptr<IKSolver> ikSolver) { this->ikSolver = ikSolver; }
+  /**
+   * @brief Initializes the PFKinematics module with the given URDF file path and end-effector link name.
+   *
+   * @note The end-effector link name must match a link in the
+   *       URDF model and will be the frame used for planning.
+   *
+   * @param urdfFilePath The file path to the robot's URDF file.
+   * @param eeLinkName The name of the end-effector link in the robot model.
+   */
+  void initializeKinematics(const std::string& urdfFilePath, const std::string& eeLinkName);
 
   // ============ Getters and Setters ============
   void setAttractiveGain(double newAttractiveGain) { this->attractiveGain = newAttractiveGain; }
@@ -254,8 +306,10 @@ public:
   void setMaxLinearAcceleration(double newMaxLinearAcceleration) { this->maxLinearAcceleration = newMaxLinearAcceleration; }
   void setMaxAngularAcceleration(double newMaxAngularAcceleration) { this->maxAngularAcceleration = newMaxAngularAcceleration; }
   void setInfluenceDistance(double newInfluenceDistance) { this->influenceDistance = newInfluenceDistance; }
-  void setGoalPose(SpatialVector newGoalPose) { this->goalPose = newGoalPose; }
-  void useDynamicQuadraticThreshold(bool enabled) { this->dynamicQuadraticThresholdEnabled = enabled; }
+  void setGoalPose(SpatialVector newGoalPose) { this->goalPose = newGoalPose; this->goalSet = true; }
+  void clearGoalPose() { this->goalSet = false; }
+  void setIKSolver(std::shared_ptr<IKSolver> ikSolver) { this->ikSolver = ikSolver; }
+  void setDynamicQuadraticThreshold(bool enabled) { this->dynamicQuadraticThresholdEnabled = enabled; }
   double getAttractiveGain() const { return this->attractiveGain; }
   double getRepulsiveGain() const { return this->repulsiveGain; }
   double getRotationalAttractiveGain() const { return this->rotationalAttractiveGain; }
@@ -264,9 +318,13 @@ public:
   double getMaxLinearAcceleration() const { return this->maxLinearAcceleration; }
   double getMaxAngularAcceleration() const { return this->maxAngularAcceleration; }
   double getInfluenceDistance() const { return this->influenceDistance; }
+  size_t getNumJoints() const { return this->pfKinematics ? this->pfKinematics->getNumJoints() : 0; }
+  size_t getNumLinks() const { return this->pfKinematics ? this->pfKinematics->getNumLinks() : 0; }
   bool isUsingDynamicQuadraticThreshold() const { return this->dynamicQuadraticThresholdEnabled; }
+  bool isGoalSet() const { return this->goalSet; }
   SpatialVector getGoalPose() const { return this->goalPose; }
-  std::vector<PotentialFieldObstacle> getObstacles() const { return this->obstacles; }
+  std::vector<PotentialFieldObstacle> getEnvObstacles() const { return this->envObstacles; }
+  std::vector<PotentialFieldObstacle> getRobotObstacles() const { return this->robotObstacles; }
 
   // ============ Obstacle Management ============
 
@@ -309,12 +367,55 @@ public:
    */
   void clearObstacles();
 
+  /**
+   * @brief Gets an obstacle by its frame ID.
+   *
+   * @param obstacleFrameID the frame ID of the obstacle to retrieve.
+   * @return PotentialFieldObstacle The obstacle with the specified frame ID.
+   */
   PotentialFieldObstacle getObstacleByID(const std::string& obstacleFrameID) const;
 
-  bool isPointInsideObstacle(Eigen::Vector3d point) const;
-  bool isPointWithinInfluenceZone(Eigen::Vector3d point) const;
+  /**
+   * @brief Gets all of the obstacles belonging to a specific group.
+   *
+   * @note Obstacle groups are [STATIC, DYNAMIC, ROBOT]
+   *
+   * @param group The group to filter obstacles by.
+   * @return std::vector<PotentialFieldObstacle> A vector of obstacles belonging to the specified group.
+   */
+  std::vector<PotentialFieldObstacle> getObstaclesByGroup(ObstacleGroup group) const;
+
+  /**
+   * @brief Determines if the given point (in the world frame) is inside any obstacle.
+   *
+   * @param worldPoint The point in world coordinates to check.
+   * @return true If the point is inside any obstacle.
+   */
+  bool isPointInsideObstacle(Eigen::Vector3d worldPoint) const;
+
+  /**
+   * @brief Determines if the given point (in the world frame) is within the influence zone of any obstacle.
+   *
+   * @param worldPoint The point in world coordinates to check.
+   * @return true If the point is within the influence zone of any obstacle.
+   */
+  bool isPointWithinInfluenceZone(Eigen::Vector3d worldPoint) const;
+
+  /**
+   * @brief Computes the spatial limits (bounding box) of the potential field for visualization or analysis.
+   *        The bounds encompass all obstacles, the goal, and the query pose, expanded by a buffer area.
+   *
+   * @param queryPose The current query pose to include in the bounds
+   * @param bufferArea The extra margin to add around the computed limits [m]
+   * @return PFLimits The computed spatial limits
+   */
+  PFLimits computeFieldBounds(const SpatialVector& queryPose, double bufferArea) const;
 
   // ============ Force and Velocity Computation ============
+
+  Eigen::VectorXd evaluateWholeBodyJointVelocitiesAtConfiguration(
+    const std::vector<double>& jointAngles,
+    const SpatialVector& eePose);
 
   /**
    * @brief Given a 3D position, computes the task-space wrench
@@ -467,30 +568,32 @@ public:
    */
   Eigen::Vector3d computeRepulsiveForceLinear(const SpatialVector& queryPose) const;
 
-  // ============ Path Planning ============
+  /**
+   * @brief Computes joint torques for end-effector attraction to the goal pose.
+   *
+   * @note Uses the evaluateWrenchAtPose method to compute
+   *       task-space forces, then maps them to joint space via the end-effector Jacobian transpose.
+   *
+   * @param eePose The current end-effector pose
+   * @param jointAngles The current joint configuration [rad]
+   * @return Eigen::VectorXd Joint torques for end-effector attraction [Nm]
+   */
+  Eigen::VectorXd computeEndEffectorAttractionJointTorques(
+    const SpatialVector& eePose, const std::vector<double>& jointAngles) const;
 
   /**
-   * @brief Plans a path from the start pose to the goal pose using the potential field.
+   * @brief Computes joint torques for whole-body obstacle repulsion.
    *
-   * @note When stagnation is detected (i.e., minimal position change over a set number of iterations),
-   *       the force computation changes to remove opposing repulsive force components to help escape local minima
-   *       using the removeOpposingForce method.
+   * @note Iterates over all robot links and environment obstacles, computing repulsive forces
+   *       at the nearest points and mapping them to joint space via link Jacobian transposes.
+   *       Uses COAL distance queries and the Khatib repulsive potential formulation.
    *
-   *
-   * @param startPose The starting pose as a SpatialVector.
-   * @param dt The time step for each iteration of the path planning [s].
-   * @param goalTolerance The tolerance for reaching the goal pose [m].
-   * @param stagnationLimit The number of iterations to consider for stagnation detection, defaults to 100.
-   * @param stagnationThreshold The threshold for detecting stagnation in position change, defaults to 1e-4 [m].
-   * @param maxIters The maximum number of iterations to perform for path planning, defaults to 30000.
-   * @return PlannedPath The planned path containing poses, twists, joint angles, and timestamps.
+   * @param jointAngles The current joint configuration [rad]
+   * @return Eigen::VectorXd Joint torques for whole-body obstacle avoidance [Nm]
    */
-  PlannedPath planPath(
-    const SpatialVector& startPose,
-    const double dt,
-    const double goalTolerance,
-    const size_t maxIters = 30000
-  );
+  Eigen::VectorXd computeWholeBodyRepulsionJointTorques(const std::vector<double>& jointAngles) const;
+
+  // ============ Path Planning ============
 
   /**
    * @brief Computes the constrained twist at a given pose using the previous twist and the time step
@@ -546,6 +649,99 @@ public:
    */
   double minClearanceAlongSegment(const Eigen::Vector3d& from, const Eigen::Vector3d& to, int samples = 7) const;
 
+  /**
+   * @brief Checks if the robot is within a certain clearance distance from any environment obstacles.
+   *
+   * @param clearanceThreshold The clearance distance to check against [m]
+   * @return true If the robot is in collision with an environment obstacle
+   * @return false If the robot is not in collision with any environment obstacles
+   */
+  bool isRobotInCollisionWithEnvironment(double clearanceThreshold = 0.0) const;
+
+  /**
+ * @brief Plans a path from the start pose to the goal pose using the potential field.
+ *
+ * @note The path is planned by iteratively evaluating the velocity field at the current pose,
+ *       applying motion constraints, and integrating (RK4) to find the next pose until the goal is reached.
+ *       The IK solver is used to translate end-effector poses to joint angles at each step.
+ *
+ * @param startPose The starting pose as a SpatialVector.
+ * @param startJointAngles The starting joint angles for the robot [rad].
+ * @param dt The time step for each iteration of the path planning [s].
+ * @param goalTolerance The tolerance for reaching the goal pose [m].
+ * @param stagnationLimit The number of iterations to consider for stagnation detection, defaults to 100.
+ * @param stagnationThreshold The threshold for detecting stagnation in position change, defaults to 1e-4 [m].
+ * @param maxIters The maximum number of iterations to perform for path planning, defaults to 30000.
+ * @return PlannedPath The planned path containing poses, twists, joint angles, and timestamps.
+ */
+  PlannedPath planPathFromTaskSpaceWrench(
+    const SpatialVector& startPose,
+    const std::vector<double>& startJointAngles,
+    const double dt,
+    const double goalTolerance,
+    const size_t maxIters = 30000
+  );
+
+  /**
+   * @brief Plans a path from the start pose to the goal pose using whole-body joint velocities.
+   *
+   * @note This method computes joint velocities by considering both end-effector attraction
+   *       to the goal and whole-body obstacle repulsion. Unlike planPathFromTaskSpaceWrench,
+   *       this method directly integrates joint velocities rather than task-space velocities,
+   *       providing better whole-body collision avoidance. Forward kinematics is used to
+   *       compute the end-effector pose at each step from the integrated joint configuration.
+   *
+   * @param startPose The starting end-effector pose as a SpatialVector (used for validation).
+   * @param startJointAngles The starting joint angles for the robot [rad].
+   * @param dt The time step for each iteration of the path planning [s].
+   * @param goalTolerance The tolerance for reaching the goal pose [m].
+   * @param maxIters The maximum number of iterations to perform for path planning, defaults to 30000.
+   * @return PlannedPath The planned path containing poses, twists, joint angles, and timestamps.
+   */
+  PlannedPath planPathFromWholeBodyJointVelocities(
+    const SpatialVector& startPose,
+    const std::vector<double>& startJointAngles,
+    const double dt,
+    const double goalTolerance,
+    const size_t maxIters = 30000
+  );
+
+  /**
+   * @brief Runs the IKSolver to compute joint angles for a desired end-effector pose.
+   *
+   * @param targetPose The desired end-effector pose as a SpatialVector.
+   * @param seedJointAngles The initial guess for joint angles [rad].
+   * @return std::vector<double> The computed joint angles [rad].
+   */
+  std::vector<double> computeInverseKinematics(const SpatialVector& targetPose, const std::vector<double>& seedJointAngles) const;
+
+  /**
+   * @brief Creates a CSV file from a planned path with the following columns:
+   *        Time [s],
+   *        Position X [m], Position Y [m], Position Z [m],
+   *        Orientation Qx, Orientation Qy, Orientation Qz, Orientation Qw,
+   *        Linear Velocity X [m/s], Linear Velocity Y [m/s], Linear Velocity Z [m/s],
+   *        Angular Velocity X [rad/s], Angular Velocity Y [rad/s], Angular Velocity Z [rad/s],
+   *        Minimum Obstacle Clearance [m],
+   *        Number of Joints
+   *        Joint 1 [rad], Joint 2 [rad], ..., Joint N [rad]
+   *
+   * @note The real header looks like:
+   *       time_s, pos_x_m, pos_y_m, pos_z_m,
+   *       q_x, q_y, q_z, q_w,
+   *       vel_x_m_s, vel_y_m_s, vel_z_m_s,
+   *       ang_vel_x_rad_s, ang_vel_y_rad_s, ang_vel_z_rad_s,
+   *       min_obstacle_clearance_m,
+   *       num_joints,
+   *       joint_1_rad, joint_2_rad, ..., joint_N_rad
+   *
+   * @param path The planned path to convert to CSV
+   * @param filePath The file path to save the CSV
+   * @return true If the CSV was created successfully
+   * @return false If there was an error creating the CSV
+   */
+  bool createPlannedPathCSV(const PlannedPath& path, const std::string& filePath) const;
+
 private:
   double attractiveGain; // Gain for attractive force
   double repulsiveGain; // Gain for repulsive force
@@ -556,21 +752,20 @@ private:
   double maxAngularAcceleration; // [rad/s^2]
   double influenceDistance; // [m] global influence distance
   SpatialVector goalPose; // Current GoalPose
-  std::vector<PotentialFieldObstacle> obstacles; // Obstacle list
-  std::unordered_map<std::string, size_t> obstacleIndex; // Fast lookup for obstacle updates/removals by ID
+  bool goalSet = false; // Whether a goal pose has been set
+  std::vector<PotentialFieldObstacle> envObstacles; // Obstacle list
+  std::vector<PotentialFieldObstacle> robotObstacles; // Obstacle list
+  std::unordered_map<std::string, size_t> envObstacleIndexMap; // Fast lookup for obstacle updates/removals by ID
+  std::unordered_map<std::string, size_t> robotObstacleIndexMap; // Fast lookup for obstacle updates/removals by ID
   std::string urdfFileName; // URDF file path for kinematic model
+  std::string eeLinkName; // End-effector link name for kinematic model, IK, and planning
   std::unique_ptr<PFKinematics> pfKinematics; // Kinematics helper for obstacle updates via joint angles
   std::shared_ptr<IKSolver> ikSolver; // Inverse kinematics solver for joint angle computation
   const double translationalTolerance = 1e-3; // Threshold for distances to the goal and obstacles [m]
-  const double rotationalThreshold = 0.02; // Threshold for rotational geodesic distance [rad]
+  const double rotationalThreshold = 0.05; // Threshold for rotational geodesic distance [rad]
   const double defaultDStarThreshold = 1.0; // [m] distance for switching to quadratic attractive potential from conical
   const double softSatBeta = 1.0; // Soft-saturation parameter, higher = more aggressive curve
-  const double stagnationProgressRateThreshold = 0.01; // [m/s] min required progress toward goal
-  const double stagnationSpeedRmsThreshold = 0.02; // [m/s] consider "not moving" if below this
-  const int    stagnationWindowMinPoints = 8;    // need at least this many points in window
   bool dynamicQuadraticThresholdEnabled = false; // if true, use dynamic d* based on obstacles/kinematics
-
-  bool isPathStagnated(const PlannedPath& path);
 };
 
 #endif // PFIELDS_HPP

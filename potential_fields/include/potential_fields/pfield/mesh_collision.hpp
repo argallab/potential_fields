@@ -26,7 +26,7 @@ struct MeshCollisionData {
   // The BVH model of the mesh for collision queries
   std::shared_ptr<coal::BVHModel<coal::OBBRSS>> bvh;
   // Pre-created collision object for distance queries
-  std::shared_ptr<coal::CollisionObject> meshObj;
+  std::shared_ptr<coal::CollisionObject> collisionObject;
   // Axis-aligned bounding box (AABB) of the mesh (minimum corner)
   Eigen::Vector3d aabbMin;
   // Axis-aligned bounding box (AABB) of the mesh (maximum corner)

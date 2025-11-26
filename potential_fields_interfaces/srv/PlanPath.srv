@@ -1,6 +1,9 @@
-# The start pose for the plan
+# The start and goal pose for the plan
 geometry_msgs/PoseStamped start
 geometry_msgs/PoseStamped goal
+
+# The starting joint angles that correspond to the start pose [rad]
+float32[] starting_joint_angles
 
 # Timestep to breadcrumb the vector field [s]
 float32 delta_time
@@ -10,6 +13,10 @@ float32 goal_tolerance
 
 # Max iterations for the planner (Default is 30000)
 int32 max_iterations
+
+# Planning method to use: "task_space" (default) or "whole_body"
+# TODO(Sharwin24): Initialize srv variables with these definitions as well as a default to task_space
+string planning_method
 
 ---
 bool success

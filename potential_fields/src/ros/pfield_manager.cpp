@@ -46,7 +46,7 @@
 PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager") {
   RCLCPP_INFO(this->get_logger(), "PotentialFieldManager Initialized");
   // Declare parameters
-  this->visualizerFrequency = this->declare_parameter("visualize_pf_frequency", 100.0); // [Hz]
+  this->visualizerFrequency = this->declare_parameter("visualize_pf_frequency", 60.0); // [Hz]
   this->attractiveGain = this->declare_parameter("attractive_gain", 1.0); // [Ns/m]
   this->rotationalAttractiveGain = this->declare_parameter("rotational_attractive_gain", 0.7); // [Ns/m]
   this->repulsiveGain = this->declare_parameter("repulsive_gain", 0.1); // [Ns/m]
@@ -56,8 +56,10 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   this->maxAngularAcceleration = this->declare_parameter("max_angular_acceleration", 1.0); // [rad/s^2]
   this->influenceDistance = this->declare_parameter("influence_distance", 1.0); // Influence distance for obstacle repulsion
   this->fixedFrame = this->declare_parameter("fixed_frame", "world"); // RViz fixed frame
+  this->eeFrame = this->declare_parameter("end_effector_frame", "ee_link"); // End-effector frame name
   this->visualizerBufferArea = this->declare_parameter("visualizer_buffer_area", 1.0); // Extra area to visualize the PF [m]
   this->fieldResolution = this->declare_parameter("field_resolution", 0.5); // Resolution of the potential field grid [m]
+  this->visualizeFieldVectors = this->declare_parameter("visualize_field_vectors", false); // Whether to visualize the PF vectors
   this->urdfFileName = this->declare_parameter("urdf_file_path", std::string());
   this->motionPluginType = this->declare_parameter("motion_plugin_type", std::string()); // Motion Plugin Type [e.g. "franka"]
   // Get parameters from yaml file
@@ -71,8 +73,10 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   this->maxAngularAcceleration = this->get_parameter("max_angular_acceleration").as_double();
   this->influenceDistance = this->get_parameter("influence_distance").as_double();
   this->fixedFrame = this->get_parameter("fixed_frame").as_string();
+  this->eeFrame = this->get_parameter("end_effector_frame").as_string();
   this->visualizerBufferArea = this->get_parameter("visualizer_buffer_area").as_double();
   this->fieldResolution = this->get_parameter("field_resolution").as_double();
+  this->visualizeFieldVectors = this->get_parameter("visualize_field_vectors").as_bool();
   this->urdfFileName = this->get_parameter("urdf_file_path").as_string();
   this->motionPluginType = this->get_parameter("motion_plugin_type").as_string();
 
@@ -83,7 +87,7 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
     this->maxLinearAcceleration, this->maxAngularAcceleration,
     this->influenceDistance
   );
-  this->pField->useDynamicQuadraticThreshold(true);
+  this->pField->setDynamicQuadraticThreshold(true);
 
   // Initialize the motion plugin
   std::transform(
@@ -92,7 +96,7 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
     this->motionPluginType.begin(),
     [](unsigned char c) { return std::tolower(c); }
   );
-  if (this->motionPluginType.empty()) {
+  if (this->motionPluginType.empty() || this->motionPluginType == "null") {
     this->motionPlugin = std::make_unique<NullMotionPlugin>();
   }
 #ifdef USING_FRANKA
@@ -121,15 +125,18 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   }
 
   // Once IKSolver is initialized, assign it to the PF instance
-  this->pField->assignIKSolver(this->ikSolver);
+  this->pField->setIKSolver(this->ikSolver);
+
+  // Initialize currentJointAngles
+  this->currentJointAngles.resize(this->pField->getNumJoints(), 0.0);
 
   // Allow the user to not use a URDF
   if (!this->urdfFileName.empty() && this->urdfFileName.ends_with(".urdf")) {
     try {
-      this->pField->initializeKinematics(this->urdfFileName, this->ikSolver->getJointNames());
+      this->pField->initializeKinematics(this->urdfFileName, this->eeFrame);
       RCLCPP_INFO(this->get_logger(), "PF Kinematics initialized from URDF: %s", this->urdfFileName.c_str());
       RCLCPP_INFO(this->get_logger(),
-        "PF Kinematics estimated influence distance from robot extend to be: %f", this->pField->getInfluenceDistance());
+        "PF Kinematics estimated influence distance from robot extend to be: %.4f [m]", this->pField->getInfluenceDistance());
     }
     catch (const std::exception& e) {
       RCLCPP_ERROR(this->get_logger(), "Failed to initialize PF Kinematics from URDF: %s", e.what());
@@ -141,9 +148,11 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
 
   // Setup marker publisher
   // Use reliable and transient_local QoS for RViz MarkerArray publisher
-  auto markerPubQos = rclcpp::QoS(rclcpp::KeepLast(100)).reliable().transient_local();
+  auto markerPubQos = rclcpp::QoS(rclcpp::KeepLast(200)).reliable().transient_local();
   this->pFieldMarkerPub = this->create_publisher<MarkerArray>("pfield/markers", markerPubQos);
-  RCLCPP_INFO(this->get_logger(), "PF Markers publishing on: %s", this->pFieldMarkerPub->get_topic_name());
+  RCLCPP_INFO(this->get_logger(), "PF Markers publishing on '%s' at %.1f Hz", this->pFieldMarkerPub->get_topic_name(),
+    this->visualizerFrequency
+  );
 
   // Setup goal pose subscriber
   auto goalPoseQos = rclcpp::QoS(rclcpp::KeepLast(10)).reliable();
@@ -239,8 +248,6 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
 }
 
 void PotentialFieldManager::timerCallback() {
-  // Get updated obstacles from PFKinematics and update internal PF
-  // this->pField->updateObstaclesFromKinematics(this->motionPlugin->getCurrentJointAngles());
   // Update the query pose position based on integrating the PF velocity
   this->integrateQueryPoseFromField();
   MarkerArray pfieldMarkers = this->visualizePF(this->pField);
@@ -258,7 +265,16 @@ void PotentialFieldManager::integrateQueryPoseFromField() {
     this->queryPose.getPosition(), twist.linearVelocity, dt);
   Eigen::Quaterniond nextOrientation = this->pField->integrateAngularVelocity(
     this->queryPose.getOrientation(), twist.angularVelocity, dt);
+  // Update the query pose
   this->queryPose = SpatialVector(nextPosition, nextOrientation);
+  // Update robot obstacles based on query pose using IK
+  if (this->ikSolver) {
+    std::vector<double> newJoints = this->pField->computeInverseKinematics(this->queryPose, this->currentJointAngles);
+    if (!newJoints.empty()) {
+      this->currentJointAngles = newJoints;
+      this->pField->updateObstaclesFromKinematics(this->currentJointAngles);
+    }
+  }
   // Supply velocity-limited twist as previous for next acceleration limiting
   this->prevQueryTwist = twist;
 }
@@ -323,12 +339,44 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
   PlannedPath planningResult;
   try {
     // Plan a path using the request parameters and store the result
-    planningResult = this->pField->planPath(
-      /*startPose=*/startSV,
-      /*dt=*/request->delta_time,
-      /*goalTolerance=*/request->goal_tolerance,
-      /*maxIterations=*/request->max_iterations
+    // Convert starting_joint_angles (std::vector<float>) to std::vector<double> expected by planPathFromTaskSpaceWrench
+    std::vector<double> startJointAnglesDouble(
+      request->starting_joint_angles.cbegin(), request->starting_joint_angles.cend()
     );
+    if (request->planning_method == "task_space") {
+      RCLCPP_INFO(this->get_logger(), "Using Task-Space Wrench Planning");
+      planningResult = this->pField->planPathFromTaskSpaceWrench(
+        /*startPose=*/startSV,
+        /*startJointAngles=*/startJointAnglesDouble,
+        /*dt=*/request->delta_time,
+        /*goalTolerance=*/request->goal_tolerance,
+        /*maxIterations=*/request->max_iterations
+      );
+    }
+    else if (request->planning_method == "whole_body") {
+      RCLCPP_INFO(this->get_logger(), "Using Whole-Body Joint Velocity Planning");
+      planningResult = this->pField->planPathFromWholeBodyJointVelocities(
+        /*startPose=*/startSV,
+        /*startJointAngles=*/startJointAnglesDouble,
+        /*dt=*/request->delta_time,
+        /*goalTolerance=*/request->goal_tolerance,
+        /*maxIterations=*/request->max_iterations
+      );
+    }
+    else {
+      // Default to Task Space Wrench
+      if (!request->planning_method.empty() && request->planning_method != "task_space") {
+        RCLCPP_WARN(this->get_logger(), "Unknown planning method '%s'", request->planning_method.c_str());
+      }
+      RCLCPP_INFO(this->get_logger(), "Using Task-Space Wrench Planning");
+      planningResult = this->pField->planPathFromTaskSpaceWrench(
+        /*startPose=*/startSV,
+        /*startJointAngles=*/startJointAnglesDouble,
+        /*dt=*/request->delta_time,
+        /*goalTolerance=*/request->goal_tolerance,
+        /*maxIterations=*/request->max_iterations
+      );
+    }
   }
   catch (const std::exception& e) {
     RCLCPP_ERROR(this->get_logger(), "Exception during path planning: %s", e.what());
@@ -424,83 +472,57 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
       distanceToGoal
     );
   }
-}
-
-PFLimits PotentialFieldManager::getPFLimits(std::shared_ptr<PotentialField> pf) {
-  PFLimits limits;
-  // Determine the limits of the potential field based on obstacle positions, goal position, and query pose
-  auto obstacles = pf->getObstacles();
-  Eigen::Vector3d goalPos = pf->getGoalPose().getPosition();
-  Eigen::Vector3d queryPos = this->queryPose.getPosition();
-  if (obstacles.empty()) {
-    // If no obstacles, set limits around the goal position and query pose
-    limits.minX = std::min(goalPos.x(), queryPos.x());
-    limits.maxX = std::max(goalPos.x(), queryPos.x());
-    limits.minY = std::min(goalPos.y(), queryPos.y());
-    limits.maxY = std::max(goalPos.y(), queryPos.y());
-    limits.minZ = std::min(goalPos.z(), queryPos.z());
-    limits.maxZ = std::max(goalPos.z(), queryPos.z());
+  // Create a CSV file of the planned path for analysis
+  const std::string csvFilePath = "data/planned_path.csv";
+  if (!this->pField->createPlannedPathCSV(planningResult, csvFilePath)) {
+    RCLCPP_WARN(this->get_logger(), "Failed to create planned path CSV at %s", csvFilePath.c_str());
   }
   else {
-    // Initialize limits based on the first obstacle
-    Eigen::Vector3d firstPos = obstacles[0].getPosition();
-    limits.minX = firstPos.x();
-    limits.maxX = firstPos.x();
-    limits.minY = firstPos.y();
-    limits.maxY = firstPos.y();
-    limits.minZ = firstPos.z();
-    limits.maxZ = firstPos.z();
-    // Iterate through obstacles to find overall min/max
-    for (const auto& obst : obstacles) {
-      Eigen::Vector3d pos = obst.getPosition();
-      if (pos.x() < limits.minX) limits.minX = pos.x();
-      if (pos.x() > limits.maxX) limits.maxX = pos.x();
-      if (pos.y() < limits.minY) limits.minY = pos.y();
-      if (pos.y() > limits.maxY) limits.maxY = pos.y();
-      if (pos.z() < limits.minZ) limits.minZ = pos.z();
-      if (pos.z() > limits.maxZ) limits.maxZ = pos.z();
-    }
-    // Expand limits to include the goal position if outside current bounds
-    if (goalPos.x() < limits.minX) limits.minX = goalPos.x();
-    if (goalPos.x() > limits.maxX) limits.maxX = goalPos.x();
-    if (goalPos.y() < limits.minY) limits.minY = goalPos.y();
-    if (goalPos.y() > limits.maxY) limits.maxY = goalPos.y();
-    if (goalPos.z() < limits.minZ) limits.minZ = goalPos.z();
-    if (goalPos.z() > limits.maxZ) limits.maxZ = goalPos.z();
-    // Expand limits to include the query pose if outside current bounds
-    if (queryPos.x() < limits.minX) limits.minX = queryPos.x();
-    if (queryPos.x() > limits.maxX) limits.maxX = queryPos.x();
-    if (queryPos.y() < limits.minY) limits.minY = queryPos.y();
-    if (queryPos.y() > limits.maxY) limits.maxY = queryPos.y();
-    if (queryPos.z() < limits.minZ) limits.minZ = queryPos.z();
-    if (queryPos.z() > limits.maxZ) limits.maxZ = queryPos.z();
+    RCLCPP_INFO(this->get_logger(), "Planned path CSV created at %s", csvFilePath.c_str());
   }
-  // Increase the limits by a buffer area for better visualization
-  limits.minX -= this->visualizerBufferArea;
-  limits.maxX += this->visualizerBufferArea;
-  limits.minY -= this->visualizerBufferArea;
-  limits.maxY += this->visualizerBufferArea;
-  limits.minZ -= this->visualizerBufferArea;
-  limits.maxZ += this->visualizerBufferArea;
-  return limits;
 }
+
 
 MarkerArray PotentialFieldManager::visualizePF(std::shared_ptr<PotentialField> pf) {
   MarkerArray markerArray;
+  auto start = this->now();
   MarkerArray goalMarkerArray = this->createGoalMarker(pf);
   markerArray.markers.insert(markerArray.markers.cend(), goalMarkerArray.markers.cbegin(), goalMarkerArray.markers.cend());
+  auto endGoal = this->now();
   MarkerArray obstacleMarkers = this->createObstacleMarkers(pf);
-  markerArray.markers.insert(markerArray.markers.cend(), obstacleMarkers.markers.cbegin(),
-    obstacleMarkers.markers.cend());
-  MarkerArray potentialVectorMarkers = this->createPotentialVectorMarkers(pf);
-  markerArray.markers.insert(markerArray.markers.cend(), potentialVectorMarkers.markers.cbegin(),
-    potentialVectorMarkers.markers.cend());
+  markerArray.markers.insert(markerArray.markers.cend(), obstacleMarkers.markers.cbegin(), obstacleMarkers.markers.cend());
+  auto endObstacles = this->now();
   MarkerArray queryPoseMarkerArray = this->createQueryPoseMarker();
   markerArray.markers.insert(markerArray.markers.cend(), queryPoseMarkerArray.markers.cbegin(),
     queryPoseMarkerArray.markers.cend());
+  auto endQueryPose = this->now();
   MarkerArray thresholdMarkers = this->createThresholdMarkers(pf);
   markerArray.markers.insert(markerArray.markers.cend(), thresholdMarkers.markers.cbegin(),
     thresholdMarkers.markers.cend());
+  auto endThreshold = this->now();
+  if (this->visualizeFieldVectors) {
+    MarkerArray potentialVectorMarkers = this->createPotentialVectorMarkers(pf);
+    markerArray.markers.insert(markerArray.markers.cend(), potentialVectorMarkers.markers.cbegin(),
+      potentialVectorMarkers.markers.cend());
+    auto endVectors = this->now();
+    RCLCPP_DEBUG_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
+      "PF Visualization Timing: Goal=%.3f ms, Obstacles=%.3f ms, Query Pose=%.3f ms, Threshold=%.3f ms, Velocity Vectors=%.3f ms",
+      (endGoal - start).seconds() * 1000.0,
+      (endObstacles - endGoal).seconds() * 1000.0,
+      (endQueryPose - endObstacles).seconds() * 1000.0,
+      (endThreshold - endQueryPose).seconds() * 1000.0,
+      (endVectors - endThreshold).seconds() * 1000.0
+    );
+  }
+  else {
+    RCLCPP_DEBUG_THROTTLE(this->get_logger(), *this->get_clock(), 5000,
+      "PF Visualization Timing: Goal=%.3f ms, Obstacles=%.3f ms, Query Pose=%.3f ms, Threshold=%.3f ms",
+      (endGoal - start).seconds() * 1000.0,
+      (endObstacles - endGoal).seconds() * 1000.0,
+      (endQueryPose - endObstacles).seconds() * 1000.0,
+      (endThreshold - endQueryPose).seconds() * 1000.0
+    );
+  }
   return markerArray;
 }
 
@@ -579,6 +601,7 @@ MarkerArray PotentialFieldManager::createQueryPoseMarker() {
 
 MarkerArray PotentialFieldManager::createThresholdMarkers(std::shared_ptr<PotentialField> pf) {
   MarkerArray markerArray;
+  if (!pf->isGoalSet()) { return markerArray; }
   // Create a translucent sphere representing the dStarThreshold around the goal
   const SpatialVector goalPose = pf->getGoalPose();
   Marker thresholdMarker;
@@ -610,14 +633,50 @@ MarkerArray PotentialFieldManager::createThresholdMarkers(std::shared_ptr<Potent
 
 MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<PotentialField> pf) {
   MarkerArray markerArray;
-  std::vector<PotentialFieldObstacle> obstacles = pf->getObstacles();
+
+  // Clear previous markers to prevent trails
+  Marker deleteRobot;
+  deleteRobot.action = Marker::DELETEALL;
+  deleteRobot.ns = "robot_obstacles";
+  markerArray.markers.push_back(deleteRobot);
+
+  Marker deleteEnv;
+  deleteEnv.action = Marker::DELETEALL;
+  deleteEnv.ns = "environment_obstacles";
+  markerArray.markers.push_back(deleteEnv);
+
+  Marker deleteInf;
+  deleteInf.action = Marker::DELETEALL;
+  deleteInf.ns = "environment_influence_zones";
+  markerArray.markers.push_back(deleteInf);
+
+  std::vector<PotentialFieldObstacle> envObstacles = pf->getEnvObstacles();
+  std::vector<PotentialFieldObstacle> robotObstacles = pf->getRobotObstacles();
+  // Combine both environment and robot obstacles for visualization
+  std::vector<PotentialFieldObstacle> obstacles;
+  obstacles.insert(obstacles.end(), envObstacles.begin(), envObstacles.end());
+  obstacles.insert(obstacles.end(), robotObstacles.begin(), robotObstacles.end());
+
+  std::unordered_set<int> usedIDs;
+
   for (const auto& obstacle : obstacles) {
     int hashID = createHashID(obstacle);
+    // Ensure unique ID in this array
+    while (usedIDs.count(hashID)) {
+      hashID++;
+    }
+    usedIDs.insert(hashID);
+
     Marker obstacleMarker;
     obstacleMarker.header.frame_id = this->fixedFrame;
     obstacleMarker.header.stamp = this->now();
     obstacleMarker.frame_locked = true;
-    obstacleMarker.ns = "obstacles";
+    if (obstacle.getGroup() == ObstacleGroup::ROBOT) {
+      obstacleMarker.ns = "robot_obstacles";
+    }
+    else {
+      obstacleMarker.ns = "environment_obstacles";
+    }
     obstacleMarker.id = hashID;
     obstacleMarker.action = Marker::ADD;
     auto position = obstacle.getPosition();
@@ -673,18 +732,31 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<Potenti
       break;
     }
     }
-    obstacleMarker.color.r = 1.0f;
-    obstacleMarker.color.g = 0.0f;
-    obstacleMarker.color.b = 0.0f;
+    if (obstacle.getGroup() == ObstacleGroup::ROBOT) {
+      // Robot obstacles in green
+      obstacleMarker.color.r = 0.0f;
+      obstacleMarker.color.g = 1.0f;
+      obstacleMarker.color.b = 0.0f;
+    }
+    else {
+      // Environment obstacles in red
+      obstacleMarker.color.r = 1.0f;
+      obstacleMarker.color.g = 0.0f;
+      obstacleMarker.color.b = 0.0f;
+    }
     obstacleMarker.color.a = 1.0f; // Opaque
     obstacleMarker.lifetime = rclcpp::Duration(0, 0); // No lifetime
     markerArray.markers.push_back(obstacleMarker);
+    if (obstacle.getGroup() == ObstacleGroup::ROBOT) {
+      // Skip influence zone visualization for robot obstacles
+      continue;
+    }
     // Create a transparent volume representing the influence zone
     Marker influenceMarker;
     influenceMarker.header.frame_id = this->fixedFrame;
     influenceMarker.header.stamp = this->now();
     influenceMarker.frame_locked = true;
-    influenceMarker.ns = "influence_zones";
+    influenceMarker.ns = "environment_influence_zones";
     influenceMarker.id = hashID; // mirror id for influence volume
     influenceMarker.action = Marker::ADD;
     influenceMarker.pose.position.x = position.x();
@@ -765,11 +837,14 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<Potenti
     }
     markerArray.markers.push_back(influenceMarker);
   }
+
   return markerArray;
 }
 
 MarkerArray PotentialFieldManager::createGoalMarker(std::shared_ptr<PotentialField> pf) {
   // Create a green sphere marker
+  MarkerArray markerArray;
+  if (!pf->isGoalSet()) { return markerArray; }
   Marker goalMarker;
   goalMarker.header.frame_id = this->fixedFrame;
   goalMarker.header.stamp = this->now();
@@ -845,10 +920,11 @@ MarkerArray PotentialFieldManager::createGoalMarker(std::shared_ptr<PotentialFie
 MarkerArray PotentialFieldManager::createPotentialVectorMarkers(std::shared_ptr<PotentialField> pf) {
   MarkerArray markerArray;
   int id = 0;
-  const auto limits = this->getPFLimits(pf);
-  for (double x = limits.minX; x <= limits.maxX; x += this->fieldResolution) {
-    for (double y = limits.minY; y <= limits.maxY; y += this->fieldResolution) {
-      for (double z = limits.minZ; z <= limits.maxZ; z += this->fieldResolution) {
+  const auto limits = pf->computeFieldBounds(this->queryPose, this->visualizerBufferArea);
+  const double resolution = std::max(this->fieldResolution, 1.0); // Resolution must be at least 1.0
+  for (double x = limits.minX; x <= limits.maxX; x += resolution) {
+    for (double y = limits.minY; y <= limits.maxY; y += resolution) {
+      for (double z = limits.minZ; z <= limits.maxZ; z += resolution) {
         // Skip any points that are inside obstacle radius
         Eigen::Vector3d point(x, y, z);
         if (pf->isPointInsideObstacle(point)) { continue; }
@@ -935,7 +1011,7 @@ void PotentialFieldManager::exportFieldDataToCSV(std::shared_ptr<PotentialField>
   std::ofstream obstacles_file(obstacles_filename);
   if (obstacles_file.is_open()) {
     obstacles_file << "obstacle_x,obstacle_y,obstacle_z,type,influence,repulsive_gain,radius,length,width,height\n";
-    for (const auto& obstacle : pf->getObstacles()) {
+    for (const auto& obstacle : pf->getEnvObstacles()) {
       const Eigen::Vector3d& position = obstacle.getPosition();
       const ObstacleGeometry& g = obstacle.getGeometry();
       obstacles_file << position.x() << "," << position.y() << "," << position.z() << ","

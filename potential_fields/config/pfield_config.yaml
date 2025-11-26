@@ -1,6 +1,6 @@
 pfield_manager:
   ros__parameters:
-    visualize_pf_frequency: 60.0 # [Hz]
+    visualize_pf_frequency: 10.0 # [Hz]
     attractive_gain: 1.5 # [Nm]
     rotational_attractive_gain: 1.5 # [Nm/rad]
     repulsive_gain: 0.7 # [Nm]
@@ -9,6 +9,6 @@ pfield_manager:
     max_linear_acceleration: 1.0 # [m/s^2]
     max_angular_acceleration: 0.2 # [rad/s^2]
     influence_distance: 0.075 # Influence distance for obstacle repulsion [m]
+    visualize_field_vectors: false # Whether to visualize the potential field vectors (Slows down computation if true)
     visualizer_buffer_area: 0.5 # Extra area around obstacles and goal to visualize the PF [m]
-    field_resolution: 0.5 # Resolution to show PF velocity arrows in RViz [m]
-    motion_plugin_type: "xarm" # Motion plugin to use (e.g., "null", "franka", "xarm")
+    field_resolution: 1.0 # Resolution to show PF velocity arrows in RViz [m]

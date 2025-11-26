@@ -2,6 +2,11 @@
 #include "pfield/mesh_collision.hpp"
 #include "pfield/pfield_common.hpp"
 
+#include <coal/narrowphase/narrowphase.h>
+#include <coal/collision.h>
+#include <coal/distance.h>
+#include <coal/shape/geometric_shapes.h>
+#include <coal/math/transform.h>
 
 bool PotentialFieldObstacle::withinInfluenceZone(Eigen::Vector3d worldPoint, double influenceDistance) const {
   double signedDistance;
@@ -180,4 +185,110 @@ void PotentialFieldObstacle::computeSignedDistanceAndNormal(
   default:
     throw std::invalid_argument("Unknown obstacle type");
   }
+}
+
+std::shared_ptr<coal::CollisionObject> PotentialFieldObstacle::toCoalCollisionObject() {
+  // First, check the cached COAL collision object
+  if (this->coalCollisionObject) { return this->coalCollisionObject; }
+
+  // Create COAL transform from obstacle pose
+  coal::Transform3s transform = coal::Transform3s::Identity();
+
+  // Set translation
+  transform.setTranslation(coal::Vec3s(
+    static_cast<coal::CoalScalar>(this->position.x()),
+    static_cast<coal::CoalScalar>(this->position.y()),
+    static_cast<coal::CoalScalar>(this->position.z())
+  ));
+
+  // Set rotation from quaternion (COAL uses w,x,y,z order)
+  coal::Quatf quat(
+    static_cast<coal::CoalScalar>(this->orientation.w()),
+    static_cast<coal::CoalScalar>(this->orientation.x()),
+    static_cast<coal::CoalScalar>(this->orientation.y()),
+    static_cast<coal::CoalScalar>(this->orientation.z())
+  );
+  transform.setQuatRotation(quat);
+
+  // Create appropriate COAL shape based on obstacle type
+  std::shared_ptr<coal::CollisionGeometry> shape;
+
+  switch (this->type) {
+  case ObstacleType::SPHERE: {
+    shape = std::make_shared<coal::Sphere>(
+      static_cast<coal::CoalScalar>(this->geometry.radius)
+    );
+    break;
+  }
+
+  case ObstacleType::BOX: {
+    shape = std::make_shared<coal::Box>(
+      static_cast<coal::CoalScalar>(this->geometry.length),
+      static_cast<coal::CoalScalar>(this->geometry.width),
+      static_cast<coal::CoalScalar>(this->geometry.height)
+    );
+    break;
+  }
+
+  case ObstacleType::CYLINDER: {
+    shape = std::make_shared<coal::Cylinder>(
+      static_cast<coal::CoalScalar>(this->geometry.radius),
+      static_cast<coal::CoalScalar>(this->geometry.height)
+    );
+    break;
+  }
+
+  case ObstacleType::MESH: {
+    if (!this->meshCollisionData || !this->meshCollisionData->bvh) {
+      std::string errorMsg = "Mesh collision data not available for obstacle: " + this->frameID;
+      if (!this->meshResource.empty()) {
+        errorMsg += "\n  Attempted to load mesh from: " + this->meshResource;
+        errorMsg += "\n  Mesh scale: [" + std::to_string(this->meshScale.x()) + ", "
+          + std::to_string(this->meshScale.y()) + ", "
+          + std::to_string(this->meshScale.z()) + "]";
+        errorMsg += "\n  Possible causes:";
+        errorMsg += "\n    - Mesh file does not exist at the specified path";
+        errorMsg += "\n    - ROS package path is not resolved (package:// URI requires ROS environment)";
+        errorMsg += "\n    - Mesh file format is not supported or corrupted";
+        errorMsg += "\n    - Insufficient permissions to read the mesh file";
+      }
+      else {
+        errorMsg += "\n  No mesh resource path was provided";
+      }
+      throw std::runtime_error(errorMsg);
+    }
+    // Use the existing BVH from mesh collision data
+    shape = this->meshCollisionData->bvh;
+    break;
+  }
+
+  default:
+    throw std::invalid_argument("Unknown obstacle type: " + obstacleTypeToString(this->type));
+  }
+
+  // Create and return collision object
+  this->coalCollisionObject = std::make_shared<coal::CollisionObject>(shape, transform);
+  return this->coalCollisionObject;
+}
+
+void PotentialFieldObstacle::updateCoalCollisionObjectPose() const {
+  if (!this->coalCollisionObject) { return; }
+  coal::Transform3s transform = coal::Transform3s::Identity();
+  transform.setTranslation(
+    Eigen::Vector3d(
+      static_cast<coal::CoalScalar>(this->position.x()),
+      static_cast<coal::CoalScalar>(this->position.y()),
+      static_cast<coal::CoalScalar>(this->position.z())
+    )
+  );
+  transform.setQuatRotation(
+    coal::Quatf(
+      static_cast<coal::CoalScalar>(this->orientation.w()),
+      static_cast<coal::CoalScalar>(this->orientation.x()),
+      static_cast<coal::CoalScalar>(this->orientation.y()),
+      static_cast<coal::CoalScalar>(this->orientation.z())
+    )
+  );
+  this->coalCollisionObject->setTransform(transform);
+  this->coalCollisionObject->computeAABB();
 }

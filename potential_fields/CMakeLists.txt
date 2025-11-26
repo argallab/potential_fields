@@ -33,6 +33,9 @@ find_package(geometric_shapes REQUIRED)
 find_package(hpp-fcl REQUIRED)
 find_package(pinocchio REQUIRED)
 # find_package(Franka REQUIRED)
+find_package(kdl_parser REQUIRED)
+find_package(orocos_kdl REQUIRED)
+find_package(ament_index_cpp REQUIRED)
 
 
 # Setup pfield_lib library
@@ -86,6 +89,10 @@ ament_target_dependencies(robot_plugins
   rclcpp
   geometry_msgs
   sensor_msgs
+  kdl_parser
+  orocos_kdl
+  ament_index_cpp
+  urdf
   # Franka
 )
 target_include_directories(robot_plugins PUBLIC
@@ -197,6 +204,12 @@ if(BUILD_TESTING)
     test/test_pf_obstacles.cpp
   )
   target_link_libraries(test_pf_obstacles pfield_lib)
+
+  ament_add_gtest(test_visualization_profiling
+    test/test_visualization_profiling.cpp
+  )
+  target_link_libraries(test_visualization_profiling pfield_lib)
+
   install(
     TARGETS test_spatial_vector
     DESTINATION lib/${PROJECT_NAME}
@@ -211,6 +224,10 @@ if(BUILD_TESTING)
   )
   install(
     TARGETS test_pf_obstacles
+    DESTINATION lib/${PROJECT_NAME}
+  )
+  install(
+    TARGETS test_visualization_profiling
     DESTINATION lib/${PROJECT_NAME}
   )
 

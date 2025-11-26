@@ -3,7 +3,7 @@
 #include "pfield/pfield.hpp"
 #include "pfield/pf_obstacle.hpp"
 #include "pfield/spatial_vector.hpp"
-// Use the simple IK from the NullMotionPlugin for planPath tests
+// Use the simple IK from the NullMotionPlugin for planPathFromTaskSpaceWrench tests
 #include "robot_plugins/null_motion_plugin.hpp"
 
 TEST(PotentialFieldTest, AddAndRemoveObstacles) {
@@ -17,7 +17,7 @@ TEST(PotentialFieldTest, AddAndRemoveObstacles) {
     ObstacleGeometry{1.0f, 0.0f, 0.0f, 0.0f}
   );
   pf.addObstacle(o1);
-  EXPECT_EQ(pf.getObstacles().size(), 1);
+  EXPECT_EQ(pf.getEnvObstacles().size(), 1);
 
   // Overwrite same ID
   PotentialFieldObstacle o1b(
@@ -29,12 +29,12 @@ TEST(PotentialFieldTest, AddAndRemoveObstacles) {
     ObstacleGeometry{1.5f, 0.0f, 0.0f, 0.0f}
   );
   pf.addObstacle(o1b);
-  EXPECT_EQ(pf.getObstacles().size(), 1);
-  EXPECT_EQ(pf.getObstacles()[0].getType(), ObstacleType::SPHERE);
-  EXPECT_EQ(pf.getObstacles()[0].getPosition().x(), 2.0f);
-  EXPECT_EQ(pf.getObstacles()[0].getPosition().y(), 2.0f);
-  EXPECT_EQ(pf.getObstacles()[0].getPosition().z(), 2.0f);
-  EXPECT_EQ(pf.getObstacles()[0].getGeometry().radius, 1.5f);
+  EXPECT_EQ(pf.getEnvObstacles().size(), 1);
+  EXPECT_EQ(pf.getEnvObstacles()[0].getType(), ObstacleType::SPHERE);
+  EXPECT_EQ(pf.getEnvObstacles()[0].getPosition().x(), 2.0f);
+  EXPECT_EQ(pf.getEnvObstacles()[0].getPosition().y(), 2.0f);
+  EXPECT_EQ(pf.getEnvObstacles()[0].getPosition().z(), 2.0f);
+  EXPECT_EQ(pf.getEnvObstacles()[0].getGeometry().radius, 1.5f);
 
 
   // Add another and remove
@@ -46,10 +46,10 @@ TEST(PotentialFieldTest, AddAndRemoveObstacles) {
     ObstacleGroup::STATIC,
     ObstacleGeometry{1.0, 2.0, 8.0, 1.0}
   ));
-  EXPECT_EQ(pf.getObstacles().size(), 2);
+  EXPECT_EQ(pf.getEnvObstacles().size(), 2);
   EXPECT_TRUE(pf.removeObstacle("o2"));
   EXPECT_FALSE(pf.removeObstacle("o99"));  // nonexistent
-  EXPECT_EQ(pf.getObstacles().size(), 1);
+  EXPECT_EQ(pf.getEnvObstacles().size(), 1);
 }
 
 TEST(PotentialFieldTest, ClearObstacles) {
@@ -71,7 +71,7 @@ TEST(PotentialFieldTest, ClearObstacles) {
     ObstacleGeometry{2.0, 0.0, 0.0, 0.0}
   ));
   pf.clearObstacles();
-  EXPECT_TRUE(pf.getObstacles().empty());
+  EXPECT_TRUE(pf.getEnvObstacles().empty());
 }
 
 TEST(PotentialFieldTest, VelocityAtGoalIsZero) {
@@ -94,12 +94,21 @@ TEST(PotentialFieldTest, AttractiveFieldPullsTowardGoal) {
 
 TEST(PotentialFieldTest, AttractiveGainScaling) {
   PotentialField pf(3.0, 0.0, 0.0, 0.0, 10.0, 1.0, 5.0, 5.0);
+  pf.setGoalPose(SpatialVector(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity()));
   SpatialVector query(Eigen::Vector3d(2.0, 0.0, 0.0));
   TaskSpaceTwist vel = pf.evaluateVelocityAtPose(query);
   // With d* = 1.0 (fixed, dynamic disabled), distance(=2) > d* so we are in the conical region.
   // Expected force magnitude = gain * d* = 3 * 1 = 3 toward the goal (negative x).
   EXPECT_NEAR(vel.getLinearVelocity().x(), -3.0, 1e-6);
   EXPECT_NEAR(vel.getLinearVelocity().y(), 0.0, 1e-6);
+}
+
+TEST(PotentialFieldTest, NoGoalNoAttraction) {
+  PotentialField pf(1.0, 0.0, 0.0); // Attractive gain 1.0, but no goal set
+  SpatialVector query(Eigen::Vector3d(2.0, 0.0, 0.0));
+  TaskSpaceTwist vel = pf.evaluateVelocityAtPose(query);
+  EXPECT_EQ(vel.getLinearVelocity(), Eigen::Vector3d::Zero());
+  EXPECT_EQ(vel.getAngularVelocity(), Eigen::Vector3d::Zero());
 }
 
 TEST(PotentialFieldTest, RepulsiveFieldPushesAwayFromObstacle) {
@@ -568,10 +577,11 @@ TEST(PotentialFieldTest, PlanPathSinglePointWhenAlreadyAtGoal) {
   // Provide a simple IK solver from the NullMotionPlugin
   NullMotionPlugin nullPlugin;
   auto ik = nullPlugin.getIKSolver();
-  pf.assignIKSolver(ik);
+  pf.setIKSolver(ik);
+  const std::vector<double> startJointAngles = {};
   const double dt = 0.05;
   const double tol = 1e-3; // matches translationalTolerance
-  PlannedPath path = pf.planPath(goal, dt, tol); // startPose == goal
+  PlannedPath path = pf.planPathFromTaskSpaceWrench(goal, startJointAngles, dt, tol); // startPose == goal
   ASSERT_EQ(path.numPoints, 1u);
   ASSERT_EQ(path.poses.size(), 1u);
   ASSERT_EQ(path.twists.size(), 1u);
@@ -589,11 +599,12 @@ TEST(PotentialFieldTest, PlanPathMonotonicConvergenceToGoal) {
   SpatialVector start(Eigen::Vector3d(2.0, 0.0, 0.0), Eigen::Quaterniond::Identity());
   NullMotionPlugin nullPlugin;
   auto ik = nullPlugin.getIKSolver();
-  pf.assignIKSolver(ik);
+  pf.setIKSolver(ik);
+  const std::vector<double> startJointAngles = {};
   const double dt = 0.1;
   const double tol = 1e-3;
   const size_t maxIters = 500;
-  PlannedPath path = pf.planPath(start, dt, tol, maxIters);
+  PlannedPath path = pf.planPathFromTaskSpaceWrench(start, startJointAngles, dt, tol, maxIters);
   ASSERT_GT(path.numPoints, 1u); // should have progressed
   // Distances should be non-increasing
   double prevDist = (path.poses.front().getPosition() - goal.getPosition()).norm();
@@ -617,11 +628,12 @@ TEST(PotentialFieldTest, PlanPathTimeStampConsistency) {
   SpatialVector start(Eigen::Vector3d(1.0, 0.0, 0.0), Eigen::Quaterniond::Identity());
   NullMotionPlugin nullPlugin;
   auto ik = nullPlugin.getIKSolver();
-  pf.assignIKSolver(ik);
+  pf.setIKSolver(ik);
+  const std::vector<double> startJointAngles = {};
   const double dt = 0.05;
   const double tol = 1e-3;
   const size_t maxIters = 400;
-  PlannedPath path = pf.planPath(start, dt, tol, maxIters);
+  PlannedPath path = pf.planPathFromTaskSpaceWrench(start, startJointAngles, dt, tol, maxIters);
   ASSERT_EQ(path.dt, dt); // stored dt
   // timeStamps[i] should be approximately i*dt
   for (size_t i = 0; i < path.timeStamps.size(); ++i) {
@@ -634,18 +646,19 @@ TEST(PotentialFieldTest, PlanPathTimeStampConsistency) {
 }
 
 TEST(PotentialFieldTest, PlanPathTwistMatchesRK4ConstrainedTwist) {
-  // planPath records the RK4-averaged constrained twist (with opposing-force removal) per step.
+  // planPathFromTaskSpaceWrench records the RK4-averaged constrained twist (with opposing-force removal) per step.
   // Reconstruct that twist using the same method and compare strictly.
   SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
   PotentialField pf(goal, 1.0, 0.0, 0.0);
   SpatialVector start(Eigen::Vector3d(1.5, 0.0, 0.0), Eigen::Quaterniond::Identity());
   NullMotionPlugin nullPlugin;
   auto ik = nullPlugin.getIKSolver();
-  pf.assignIKSolver(ik);
+  pf.setIKSolver(ik);
+  const std::vector<double> startJointAngles = {};
   const double dt = 0.1;
   const double tol = 1e-3;
   const size_t maxIters = 200;
-  PlannedPath path = pf.planPath(start, dt, tol, maxIters);
+  PlannedPath path = pf.planPathFromTaskSpaceWrench(start, startJointAngles, dt, tol, maxIters);
   ASSERT_EQ(path.poses.size(), path.twists.size());
   TaskSpaceTwist prevLimited; // starts at zero
   for (size_t i = 0; i < path.poses.size(); ++i) {
@@ -719,7 +732,7 @@ TEST(PotentialFieldDynamicThresholdTest, NoObstaclesBaselinePlusStopping) {
   // With no obstacles, d* = baseline + 0.5 * stoppingDistance, clamped to [dMin, influenceDistance]
   PotentialField pf; // defaults: vmax=5, amax=1, baseline ~ 1.0, influence=1.0
   pf.setInfluenceDistance(10.0); // widen clamp upper bound so stopping distance affects result
-  pf.useDynamicQuadraticThreshold(true);
+  pf.setDynamicQuadraticThreshold(true);
   SpatialVector query(Eigen::Vector3d(2.0, 0.0, 0.0));
 
   // Stopping distance evaluates to 12.5
@@ -733,7 +746,7 @@ TEST(PotentialFieldDynamicThresholdTest, ClampedByInfluenceInClutter) {
   SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
   PotentialField pf(goal, 1.0, 0.0, 0.0);
   pf.setInfluenceDistance(3.0); // small influence to exercise clamping
-  pf.useDynamicQuadraticThreshold(true);
+  pf.setDynamicQuadraticThreshold(true);
   // Obstacle centered at goal
   pf.addObstacle(PotentialFieldObstacle(
     "clutter",
@@ -746,4 +759,55 @@ TEST(PotentialFieldDynamicThresholdTest, ClampedByInfluenceInClutter) {
   SpatialVector query(Eigen::Vector3d(5.0, 0.0, 0.0));
   const double dstar = pf.computeDynamicQuadraticThreshold(query);
   EXPECT_NEAR(dstar, pf.getInfluenceDistance(), 1e-12);
+}
+
+TEST(PotentialFieldTest, EvaluateWholeBodyJointVelocitiesBasic) {
+  // Test that evaluateWholeBodyJointVelocitiesAtConfiguration returns joint velocities
+  // with correct dimensions and reasonable values
+
+  // Create a PotentialField with a goal away from origin
+  SpatialVector goal(Eigen::Vector3d(2.0, 0.0, 0.0));
+  PotentialField pf(goal, 1.0, 0.0, 1.0);  // attractive gain, rotational gain, repulsive gain
+
+  // Initialize with URDF (using null motion plugin approach for testing)
+  NullMotionPlugin plugin;
+  pf.setIKSolver(plugin.getIKSolver());
+
+  // Define a simple 3-DOF joint configuration
+  std::vector<double> jointAngles = {0.1, 0.2, 0.3};
+
+  // Current EE pose (not at goal, so there should be attraction)
+  SpatialVector eePose(Eigen::Vector3d(0.5, 0.0, 0.0));
+
+  // Add an obstacle to create some repulsion
+  pf.addObstacle(PotentialFieldObstacle(
+    "test_obstacle",
+    Eigen::Vector3d(1.0, 0.5, 0.0),
+    Eigen::Quaterniond::Identity(),
+    ObstacleType::SPHERE,
+    ObstacleGroup::STATIC,
+    ObstacleGeometry{0.3, 0.0, 0.0, 0.0}
+  ));
+
+  // Evaluate joint velocities
+  Eigen::VectorXd jointVels = pf.evaluateWholeBodyJointVelocitiesAtConfiguration(jointAngles, eePose);
+
+  // Verify the output has the correct size
+  EXPECT_EQ(jointVels.size(), 3);
+
+  // Since we're not at the goal and there are forces, joint velocities should be non-zero
+  // (at least one joint should have non-negligible velocity)
+  double totalVelMagnitude = jointVels.norm();
+  EXPECT_GT(totalVelMagnitude, 0.0);
+
+  // Test boundary case: when already at goal with no obstacles nearby, velocities should be small
+  SpatialVector atGoalPose = goal;
+  std::vector<double> zeroJointAngles = {0.0, 0.0, 0.0};
+  PotentialField pfAtGoal(goal, 1.0, 0.0, 0.0);  // no repulsive gain
+  pfAtGoal.setIKSolver(plugin.getIKSolver());
+
+  Eigen::VectorXd zeroVels = pfAtGoal.evaluateWholeBodyJointVelocitiesAtConfiguration(zeroJointAngles, atGoalPose);
+  EXPECT_EQ(zeroVels.size(), 3);
+  // At goal with no obstacles, velocities should be very small
+  EXPECT_LT(zeroVels.norm(), 0.1);
 }
