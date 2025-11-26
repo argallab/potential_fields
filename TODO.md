@@ -9,6 +9,7 @@
 ---
 
 # Immediate TODOs
+- Documentation for whole body velocity planning method
 - Test Whole Body Velocity Path Planning with PF and Xarm
 - Include installation instructions for fcl, pinnochio, libfranka and other external dependencies in README
 - Fix DOCKER image to include all dependencies and build colcon build out of the box
