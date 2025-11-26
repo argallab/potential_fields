@@ -11,7 +11,7 @@
   <buildtool_depend>ament_cmake_python</buildtool_depend>
   <depend>rclcpp</depend>
   <depend>rclpy</depend>
-  <depend>potential_fields</depend>
+  <depend>pfield_library</depend>
   <depend>potential_fields_interfaces</depend>
   <depend>geometry_msgs</depend>
   <depend>visualization_msgs</depend>

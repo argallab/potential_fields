@@ -5,9 +5,9 @@
 #include <eigen3/Eigen/Core>
 #include <eigen3/Eigen/Geometry>
 
-#include "pfield/pfield.hpp"
-#include "pfield/pf_obstacle.hpp"
-#include "pfield/spatial_vector.hpp"
+#include "pfield_library/pfield/pfield.hpp"
+#include "pfield_library/pfield/pf_obstacle.hpp"
+#include "pfield_library/pfield/spatial_vector.hpp"
 
 class VisualizationProfilingTest : public ::testing::Test {
 protected:
@@ -69,6 +69,7 @@ TEST_F(VisualizationProfilingTest, ProfileVectorFieldGeneration) {
 
         SpatialVector position{point};
         TaskSpaceTwist velocity = pf->evaluateLimitedVelocityAtPose(position);
+        (void)velocity; // Suppress unused variable warning
         evaluatedCount++;
 
         // Simulate marker creation overhead (minimal)

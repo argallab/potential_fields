@@ -4,7 +4,7 @@
 #include <eigen3/Eigen/Core>
 #include <eigen3/Eigen/Geometry>
 // URDF types used by common helpers (e.g., pose conversion)
-#include <urdf/model.h>
+#include <urdf_model/model.h>
 
 inline static bool isPositiveFinite(double v) { return std::isfinite(v) && v > 1e-12; }
 

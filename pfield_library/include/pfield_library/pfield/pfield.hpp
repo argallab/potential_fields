@@ -33,12 +33,12 @@
 #include <eigen3/Eigen/Core>
 #include <eigen3/Eigen/Geometry>
 
-#include "spatial_vector.hpp"
-#include "pf_obstacle.hpp"
-#include "pf_kinematics.hpp"
-#include "pfield_common.hpp"
+#include "pfield_library/pfield/spatial_vector.hpp"
+#include "pfield_library/pfield/pf_obstacle.hpp"
+#include "pfield_library/pfield/pf_kinematics.hpp"
+#include "pfield_library/pfield/pfield_common.hpp"
 
-#include "robot_plugins/ik_solver.hpp"
+#include "pfield_library/solvers/ik_solver.hpp"
 
 struct PFLimits {
   double minX; // Minimum X coordinate of the bounding box [m]

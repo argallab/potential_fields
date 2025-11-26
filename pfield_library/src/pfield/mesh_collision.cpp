@@ -1,4 +1,4 @@
-#include "pfield/mesh_collision.hpp"
+#include "pfield_library/pfield/mesh_collision.hpp"
 
 #include <Eigen/Core>
 #include <limits>
@@ -6,13 +6,24 @@
 #include <mutex>
 #include <unordered_map>
 #include <vector>
+#include <iostream>
+#include <functional>
 
 #include <coal/shape/geometric_shapes.h>
 #include <coal/math/transform.h>
-#include <geometric_shapes/mesh_operations.h>      // createMeshFromResource
-#include <geometric_shapes/shape_operations.h>     // shapes::...
+
+// Assimp includes
+#include <assimp/Importer.hpp>
+#include <assimp/scene.h>
+#include <assimp/postprocess.h>
 
 constexpr double POINT_SPHERE_RADIUS = 1e-9;
+
+static URIResolver g_uriResolver = nullptr;
+
+void setURIResolver(URIResolver resolver) {
+  g_uriResolver = resolver;
+}
 
 // Simple cache so identical mesh resources share BVH + triangles
 std::shared_ptr<MeshCollisionData> loadMesh(const std::string& uri) {
@@ -28,24 +39,67 @@ std::shared_ptr<MeshCollisionData> loadMesh(const std::string& uri) {
       }
     }
   }
-  shapes::Mesh* shapeMesh = shapes::createMeshFromResource(uri);
-  if (!shapeMesh) throw std::runtime_error("Failed to load mesh: " + uri);
+
+  std::string path = uri;
+  // Use the custom resolver if available
+  if (g_uriResolver) {
+    path = g_uriResolver(uri);
+  } else {
+    // Fallback: Handle "package://" or "file://" prefixes
+    if (path.find("file://") == 0) {
+        path = path.substr(7);
+    } else if (path.find("package://") == 0) {
+        // Warn that package:// is not fully supported without ROS
+        std::cerr << "Warning: package:// URI used in ROS-agnostic build. Assuming path relative to current directory or absolute path after stripping prefix." << std::endl;
+        // Naive stripping: remove package://
+        path = path.substr(10); 
+    }
+  }
+
+  Assimp::Importer importer;
+  // aiProcess_Triangulate is important because we need triangles
+  const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_JoinIdenticalVertices | aiProcess_SortByPType);
+
+  if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) {
+      throw std::runtime_error("Failed to load mesh: " + uri + " (" + importer.GetErrorString() + ")");
+  }
 
   auto model = std::make_shared<coal::BVHModel<coal::OBBRSS>>();
   std::vector<coal::Vec3s> verts;
   std::vector<coal::Triangle> tris;
 
-  verts.reserve(shapeMesh->vertex_count);
-  for (size_t i = 0; i < shapeMesh->vertex_count; ++i) {
-    verts.emplace_back(shapeMesh->vertices[3 * i + 0],
-      shapeMesh->vertices[3 * i + 1],
-      shapeMesh->vertices[3 * i + 2]);
-  }
-  tris.reserve(shapeMesh->triangle_count);
-  for (size_t i = 0; i < shapeMesh->triangle_count; ++i) {
-    const unsigned int* t = &shapeMesh->triangles[3 * i];
-    tris.emplace_back(t[0], t[1], t[2]);
-  }
+  size_t vertex_offset = 0;
+  
+  // Recursive function to process nodes
+  std::function<void(const aiNode*, const aiMatrix4x4&)> processNode;
+  processNode = [&](const aiNode* node, const aiMatrix4x4& parentTransform) {
+      aiMatrix4x4 transform = parentTransform * node->mTransformation;
+      
+      for (unsigned int m = 0; m < node->mNumMeshes; ++m) {
+          aiMesh* mesh = scene->mMeshes[node->mMeshes[m]];
+          
+          // Apply transform to vertices
+          for (unsigned int i = 0; i < mesh->mNumVertices; ++i) {
+              aiVector3D v = mesh->mVertices[i];
+              v *= transform; // Transform vertex
+              verts.emplace_back(v.x, v.y, v.z);
+          }
+          
+          for (unsigned int i = 0; i < mesh->mNumFaces; ++i) {
+              aiFace face = mesh->mFaces[i];
+              if (face.mNumIndices == 3) {
+                  tris.emplace_back(vertex_offset + face.mIndices[0], vertex_offset + face.mIndices[1], vertex_offset + face.mIndices[2]);
+              }
+          }
+          vertex_offset += mesh->mNumVertices;
+      }
+      
+      for (unsigned int i = 0; i < node->mNumChildren; ++i) {
+          processNode(node->mChildren[i], transform);
+      }
+  };
+
+  processNode(scene->mRootNode, aiMatrix4x4());
 
   model->beginModel();
   model->addSubModel(verts, tris);
@@ -53,7 +107,7 @@ std::shared_ptr<MeshCollisionData> loadMesh(const std::string& uri) {
 
   Eigen::Vector3d centroid = Eigen::Vector3d::Zero();
   for (auto& v : verts) centroid += Eigen::Vector3d(v[0], v[1], v[2]);
-  centroid /= static_cast<double>(verts.size());
+  if (!verts.empty()) centroid /= static_cast<double>(verts.size());
 
   Eigen::Vector3d minB = Eigen::Vector3d::Constant(std::numeric_limits<double>::max());
   Eigen::Vector3d maxB = -minB;
@@ -80,7 +134,7 @@ std::shared_ptr<MeshCollisionData> loadMesh(const std::string& uri) {
   for (auto& t : tris) result->triangles.emplace_back(t[0], t[1], t[2]);
   // Pre-create collision object for distance queries
   result->collisionObject = std::make_shared<coal::CollisionObject>(result->bvh, coal::Transform3s::Identity());
-  delete shapeMesh;
+  // delete shapeMesh; // No longer needed as we use Assimp
   {
     std::lock_guard<std::mutex> lk(cacheMutex);
     cache[uri] = result;

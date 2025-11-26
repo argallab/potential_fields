@@ -11,7 +11,7 @@
  * @version 1.0
  */
 
-#include "geofik.h"
+#include "pfield_library/solvers/geofik.h"
 #include <iostream>
 #include <vector>
 

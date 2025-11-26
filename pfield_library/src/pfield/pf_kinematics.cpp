@@ -1,5 +1,5 @@
-#include "pfield/pf_kinematics.hpp"
-#include "pfield/pfield_common.hpp"
+#include "pfield_library/pfield/pf_kinematics.hpp"
+#include "pfield_library/pfield/pfield_common.hpp"
 #include <pinocchio/fwd.hpp>
 #include <pinocchio/algorithm/frames.hpp>
 #include <pinocchio/algorithm/joint-configuration.hpp>
@@ -19,9 +19,12 @@ PFKinematics::PFKinematics(const std::string& urdfFileName) {
     );
   }
   this->data = pinocchio::Data(this->model);
-  this->robotModel.initFile(urdfFileName);
+  this->robotModel = urdf::parseURDFFile(urdfFileName);
+  if (!this->robotModel) {
+    throw std::runtime_error("PFKinematics Constructor: Failed to parse URDF file '" + urdfFileName + "'");
+  }
   // Build collision catalog (this also initializes caches internally)
-  this->collisionCatalog = this->buildCollisionCatalog(this->robotModel);
+  this->collisionCatalog = this->buildCollisionCatalog(*this->robotModel);
 }
 
 void PFKinematics::initializeCaches(
@@ -96,7 +99,7 @@ std::vector<Eigen::Affine3d> PFKinematics::computeLinkTransforms(const std::vect
   return out;
 }
 
-std::vector<CollisionCatalogEntry> PFKinematics::buildCollisionCatalog(urdf::Model& model) {
+std::vector<CollisionCatalogEntry> PFKinematics::buildCollisionCatalog(const urdf::ModelInterface& model) {
   std::vector<CollisionCatalogEntry> catalog;
   this->obstacleGeometryTemplates.clear();
 
@@ -239,7 +242,7 @@ std::vector<PotentialFieldObstacle> PFKinematics::updateObstaclesFromJointAngles
 
 double PFKinematics::estimateRobotExtentRadius() {
   // Require a valid URDF model
-  if (this->robotModel.links_.empty()) { return 0.0; }
+  if (!this->robotModel || this->robotModel->links_.empty()) { return 0.0; }
 
   // Prepare transforms for links that have collision geometry. Use nominal zero joint values.
   std::vector<double> q_zero;
@@ -415,4 +418,72 @@ SpatialVector PFKinematics::computeEndEffectorPose(const std::vector<double>& jo
   Eigen::Quaterniond orientation(eeTransform.rotation());
 
   return SpatialVector(position, orientation);
+}
+
+std::vector<double> PFKinematics::computeInverseKinematics(
+  const SpatialVector& targetPose,
+  const std::vector<double>& seedJointAngles,
+  const std::string& eeLinkName,
+  int maxIterations,
+  double tolerance) {
+
+  if (!this->model.existFrame(eeLinkName)) {
+    return {};
+  }
+  pinocchio::FrameIndex frameId = this->model.getFrameId(eeLinkName);
+
+  Eigen::VectorXd q = Eigen::VectorXd::Zero(this->model.nq);
+  // Initialize q from seed
+  for (size_t i = 0; i < seedJointAngles.size() && i < this->jointQIndices.size(); ++i) {
+    int qi = this->jointQIndices[i];
+    if (qi >= 0 && qi < this->model.nq) {
+      q[qi] = seedJointAngles[i];
+    }
+  }
+
+  const double lambda = 0.01; // Damping factor
+
+  for (int i = 0; i < maxIterations; ++i) {
+    pinocchio::framesForwardKinematics(this->model, this->data, q);
+    const pinocchio::SE3& currentTransform = this->data.oMf[frameId];
+
+    Eigen::Vector3d currentPos = currentTransform.translation();
+    Eigen::Quaterniond currentRot(currentTransform.rotation());
+
+    Eigen::Vector3d errPos = targetPose.getPosition() - currentPos;
+    Eigen::Quaterniond errRotQuat = targetPose.getOrientation() * currentRot.conjugate();
+    // Ensure shortest path
+    if (errRotQuat.w() < 0) {
+      errRotQuat.coeffs() *= -1;
+    }
+    Eigen::AngleAxisd errRotAA(errRotQuat);
+    Eigen::Vector3d errRot = errRotAA.angle() * errRotAA.axis();
+
+    Eigen::VectorXd error(6);
+    error << errPos, errRot;
+
+    if (error.norm() < tolerance) {
+      std::vector<double> result(this->numJoints, 0.0);
+      for (size_t j = 0; j < this->numJoints; ++j) {
+        int qi = this->jointQIndices[j];
+        if (qi >= 0) result[j] = q[qi];
+      }
+      return result;
+    }
+
+    pinocchio::Data::Matrix6x J(6, this->model.nv);
+    J.setZero();
+    pinocchio::computeJointJacobians(this->model, this->data, q);
+    pinocchio::getFrameJacobian(this->model, this->data, frameId, pinocchio::LOCAL_WORLD_ALIGNED, J);
+
+    // Damped Least Squares: dq = J^T * (J * J^T + lambda^2 * I)^-1 * error
+    Eigen::MatrixXd JJT = J * J.transpose();
+    JJT.diagonal().array() += lambda * lambda;
+    Eigen::VectorXd dq = J.transpose() * JJT.ldlt().solve(error);
+
+    q += dq;
+    pinocchio::normalize(this->model, q);
+  }
+
+  return {}; // Failed to converge
 }

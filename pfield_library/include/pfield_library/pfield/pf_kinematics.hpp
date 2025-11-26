@@ -12,9 +12,9 @@
 
 #include <coal/collision.h>
 
-#include "pfield/pf_obstacle.hpp"
-#include "urdf/model.h"
-#include "urdf_parser/urdf_parser.h"
+#include "pfield_library/pfield/pf_obstacle.hpp"
+#include <urdf_model/model.h>
+#include <urdf_parser/urdf_parser.h>
 
 struct CollisionCatalogEntry {
   std::string id;         // unique obstacle id (link::name or link::colN)
@@ -55,7 +55,7 @@ public:
    * @param repulsiveGain The repulsive gain for the robot obstacles
    * @return std::vector<CollisionCatalogEntry> The built collision catalog
    */
-  std::vector<CollisionCatalogEntry> buildCollisionCatalog(urdf::Model& model);
+  std::vector<CollisionCatalogEntry> buildCollisionCatalog(const urdf::ModelInterface& model);
 
   /**
    * @brief Builds an Obstacle message from a URDF Collision object and given pose
@@ -121,10 +121,27 @@ public:
    */
   SpatialVector computeEndEffectorPose(const std::vector<double>& jointAngles, const std::string& eeLinkName);
 
+  /**
+   * @brief Computes inverse kinematics for the given target pose using a numerical solver (Newton-Raphson).
+   *
+   * @param targetPose The target end-effector pose.
+   * @param seedJointAngles The initial guess for joint angles.
+   * @param eeLinkName The name of the end-effector link.
+   * @param maxIterations Maximum number of iterations.
+   * @param tolerance Convergence tolerance (position and orientation).
+   * @return std::vector<double> The computed joint angles. Returns empty vector if failed.
+   */
+  std::vector<double> computeInverseKinematics(
+    const SpatialVector& targetPose,
+    const std::vector<double>& seedJointAngles,
+    const std::string& eeLinkName,
+    int maxIterations = 100,
+    double tolerance = 1e-4);
+
 private:
   pinocchio::Model model;
   pinocchio::Data data;
-  urdf::Model robotModel;
+  urdf::ModelInterfaceSharedPtr robotModel;
   std::vector<std::string> jointNamesCache;
   std::vector<std::string> linkNamesCache;
   size_t numJoints;

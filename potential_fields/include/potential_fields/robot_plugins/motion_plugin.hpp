@@ -10,7 +10,7 @@
 #include "geometry_msgs/msg/pose_stamped.hpp"
 #include "geometry_msgs/msg/twist.hpp"
 #include "sensor_msgs/msg/joint_state.hpp"
-#include "ik_solver.hpp"
+#include "pfield_library/solvers/ik_solver.hpp"
 
 
 class MotionPlugin {

@@ -1,6 +1,6 @@
-#include "pfield/pf_obstacle.hpp"
-#include "pfield/mesh_collision.hpp"
-#include "pfield/pfield_common.hpp"
+#include "pfield_library/pfield/pf_obstacle.hpp"
+#include "pfield_library/pfield/mesh_collision.hpp"
+#include "pfield_library/pfield/pfield_common.hpp"
 
 #include <coal/narrowphase/narrowphase.h>
 #include <coal/collision.h>

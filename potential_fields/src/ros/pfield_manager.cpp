@@ -43,6 +43,9 @@
 #include "robot_plugins/franka_plugin.hpp"
 #include "robot_plugins/xarm_plugin.hpp"
 
+#include <ament_index_cpp/get_package_share_directory.hpp>
+#include "pfield_library/pfield/mesh_collision.hpp"
+
 PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager") {
   RCLCPP_INFO(this->get_logger(), "PotentialFieldManager Initialized");
   // Declare parameters
@@ -116,19 +119,22 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   RCLCPP_INFO(this->get_logger(), "Using Motion Plugin: %s", this->motionPlugin->getName().c_str());
 
   // Save the IKSolver from the motion plugin
-  this->ikSolver = this->motionPlugin->getIKSolver();
-  if (!this->ikSolver) {
+  if (this->motionPluginType.empty() || this->motionPluginType == "null") {
+    this->ikSolver = nullptr;
+    RCLCPP_INFO(this->get_logger(), "Motion plugin is null; using internal Pinocchio IK solver.");
+  } else {
+    this->ikSolver = this->motionPlugin->getIKSolver();
+  }
+
+  if (!this->ikSolver && !this->motionPluginType.empty() && this->motionPluginType != "null") {
     RCLCPP_WARN(this->get_logger(), "IKSolver not available from motionPlugin");
   }
-  else {
+  else if (this->ikSolver) {
     RCLCPP_INFO(this->get_logger(), "Using IKSolver: %s", this->ikSolver->getName().c_str());
   }
 
   // Once IKSolver is initialized, assign it to the PF instance
   this->pField->setIKSolver(this->ikSolver);
-
-  // Initialize currentJointAngles
-  this->currentJointAngles.resize(this->pField->getNumJoints(), 0.0);
 
   // Allow the user to not use a URDF
   if (!this->urdfFileName.empty() && this->urdfFileName.ends_with(".urdf")) {
@@ -240,6 +246,10 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   // std::string filename = "pfield_data";
   // this->exportFieldDataToCSV(filename);
 
+  // Initialize currentJointAngles and queryPose
+  this->queryPose = SpatialVector();
+  this->currentJointAngles.resize(this->pField->getNumJoints(), 0.0);
+
   // Run the timer for visualizing the potential field
   this->timer = this->create_wall_timer(
     std::chrono::duration<double>(1.0 / this->visualizerFrequency),
@@ -268,12 +278,10 @@ void PotentialFieldManager::integrateQueryPoseFromField() {
   // Update the query pose
   this->queryPose = SpatialVector(nextPosition, nextOrientation);
   // Update robot obstacles based on query pose using IK
-  if (this->ikSolver) {
-    std::vector<double> newJoints = this->pField->computeInverseKinematics(this->queryPose, this->currentJointAngles);
-    if (!newJoints.empty()) {
-      this->currentJointAngles = newJoints;
-      this->pField->updateObstaclesFromKinematics(this->currentJointAngles);
-    }
+  std::vector<double> newJoints = this->pField->computeInverseKinematics(this->queryPose, this->currentJointAngles);
+  if (!newJoints.empty()) {
+    this->currentJointAngles = newJoints;
+    this->pField->updateObstaclesFromKinematics(this->currentJointAngles);
   }
   // Supply velocity-limited twist as previous for next acceleration limiting
   this->prevQueryTwist = twist;
@@ -336,13 +344,13 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
       request->start.pose.orientation.z
     )
   );
+  // Convert starting_joint_angles (std::vector<float>) to std::vector<double> expected by planPathFromTaskSpaceWrench
+  std::vector<double> startJointAnglesDouble(
+    request->starting_joint_angles.cbegin(), request->starting_joint_angles.cend()
+  );
   PlannedPath planningResult;
   try {
     // Plan a path using the request parameters and store the result
-    // Convert starting_joint_angles (std::vector<float>) to std::vector<double> expected by planPathFromTaskSpaceWrench
-    std::vector<double> startJointAnglesDouble(
-      request->starting_joint_angles.cbegin(), request->starting_joint_angles.cend()
-    );
     if (request->planning_method == "task_space") {
       RCLCPP_INFO(this->get_logger(), "Using Task-Space Wrench Planning");
       planningResult = this->pField->planPathFromTaskSpaceWrench(
@@ -456,6 +464,8 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
       startSV.getPosition().x(), startSV.getPosition().y(), startSV.getPosition().z()
     );
     this->queryPose = startSV;
+    // Update currentJointAngles to match the start of the path so IK has a good seed
+    this->currentJointAngles = startJointAnglesDouble;
   }
   if (!response->success) {
     // If planning failed, log final pose and distance to goal
@@ -1055,6 +1065,28 @@ void PotentialFieldManager::exportFieldDataToCSV(std::shared_ptr<PotentialField>
 }
 
 int main(int argc, char* argv[]) {
+  // Set the URI resolver for the pfield library to handle package:// URIs
+  setURIResolver([](const std::string& uri) -> std::string {
+    const std::string packagePrefix = "package://";
+    if (uri.find(packagePrefix) == 0) {
+      size_t start = packagePrefix.length();
+      size_t end = uri.find('/', start);
+      if (end != std::string::npos) {
+        std::string packageName = uri.substr(start, end - start);
+        std::string relativePath = uri.substr(end); // includes the leading slash
+        try {
+          std::string packagePath = ament_index_cpp::get_package_share_directory(packageName);
+          return packagePath + relativePath;
+        }
+        catch (const std::exception& e) {
+          std::cerr << "Error resolving package URI: " << uri << " - " << e.what() << std::endl;
+          return uri; // Fallback to original
+        }
+      }
+    }
+    return uri;
+  });
+
   rclcpp::init(argc, argv);
   rclcpp::spin(std::make_shared<PotentialFieldManager>());
   rclcpp::shutdown();

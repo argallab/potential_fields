@@ -15,8 +15,8 @@
 #include <coal/shape/geometric_shapes.h>
 #include <coal/math/transform.h>
 
-#include "spatial_vector.hpp"
-#include "mesh_collision.hpp"
+#include "pfield_library/pfield/spatial_vector.hpp"
+#include "pfield_library/pfield/mesh_collision.hpp"
 
 /**
  * @brief Enumeration of different obstacle types.

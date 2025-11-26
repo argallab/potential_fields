@@ -14,7 +14,7 @@
 #include <franka/robot.h>
 
 #include "examples_common.h"
-#include "weighted_ik.h"
+#include "pfield_library/solvers/weighted_ik.h"
 #include "motion_plugin.hpp"
 
 /**

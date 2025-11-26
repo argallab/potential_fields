@@ -15,7 +15,7 @@
 #include <limits>
 #include <cmath>
 #include "Eigen/Dense"
-#include "geofik.h"
+#include "pfield_library/solvers/geofik.h"
 
 using namespace std;
 using namespace std::chrono;

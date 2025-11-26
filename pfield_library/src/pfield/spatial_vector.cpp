@@ -1,4 +1,4 @@
-#include "pfield/spatial_vector.hpp"
+#include "pfield_library/pfield/spatial_vector.hpp"
 
 Eigen::Vector3d SpatialVector::getOrientationEuler() const {
   // Returns the Euler angles (yaw, pitch, roll) from the quaternion

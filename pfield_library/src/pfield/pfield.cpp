@@ -1,6 +1,6 @@
-#include "pfield/pfield.hpp"
-#include "pfield/pf_obstacle.hpp"
-#include "pfield/spatial_vector.hpp"
+#include "pfield_library/pfield/pfield.hpp"
+#include "pfield_library/pfield/pf_obstacle.hpp"
+#include "pfield_library/pfield/spatial_vector.hpp"
 #include <algorithm>
 #include <limits>
 #include <fstream>
@@ -644,6 +644,9 @@ std::vector<double> PotentialField::computeInverseKinematics(
     if (!success) {
       jointAngles = std::vector<double>{}; // Return empty on failure
     }
+  } else if (this->pfKinematics) {
+    // Fallback to internal numerical IK if no external solver is provided
+    jointAngles = this->pfKinematics->computeInverseKinematics(targetPose, seedJointAngles, this->eeLinkName);
   }
   return jointAngles;
 }

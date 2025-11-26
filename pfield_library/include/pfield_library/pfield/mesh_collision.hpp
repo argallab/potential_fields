@@ -6,6 +6,7 @@
 #include <utility>
 #include <vector>
 #include <Eigen/Core>
+#include <functional>
 
 #include <coal/BVH/BVH_model.h>
 #include <coal/BV/OBBRSS.h>
@@ -14,6 +15,18 @@
 #include <coal/distance.h>
 #include <coal/shape/geometric_shape_to_BVH_model.h>
 #include <coal/data_types.h>
+
+/**
+ * @brief Function type for resolving URIs (e.g. package://) to absolute file paths.
+ */
+using URIResolver = std::function<std::string(const std::string&)>;
+
+/**
+ * @brief Sets the global URI resolver function.
+ * 
+ * @param resolver The function to use for resolving URIs.
+ */
+void setURIResolver(URIResolver resolver);
 
 /**
  * @brief Contains the collision data for a mesh, including its BVH representation and AABB.

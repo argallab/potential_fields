@@ -1,0 +1,22 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>pfield_library</name>
+  <version>0.0.1</version>
+  <description>Standalone Potential Field Library</description>
+  <maintainer email="user@example.com">User</maintainer>
+  <license>TODO</license>
+
+  <buildtool_depend>cmake</buildtool_depend>
+
+  <depend>eigen</depend>
+  <depend>pinocchio</depend>
+  <depend>coal</depend>
+  <depend>urdfdom</depend>
+  <depend>urdfdom_headers</depend>
+  <depend>assimp</depend>
+
+  <export>
+    <build_type>cmake</build_type>
+  </export>
+</package>

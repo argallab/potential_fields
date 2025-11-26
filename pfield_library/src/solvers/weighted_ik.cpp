@@ -5,7 +5,7 @@
  *
  */
 
-#include "weighted_ik.h"
+#include "pfield_library/solvers/weighted_ik.h"
 
  // Constructor - only robot-specific parameters
 WeightedIKSolver::WeightedIKSolver(

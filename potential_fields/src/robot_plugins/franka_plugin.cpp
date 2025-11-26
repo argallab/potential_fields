@@ -1,6 +1,6 @@
 #ifdef USING_FRANKA
 #include "robot_plugins/franka_plugin.hpp"
-#include "weighted_ik.h"
+#include "pfield_library/solvers/weighted_ik.h"
 #include <cmath>
 
 FrankaIKSolver::FrankaIKSolver(IKSolverSearchParameters params) : IKSolver("GeoFIK"), ikParams(params) {
