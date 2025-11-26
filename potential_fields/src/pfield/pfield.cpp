@@ -115,16 +115,16 @@ std::vector<PotentialFieldObstacle> PotentialField::getObstaclesByGroup(Obstacle
   }
 }
 
-bool PotentialField::isPointInsideObstacle(Eigen::Vector3d point) const {
+bool PotentialField::isPointInsideObstacle(Eigen::Vector3d worldPoint) const {
   for (const auto& obst : this->envObstacles) {
-    if (obst.withinObstacle(point)) { return true; }
+    if (obst.withinObstacle(worldPoint)) { return true; }
   }
   return false;
 }
 
-bool PotentialField::isPointWithinInfluenceZone(Eigen::Vector3d point) const {
+bool PotentialField::isPointWithinInfluenceZone(Eigen::Vector3d worldPoint) const {
   for (const auto& obst : this->envObstacles) {
-    if (obst.withinInfluenceZone(point, this->influenceDistance)) { return true; }
+    if (obst.withinInfluenceZone(worldPoint, this->influenceDistance)) { return true; }
   }
   return false;
 }

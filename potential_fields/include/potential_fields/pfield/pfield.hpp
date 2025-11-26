@@ -284,6 +284,15 @@ public:
   }
   bool operator!=(const PotentialField& other) const { return !(*this == other); }
 
+  /**
+   * @brief Initializes the PFKinematics module with the given URDF file path and end-effector link name.
+   *
+   * @note The end-effector link name must match a link in the
+   *       URDF model and will be the frame used for planning.
+   *
+   * @param urdfFilePath The file path to the robot's URDF file.
+   * @param eeLinkName The name of the end-effector link in the robot model.
+   */
   void initializeKinematics(const std::string& urdfFilePath, const std::string& eeLinkName);
 
   // ============ Getters and Setters ============
@@ -376,8 +385,21 @@ public:
    */
   std::vector<PotentialFieldObstacle> getObstaclesByGroup(ObstacleGroup group) const;
 
-  bool isPointInsideObstacle(Eigen::Vector3d point) const;
-  bool isPointWithinInfluenceZone(Eigen::Vector3d point) const;
+  /**
+   * @brief Determines if the given point (in the world frame) is inside any obstacle.
+   *
+   * @param worldPoint The point in world coordinates to check.
+   * @return true If the point is inside any obstacle.
+   */
+  bool isPointInsideObstacle(Eigen::Vector3d worldPoint) const;
+
+  /**
+   * @brief Determines if the given point (in the world frame) is within the influence zone of any obstacle.
+   *
+   * @param worldPoint The point in world coordinates to check.
+   * @return true If the point is within the influence zone of any obstacle.
+   */
+  bool isPointWithinInfluenceZone(Eigen::Vector3d worldPoint) const;
 
   /**
    * @brief Computes the spatial limits (bounding box) of the potential field for visualization or analysis.
@@ -684,6 +706,13 @@ public:
     const size_t maxIters = 30000
   );
 
+  /**
+   * @brief Runs the IKSolver to compute joint angles for a desired end-effector pose.
+   *
+   * @param targetPose The desired end-effector pose as a SpatialVector.
+   * @param seedJointAngles The initial guess for joint angles [rad].
+   * @return std::vector<double> The computed joint angles [rad].
+   */
   std::vector<double> computeInverseKinematics(const SpatialVector& targetPose, const std::vector<double>& seedJointAngles) const;
 
   /**
