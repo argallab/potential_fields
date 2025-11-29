@@ -27,10 +27,10 @@
 #include "potential_fields_interfaces/srv/plan_path.hpp"
 #include "potential_fields_interfaces/srv/compute_autonomy_vector.hpp"
 
-#include "pfield_library/pfield/pfield.hpp"
-#include "pfield_library/pfield/pf_obstacle.hpp"
-#include "pfield_library/pfield/pf_kinematics.hpp"
-#include "pfield_library/solvers/ik_solver.hpp"
+#include "pfield/pfield.hpp"
+#include "pfield/pf_obstacle.hpp"
+#include "pfield/pf_kinematics.hpp"
+#include "solvers/ik_solver.hpp"
 #include "robot_plugins/motion_plugin.hpp"
 
 #include "urdf/model.h"
@@ -39,6 +39,8 @@
 #include "tf2_eigen/tf2_eigen.hpp"
 
 #include "rclcpp/rclcpp.hpp"
+
+using namespace pfield;
 
 using Marker = visualization_msgs::msg::Marker;
 using MarkerArray = visualization_msgs::msg::MarkerArray;

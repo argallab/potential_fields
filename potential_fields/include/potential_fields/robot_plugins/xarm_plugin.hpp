@@ -7,7 +7,7 @@
 #include <iostream>
 #include <vector>
 
-#include "pfield_library/solvers/xarm_ik_solver.hpp"
+#include "solvers/xarm_ik_solver.hpp"
 #include "motion_plugin.hpp"
 
 class XArmPlugin : public MotionPlugin {

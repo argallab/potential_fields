@@ -44,7 +44,9 @@
 #include "robot_plugins/xarm_plugin.hpp"
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
-#include "pfield_library/pfield/mesh_collision.hpp"
+#include "pfield/mesh_collision.hpp"
+
+using namespace pfield;
 
 PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager") {
   RCLCPP_INFO(this->get_logger(), "PotentialFieldManager Initialized");
@@ -122,7 +124,8 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   if (this->motionPluginType.empty() || this->motionPluginType == "null") {
     this->ikSolver = nullptr;
     RCLCPP_INFO(this->get_logger(), "Motion plugin is null; using internal Pinocchio IK solver.");
-  } else {
+  }
+  else {
     this->ikSolver = this->motionPlugin->getIKSolver();
   }
 

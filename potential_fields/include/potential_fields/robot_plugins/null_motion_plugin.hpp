@@ -7,9 +7,9 @@
 #include <memory>
 
 // A minimal IK solver that returns the seed as the solution (useful for offline testing)
-class NullIKSolver : public IKSolver {
+class NullIKSolver : public pfield::IKSolver {
 public:
-  NullIKSolver() : IKSolver("NullIKSolver") {}
+  NullIKSolver() : pfield::IKSolver("NullIKSolver") {}
   ~NullIKSolver() override = default;
 
   bool solve([[maybe_unused]] const Eigen::Isometry3d& targetPose, const std::vector<double>& seed,

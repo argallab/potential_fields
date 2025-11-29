@@ -14,7 +14,7 @@
 #include <franka/robot.h>
 
 #include "examples_common.h"
-#include "pfield_library/solvers/weighted_ik.h"
+#include "solvers/weighted_ik.h"
 #include "motion_plugin.hpp"
 
 /**
@@ -34,7 +34,7 @@ struct IKSolverSearchParameters {
   double currentWeight = 0.2; // Weight for distance from current pose in the IK cost function
 };
 
-class FrankaIKSolver : public IKSolver {
+class FrankaIKSolver : public pfield::IKSolver {
 public:
   explicit FrankaIKSolver(IKSolverSearchParameters params);
   ~FrankaIKSolver() override = default;
@@ -75,7 +75,7 @@ private:
   const std::array<double, 7> homeJointAngles = {0, -M_PI_4, 0, -3 * M_PI_4, 0, M_PI_2, M_PI_4};
   // The homogeneous transform from the robot's base link [O] to the end-effector [E] in the "home" position
   Eigen::Matrix4d homeTransformOE;
-  std::unique_ptr<WeightedIKSolver> solver;
+  std::unique_ptr<pfield::WeightedIKSolver> solver;
   const IKSolverSearchParameters ikParams;
 };
 

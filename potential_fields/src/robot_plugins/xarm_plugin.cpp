@@ -7,6 +7,8 @@
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <iostream>
 
+using namespace pfield;
+
 XArmPlugin::XArmPlugin() : MotionPlugin("xarm_motion_plugin") {
   std::string urdf_path;
   try {

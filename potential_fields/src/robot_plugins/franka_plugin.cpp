@@ -1,7 +1,9 @@
 #ifdef USING_FRANKA
 #include "robot_plugins/franka_plugin.hpp"
-#include "pfield_library/solvers/weighted_ik.h"
+#include "solvers/weighted_ik.h"
 #include <cmath>
+
+using namespace pfield;
 
 FrankaIKSolver::FrankaIKSolver(IKSolverSearchParameters params) : IKSolver("GeoFIK"), ikParams(params) {
   this->homeTransformOE = franka_fk(this->homeJointAngles);
