@@ -6,6 +6,8 @@
 #include <Eigen/Core>
 #include <Eigen/Geometry>
 
+namespace pfield {
+
 // IKSolver Interface for different IK solver implementations
 class IKSolver {
 public:
@@ -34,5 +36,7 @@ public:
 protected:
   std::string name;
 };
+
+} // namespace pfield
 
 #endif // IK_SOLVER_HPP

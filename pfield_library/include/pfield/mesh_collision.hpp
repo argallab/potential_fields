@@ -16,6 +16,8 @@
 #include <coal/shape/geometric_shape_to_BVH_model.h>
 #include <coal/data_types.h>
 
+namespace pfield {
+
 /**
  * @brief Function type for resolving URIs (e.g. package://) to absolute file paths.
  */
@@ -95,5 +97,7 @@ double computeUnsignedDistanceToMesh(const MeshCollisionData& meshData, const Ei
  */
 bool getClosestPointOnMesh(const MeshCollisionData& meshData, const Eigen::Vector3d& pointInMeshFrame,
   Eigen::Vector3d& closestPoint);
+
+} // namespace pfield
 
 #endif // MESH_COLLISION_HPP
