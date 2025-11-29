@@ -1,6 +1,8 @@
 #include <gtest/gtest.h>
 #include <eigen3/Eigen/Dense>
-#include "pfield_library/pfield/pf_obstacle.hpp"
+#include "pfield/pf_obstacle.hpp"
+
+using namespace pfield;
 
 // ============================================================================
 // Tests for toCoalCollisionObject()

@@ -1,10 +1,12 @@
 #include <gtest/gtest.h>
 #include <eigen3/Eigen/Dense>
-#include "pfield_library/pfield/pfield.hpp"
-#include "pfield_library/pfield/pf_obstacle.hpp"
-#include "pfield_library/pfield/spatial_vector.hpp"
+#include "pfield/pfield.hpp"
+#include "pfield/pf_obstacle.hpp"
+#include "pfield/spatial_vector.hpp"
 // Use the simple IK from the NullMotionPlugin for planPathFromTaskSpaceWrench tests
 #include "robot_plugins/null_motion_plugin.hpp"
+
+using namespace pfield;
 
 TEST(PotentialFieldTest, AddAndRemoveObstacles) {
   PotentialField pf;

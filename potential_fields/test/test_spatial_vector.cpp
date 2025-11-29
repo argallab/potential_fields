@@ -1,7 +1,8 @@
 #include <gtest/gtest.h>
 #include <eigen3/Eigen/Dense>
-#include "pfield_library/pfield/spatial_vector.hpp"
+#include "pfield/spatial_vector.hpp"
 
+using namespace pfield;
 
 TEST(SpatialVectorTest, ConstructorAndAccessors) {
   // SpatialVector v(1.0f, 2.0f, 3.0f, 0.1f, 0.2f, 0.3f, 0.9f);
@@ -80,4 +81,3 @@ TEST(SpatialVectorTest, OrientationNormalization) {
   // Should normalize internally to unit quaternion
   EXPECT_NEAR(v.getOrientation().norm(), 1.0, 1e-6);
 }
-

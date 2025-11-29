@@ -2,8 +2,8 @@
 // getClosestPointOnMesh, and PotentialFieldObstacle::computeSignedDistanceAndNormal.
 // We build a synthetic unit cube mesh programmatically to avoid external resources.
 
-#include "pfield_library/pfield/pf_obstacle.hpp"
-#include "pfield_library/pfield/mesh_collision.hpp"
+#include "pfield/pf_obstacle.hpp"
+#include "pfield/mesh_collision.hpp"
 
 #include <gtest/gtest.h>
 #include <Eigen/Core>
@@ -12,6 +12,8 @@
 #include <memory>
 #include <filesystem>
 #include <fstream>
+
+using namespace pfield;
 
 namespace {
 
