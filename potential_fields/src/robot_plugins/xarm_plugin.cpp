@@ -7,8 +7,6 @@
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include <iostream>
 
-using namespace pfield;
-
 XArmPlugin::XArmPlugin() : MotionPlugin("xarm_motion_plugin") {
   std::string urdf_path;
   try {
@@ -17,8 +15,7 @@ XArmPlugin::XArmPlugin() : MotionPlugin("xarm_motion_plugin") {
   catch (const std::exception& e) {
     std::cerr << "Error finding pfields_demo package: " << e.what() << std::endl;
   }
-  
-  this->ikSolver = std::make_shared<XArmIKSolver>(urdf_path);
+  this->ikSolver = std::make_shared<pfield::XArmIKSolver>(urdf_path);
 }
 
 XArmPlugin::~XArmPlugin() = default;

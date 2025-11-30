@@ -2,11 +2,9 @@
 #include <eigen3/Eigen/Dense>
 #include "pfield/spatial_vector.hpp"
 
-using namespace pfield;
-
 TEST(SpatialVectorTest, ConstructorAndAccessors) {
-  // SpatialVector v(1.0f, 2.0f, 3.0f, 0.1f, 0.2f, 0.3f, 0.9f);
-  SpatialVector v(Eigen::Vector3d(1.0f, 2.0f, 3.0f), Eigen::Quaterniond(0.1f, 0.2f, 0.3f, 0.9f));
+  // pfield::SpatialVector v(1.0f, 2.0f, 3.0f, 0.1f, 0.2f, 0.3f, 0.9f);
+  pfield::SpatialVector v(Eigen::Vector3d(1.0f, 2.0f, 3.0f), Eigen::Quaterniond(0.1f, 0.2f, 0.3f, 0.9f));
   EXPECT_EQ(v.getPosition(), Eigen::Vector3d(1.0f, 2.0f, 3.0f));
   EXPECT_EQ(v.getOrientation(), Eigen::Quaterniond(0.1f, 0.2f, 0.3f, 0.9f));
   v.setOrientation(Eigen::Quaterniond(0.0f, 0.0f, 0.0f, 1.0f));
@@ -16,21 +14,21 @@ TEST(SpatialVectorTest, ConstructorAndAccessors) {
 }
 
 TEST(SpatialVectorTest, EuclideanDistanceSamePosition) {
-  SpatialVector a;
-  SpatialVector b;
+  pfield::SpatialVector a;
+  pfield::SpatialVector b;
   EXPECT_FLOAT_EQ(a.euclideanDistance(b), 0.0f);
 }
 
 TEST(SpatialVectorTest, EuclideanDistance) {
-  SpatialVector a;
-  SpatialVector b(Eigen::Vector3d(3.0f, 4.0f, 0.0f));
+  pfield::SpatialVector a;
+  pfield::SpatialVector b(Eigen::Vector3d(3.0f, 4.0f, 0.0f));
   EXPECT_FLOAT_EQ(a.euclideanDistance(b), 5.0f);
   b.setPosition(Eigen::Vector3d(-4.5f, -2.1f, 3.0f));
   EXPECT_FLOAT_EQ(a.euclideanDistance(b), 5.801724f);
 }
 
 TEST(SpatialVectorTest, NormalizePosition) {
-  SpatialVector v(Eigen::Vector3d(3.0f, 4.0f, 0.0f));
+  pfield::SpatialVector v(Eigen::Vector3d(3.0f, 4.0f, 0.0f));
   v.normalizePosition();
   EXPECT_FLOAT_EQ(v.getPosition().norm(), 1.0f);
 }
@@ -45,7 +43,7 @@ TEST(SpatialVectorTest, SetAndGetEulerAngles) {
     {0.0,      0.0,     0.0}
   };
   for (auto&& ang : angles) {
-    SpatialVector v;
+    pfield::SpatialVector v;
     v.setOrientationEuler(ang.x(), ang.y(), ang.z());
     Eigen::Vector3d out = v.getOrientationEuler();
     EXPECT_NEAR(out.x(), ang.x(), 1e-5);
@@ -55,8 +53,8 @@ TEST(SpatialVectorTest, SetAndGetEulerAngles) {
 }
 
 TEST(SpatialVectorTest, AngularDistance) {
-  SpatialVector a;
-  SpatialVector b;
+  pfield::SpatialVector a;
+  pfield::SpatialVector b;
   a.setOrientationEuler(0, 0, 0);
   b.setOrientationEuler(M_PI_2, 0, 0); // Yaw 90 degrees
   EXPECT_NEAR(a.angularDistance(b), M_PI_2, 1e-5);
@@ -76,7 +74,7 @@ TEST(SpatialVectorTest, AngularDistance) {
 
 TEST(SpatialVectorTest, OrientationNormalization) {
   Eigen::Quaterniond q(2.0, 0.0, 0.0, 0.0);
-  SpatialVector v;
+  pfield::SpatialVector v;
   v.setOrientation(q);
   // Should normalize internally to unit quaternion
   EXPECT_NEAR(v.getOrientation().norm(), 1.0, 1e-6);

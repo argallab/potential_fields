@@ -3,8 +3,6 @@
 #include "solvers/weighted_ik.h"
 #include <cmath>
 
-using namespace pfield;
-
 FrankaIKSolver::FrankaIKSolver(IKSolverSearchParameters params) : IKSolver("GeoFIK"), ikParams(params) {
   this->homeTransformOE = franka_fk(this->homeJointAngles);
   this->solver = std::make_unique<WeightedIKSolver>(

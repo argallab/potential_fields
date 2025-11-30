@@ -2,21 +2,19 @@
 #include <eigen3/Eigen/Dense>
 #include "pfield/pf_obstacle.hpp"
 
-using namespace pfield;
-
 // ============================================================================
 // Tests for toCoalCollisionObject()
 // ============================================================================
 
 TEST(PFObstacleCoal, ToCoalCollisionObject_Sphere) {
   // Create a sphere obstacle
-  PotentialFieldObstacle sphere(
+  pfield::PotentialFieldObstacle sphere(
     "test_sphere",
     Eigen::Vector3d(1.0, 2.0, 3.0),
     Eigen::Quaterniond::Identity(),
-    ObstacleType::SPHERE,
-    ObstacleGroup::STATIC,
-    ObstacleGeometry(0.5, 0.0, 0.0, 0.0)  // radius = 0.5
+    pfield::ObstacleType::SPHERE,
+    pfield::ObstacleGroup::STATIC,
+    pfield::ObstacleGeometry(0.5, 0.0, 0.0, 0.0)  // radius = 0.5
   );
 
   // Convert to COAL collision object
@@ -41,13 +39,13 @@ TEST(PFObstacleCoal, ToCoalCollisionObject_Sphere) {
 
 TEST(PFObstacleCoal, ToCoalCollisionObject_Box) {
   // Create a box obstacle
-  PotentialFieldObstacle box(
+  pfield::PotentialFieldObstacle box(
     "test_box",
     Eigen::Vector3d(0.0, 0.0, 0.0),
     Eigen::Quaterniond::Identity(),
-    ObstacleType::BOX,
-    ObstacleGroup::STATIC,
-    ObstacleGeometry(0.0, 2.0, 1.0, 0.5)  // length=2, width=1, height=0.5
+    pfield::ObstacleType::BOX,
+    pfield::ObstacleGroup::STATIC,
+    pfield::ObstacleGeometry(0.0, 2.0, 1.0, 0.5)  // length=2, width=1, height=0.5
   );
 
   auto coalObj = box.toCoalCollisionObject();
@@ -57,13 +55,13 @@ TEST(PFObstacleCoal, ToCoalCollisionObject_Box) {
 
 TEST(PFObstacleCoal, ToCoalCollisionObject_Cylinder) {
   // Create a cylinder obstacle
-  PotentialFieldObstacle cylinder(
+  pfield::PotentialFieldObstacle cylinder(
     "test_cylinder",
     Eigen::Vector3d(-1.0, -2.0, -3.0),
     Eigen::Quaterniond::Identity(),
-    ObstacleType::CYLINDER,
-    ObstacleGroup::STATIC,
-    ObstacleGeometry(0.3, 0.0, 0.0, 1.2)  // radius=0.3, height=1.2
+    pfield::ObstacleType::CYLINDER,
+    pfield::ObstacleGroup::STATIC,
+    pfield::ObstacleGeometry(0.3, 0.0, 0.0, 1.2)  // radius=0.3, height=1.2
   );
 
   auto coalObj = cylinder.toCoalCollisionObject();
@@ -80,13 +78,13 @@ TEST(PFObstacleCoal, ToCoalCollisionObject_WithRotation) {
   // Create obstacle with non-identity rotation
   Eigen::Quaterniond rotation(Eigen::AngleAxisd(M_PI / 4, Eigen::Vector3d::UnitZ()));
 
-  PotentialFieldObstacle sphere(
+  pfield::PotentialFieldObstacle sphere(
     "rotated_sphere",
     Eigen::Vector3d::Zero(),
     rotation,
-    ObstacleType::SPHERE,
-    ObstacleGroup::STATIC,
-    ObstacleGeometry(1.0, 0.0, 0.0, 0.0)
+    pfield::ObstacleType::SPHERE,
+    pfield::ObstacleGroup::STATIC,
+    pfield::ObstacleGeometry(1.0, 0.0, 0.0, 0.0)
   );
 
   auto coalObj = sphere.toCoalCollisionObject();

@@ -483,7 +483,7 @@ namespace pfield {
 
     // Extract axis-angle from quatError in a numerically stable way
     const double vnorm = quatError.vec().norm();
-    const double angle = 2.0 * std::atan2(vnorm, std::abs(quatError.w())); // in [0, pi]
+    // const double angle = 2.0 * std::atan2(vnorm, std::abs(quatError.w())); // in [0, pi]
 
     // Guard against divide-by-zero when angle ~ 0
     if (vnorm < NEAR_ZERO_THRESHOLD) { return Eigen::Vector3d::Zero(); }
@@ -537,9 +537,18 @@ namespace pfield {
     taskForce << attractionForceVector, attractionMomentVector;
 
     // Get end-effector Jacobian (6xN)
-    Eigen::MatrixXd J_ee = this->pfKinematics->getSpatialJacobianAtPoint(
-      this->eeLinkName, eePose.getPosition(), jointAngles
-    );
+    Eigen::MatrixXd J_ee;
+    if (this->pfKinematics) {
+      J_ee = this->pfKinematics->getSpatialJacobianAtPoint(
+        this->eeLinkName, eePose.getPosition(), jointAngles
+      );
+    } else if (this->ikSolver) {
+      Eigen::Matrix<double, 6, Eigen::Dynamic> J_temp;
+      this->ikSolver->computeJacobian(jointAngles, J_temp);
+      J_ee = J_temp;
+    } else {
+      return Eigen::VectorXd::Zero(jointAngles.size());
+    }
     // Convert task-space force to joint torques: tau = J^T * F
     return J_ee.transpose() * taskForce;
   }

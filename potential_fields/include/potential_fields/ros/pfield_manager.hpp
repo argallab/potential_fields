@@ -40,8 +40,6 @@
 
 #include "rclcpp/rclcpp.hpp"
 
-using namespace pfield;
-
 using Marker = visualization_msgs::msg::Marker;
 using MarkerArray = visualization_msgs::msg::MarkerArray;
 using Pose = geometry_msgs::msg::Pose;
@@ -87,13 +85,13 @@ private:
   std::string eeFrame; // End-effector frame name for planning and kinematics
   std::string urdfFileName; // URDF file name
   std::string motionPluginType; // Motion Plugin Type [e.g., "null", "franka", etc.]
-  std::shared_ptr<PotentialField> pField; // Potential Field Instance containing main PF functionality
+  std::shared_ptr<pfield::PotentialField> pField; // Potential Field Instance containing main PF functionality
   std::unique_ptr<MotionPlugin> motionPlugin; // The MotionPlugin containing robot-specific functions like IK and state reading
-  std::shared_ptr<IKSolver> ikSolver; // The IKSolver obtained from the MotionPlugin
-  SpatialVector queryPose; // Current Query Pose for autonomy vector computation
-  TaskSpaceTwist prevQueryTwist; // Previous query twist for acceleration limiting
+  std::shared_ptr<pfield::IKSolver> ikSolver; // The IKSolver obtained from the MotionPlugin
+  pfield::SpatialVector queryPose; // Current Query Pose for autonomy vector computation
+  pfield::TaskSpaceTwist prevQueryTwist; // Previous query twist for acceleration limiting
   rclcpp::Time lastQueryUpdate;  // Timestamp of last query pose integration step
-  TaskSpaceTwist prevTwist; // Previous twist for acceleration limiting
+  pfield::TaskSpaceTwist prevTwist; // Previous twist for acceleration limiting
   std::vector<double> currentJointAngles; // Current joint angles for robot obstacle visualization
 
   rclcpp::TimerBase::SharedPtr timer; // Timer to periodically update the potential field
@@ -120,11 +118,11 @@ private:
    * @param pf The potential field instance
    * @return MarkerArray The marker array containing all visualization markers
    */
-  MarkerArray visualizePF(std::shared_ptr<PotentialField> pf);
+  MarkerArray visualizePF(std::shared_ptr<pfield::PotentialField> pf);
 
   MarkerArray createQueryPoseMarker();
 
-  MarkerArray createThresholdMarkers(std::shared_ptr<PotentialField> pf);
+  MarkerArray createThresholdMarkers(std::shared_ptr<pfield::PotentialField> pf);
 
   /**
    * @brief Get Obstacle and Obstacle Influence Zone markers from a potential field
@@ -132,7 +130,7 @@ private:
    * @param pf The potential field instance
    * @return MarkerArray The marker array containing all obstacle markers
    */
-  MarkerArray createObstacleMarkers(std::shared_ptr<PotentialField> pf);
+  MarkerArray createObstacleMarkers(std::shared_ptr<pfield::PotentialField> pf);
 
   /**
    * @brief Create a marker for the goal position in the potential field
@@ -140,7 +138,7 @@ private:
    * @param pf The potential field instance
    * @return MarkerArray The marker array containing the goal marker and orientation indicator
    */
-  MarkerArray createGoalMarker(std::shared_ptr<PotentialField> pf);
+  MarkerArray createGoalMarker(std::shared_ptr<pfield::PotentialField> pf);
 
   /**
    * @brief Create velocity vector markers for visualization in RViz
@@ -151,7 +149,7 @@ private:
    * @param pf The potential field instance
    * @return MarkerArray The marker array containing all velocity vector markers
    */
-  MarkerArray createPotentialVectorMarkers(std::shared_ptr<PotentialField> pf);
+  MarkerArray createPotentialVectorMarkers(std::shared_ptr<pfield::PotentialField> pf);
 
   /**
    * @brief Fuses the two twists using a weighted alpha parameter
@@ -183,7 +181,7 @@ private:
    * @param pf The potential field instance
    * @param filename The name of the CSV file to export the data to
    */
-  void exportFieldDataToCSV(std::shared_ptr<PotentialField> pf, const std::string& filename);
+  void exportFieldDataToCSV(std::shared_ptr<pfield::PotentialField> pf, const std::string& filename);
 
   /**
    * @brief Integrates the internal query pose forward one timestep using the

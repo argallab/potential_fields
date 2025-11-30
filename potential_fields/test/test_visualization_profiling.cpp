@@ -9,32 +9,30 @@
 #include "pfield/pf_obstacle.hpp"
 #include "pfield/spatial_vector.hpp"
 
-using namespace pfield;
-
 class VisualizationProfilingTest : public ::testing::Test {
 protected:
   void SetUp() override {
     // Setup a typical scenario
-    goalPose = SpatialVector(Eigen::Vector3d(0.5, 0.0, 0.5), Eigen::Quaterniond::Identity());
-    pf = std::make_shared<PotentialField>(goalPose);
+    goalPose = pfield::SpatialVector(Eigen::Vector3d(0.5, 0.0, 0.5), Eigen::Quaterniond::Identity());
+    pf = std::make_shared<pfield::PotentialField>(goalPose);
 
     // Add some obstacles
-    pf->addObstacle(PotentialFieldObstacle(
+    pf->addObstacle(pfield::PotentialFieldObstacle(
       "obs1",
       Eigen::Vector3d(0.3, 0.1, 0.3),
       Eigen::Quaterniond::Identity(),
-      ObstacleType::SPHERE,
-      ObstacleGroup::STATIC,
-      ObstacleGeometry{0.1, 0.0, 0.0, 0.0}
+      pfield::ObstacleType::SPHERE,
+      pfield::ObstacleGroup::STATIC,
+      pfield::ObstacleGeometry{0.1, 0.0, 0.0, 0.0}
     ));
 
-    pf->addObstacle(PotentialFieldObstacle(
+    pf->addObstacle(pfield::PotentialFieldObstacle(
       "obs2",
       Eigen::Vector3d(0.6, -0.2, 0.6),
       Eigen::Quaterniond::Identity(),
-      ObstacleType::BOX,
-      ObstacleGroup::STATIC,
-      ObstacleGeometry{0.0, 0.2, 0.2, 0.2}
+      pfield::ObstacleType::BOX,
+      pfield::ObstacleGroup::STATIC,
+      pfield::ObstacleGeometry{0.0, 0.2, 0.2, 0.2}
     ));
 
     // Parameters matching PotentialFieldManager defaults
@@ -42,15 +40,15 @@ protected:
     fieldResolution = 0.1; // Using a finer resolution to stress test, or match default 0.5
   }
 
-  std::shared_ptr<PotentialField> pf;
-  SpatialVector goalPose;
+  std::shared_ptr<pfield::PotentialField> pf;
+  pfield::SpatialVector goalPose;
   double visualizerBufferArea;
   double fieldResolution;
 };
 
 TEST_F(VisualizationProfilingTest, ProfileVectorFieldGeneration) {
-  SpatialVector queryPose(Eigen::Vector3d(0.0, 0.0, 0.0), Eigen::Quaterniond::Identity());
-  PFLimits limits = pf->computeFieldBounds(queryPose, visualizerBufferArea);
+  pfield::SpatialVector queryPose(Eigen::Vector3d(0.0, 0.0, 0.0), Eigen::Quaterniond::Identity());
+  pfield::PFLimits limits = pf->computeFieldBounds(queryPose, visualizerBufferArea);
 
   std::cout << "Profiling Vector Field Generation..." << std::endl;
   std::cout << "Limits: X[" << limits.minX << ", " << limits.maxX << "] "
@@ -69,9 +67,8 @@ TEST_F(VisualizationProfilingTest, ProfileVectorFieldGeneration) {
         Eigen::Vector3d point(x, y, z);
         if (pf->isPointInsideObstacle(point)) { continue; }
 
-        SpatialVector position{point};
-        TaskSpaceTwist velocity = pf->evaluateLimitedVelocityAtPose(position);
-        (void)velocity; // Suppress unused variable warning
+        pfield::SpatialVector position{point};
+        pfield::TaskSpaceTwist velocity = pf->evaluateLimitedVelocityAtPose(position);
         evaluatedCount++;
 
         // Simulate marker creation overhead (minimal)
