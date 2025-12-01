@@ -144,20 +144,29 @@ with defaults of $k_{lin} = 1.0\,[(\mathrm{m/s})/\mathrm{N}]$ and $k_{ang} = 1.0
 The potential functions are scalar fields representing potential energy (Newton-meters [Nm]). The gradient of the potential is represented as a force (Newtons [N]). To obtain velocity vectors, we use some parameter ($\zeta$ and $\eta$) that acts as an inverse damping coefficient (Newton-seconds / meter [Ns/m]) to convert the force into a velocity (meters / second [m/s]).
 
 ## Attractive Potential
-Attractive Potential is computed using a continuously differentiable function (quadratic function of distance)
+Attractive Potential is computed using a combined Conical and Quadratic potential function. This approach ensures a constant attractive force at large distances (Conical) to prevent high velocities, while switching to a quadratic behavior near the goal to ensure smooth convergence without chattering.
+The transition occurs at a distance $\Gamma$, which can be dynamic based on the environment (e.g., clearance from obstacles) or a fixed parameter.
 
 $$
-\begin{align}
-U_{att}(q) &= \frac{1}{2}\zeta D\left(q, q_{goal}\right)^2 \\
-\nabla U_{att}(q) &= \nabla \left(\frac{1}{2}\zeta D\left(q, q_{goal}\right)^2\right) \\
-&= \frac{1}{2}\zeta \nabla D\left(q, q_{goal}\right)^2 \\
-\nabla U_{att}(q) &= \zeta \underbrace{\left(q - q_{goal}\right)}_{\text{vector distance}}
-\end{align}
+U_{att}(q) = \begin{cases}
+\frac{1}{2}\zeta D(q, q_{goal})^2 & D(q, q_{goal}) \le \Gamma \\
+\Gamma \zeta D(q, q_{goal}) - \frac{1}{2}\zeta \Gamma^2 & D(q, q_{goal}) > \Gamma
+\end{cases}
+$$
+
+The gradient (force) is:
+
+$$
+\mathbf{F}_{att}(q) = -\nabla U_{att}(q) = \begin{cases}
+-\zeta (q - q_{goal}) & D(q, q_{goal}) \le \Gamma \\
+-\frac{\Gamma \zeta}{D(q, q_{goal})} (q - q_{goal}) & D(q, q_{goal}) > \Gamma
+\end{cases}
 $$
 
 Where:
 - $\zeta$ is the *attractive gain* parameter
-- $D\left(q, q_{goal}\right)$ is the euclidean distance between vector $q$ and $q_{goal}$
+- $D(q, q_{goal})$ is the Euclidean distance between $q$ and $q_{goal}$
+- $\Gamma$ is the quadratic threshold distance
 
 ## Rotational Attraction
 Let $q_c$ be the current unit quaternion and $q_g$ the goal orientation. The geodesic distance $\theta \in [0,\pi]$ is the shortest rotation aligning $q_c$ to $q_g$. Define the quaternion difference
@@ -326,36 +335,42 @@ $$
 This filtering is applied only during planning; the unfiltered field is kept for visualization and testing semantics.
 
 ## Path Planning Algorithm
-The path planning algorithm iteratively computes the potential field wrench, maps it to a twist, applies velocity and acceleration limits, and integrates the twist to update the pose. This process continues until the planner reaches the goal within a specified tolerance.
+This library supports two distinct path planning methods, each with different trade-offs regarding computational complexity and collision avoidance coverage.
 
-```python
-# pseudocode for path planning algorithm
-def plan_path(start_pose, goal_pose, goal_tolerance, dt):
-    current_pose = start_pose
-    path = [current_pose]
+### Task-Space Wrench Path Planning
+This method calculates forces and torques (wrench) directly at the end-effector in the task space (Cartesian space). The wrench is converted into a twist (velocity) and integrated to update the end-effector's pose. Inverse Kinematics (IK) is then used to solve for the joint angles that achieve this pose.
 
-    while not at_goal(current_pose, goal_pose, goal_tolerance):
-        # 1) Evaluate the potential field wrench at the current pose in the potential field
-        wrench = evaluate_wrench_at_pose(current_pose, goal_pose)
-        # 2) Convert the wrench to a twist (velocity) and apply velocity/acceleration limits
-        twist = convert_wrench_to_twist(wrench)
-        twist_limited = apply_velocity_acceleration_limits(twist, dt)
-        # 3) Integrate the twist to get the next pose using RK4 while still respecting limits
-        current_pose = integrate_twist(current_pose, twist_limited, dt)
-        path.append(current_pose)
+**Main Benefit:** Computationally efficient and provides precise control over the end-effector's trajectory. Best suited when the primary concern is the end-effector's path and the robot arm is relatively unobstructed.
 
-    return path
-```
+**Key Evaluations:**
+1.  **Task-Space Wrench:** Sum of attractive and repulsive forces/torques at the end-effector.
 
-# References
- [1] [Real-Time Obstacle Avoidance for Manipulators and Mobile Robots](https://ieeexplore.ieee.org/stamp/stampCaCancaCccCfaksdfojas;kfjd;ksldadjf.jsp?tp=&arnumber=1087247)
+$$ \mathcal{W}_{task} = \begin{bmatrix} \mathbf{F}_{att} + \mathbf{F}_{rep} \\ \boldsymbol{\tau}_{att} \end{bmatrix} $$
 
- ```
- O. Khatib, “Real-time obstacle avoidance for manipulators and mobile robots,” in Proc. 1985 IEEE Int. Conf. Robotics and Automation, vol. 2, pp. 500–505, 1985, doi: 10.1109/ROBOT.1985.1087247.
- ```
+2.  **Task-Space Twist:** Wrench converted to velocity using admittance gains ($k_{lin} = k_{ang} = 1.0$).
 
- [2] [Principles of Robot Motion: Theory, Algorithms, and Implementations](https://ieeexplore.ieee.org/book/6267238)
+$$ \mathcal{V}_{task} = \begin{bmatrix} k_{lin} & \mathbf{0} \\ \mathbf{0} & k_{ang} \end{bmatrix} \mathcal{W}_{task} $$
 
- ```
- H. Choset, K. M. Lynch, S. Hutchinson, G. A. Kantor, W. Burgard, L. E. Kavraki, and S. Thrun, Principles of Robot Motion: Theory, Algorithms, and Implementations. Cambridge, MA: MIT Press, 2005.
- ```
+3.  **Integration:** The twist is integrated (using RK4) to find the next end-effector pose $x_{next}$.
+
+$$ x_{next} = \text{RK4}(x_{curr}, \mathcal{V}_{task}, \Delta t) $$
+
+### Whole-Body Velocity Path Planning
+This method calculates virtual forces acting on *every* link of the robot body, not just the end-effector. These forces are mapped to joint torques using the Jacobian transpose of each link. The total joint torques are then converted to joint velocities, which are integrated to update the robot's configuration directly.
+
+**Main Benefit:** Provides whole-body collision avoidance. The robot "feels" obstacles along its entire arm and will naturally fold or move its elbows to avoid them while trying to reach the goal. Ideal for cluttered environments.
+
+**Key Evaluations:**
+1.  **Joint Torques:** Sum of end-effector attraction and whole-body repulsion mapped to joint space.
+
+$$ \boldsymbol{\tau}_{joints} = J_{ee}^T(\mathbf{q}) \mathcal{W}_{att} + \sum_{i \in \text{links}} J_{i}^T(\mathbf{q}) \mathbf{F}_{rep, i} $$
+
+2.  **Joint Velocities:** Torques converted to velocities using an admittance gain.
+
+$$ \dot{\mathbf{q}} = k_{adm} \boldsymbol{\tau}_{joints} $$
+
+_Soon to be replaced with the [Robot Dynamics Equation](https://github.com/argallab/pfields_2025/issues/23)_
+
+3.  **Integration:** Joint velocities are integrated (Euler) to find the next joint configuration.
+
+$$ \mathbf{q}_{next} = \mathbf{q}_{curr} + \dot{\mathbf{q}} \Delta t $$

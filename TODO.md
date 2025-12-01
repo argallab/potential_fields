@@ -17,9 +17,12 @@
 - Investigate Configuration Space planning with the PF
   - Principles of Robot Motion, Choset et al.
   - Modern Robotics, Lynch and Park
+- Update README
+  - D* Threshold in Repulsive Force Equation
+  - Whole Body Velocity Repulsion Explanation
 
 # Future TODOs and Refactors
 - Create U-shaped obstacle test case for classic local minima problem
 - Improve Extent Estimator ("Extentimator") to be more accurate and be realistic for robot arms
   - Add unit tests for Extent Estimator
-- Documentation for whole body velocity planning method
+- Define IKSolver and MotionPlugin more concretely. IKSolver should be an ABC for a user to implement an IK implementation. MotionPlugin shoudl be an ABC for a user to implement how to talk to real robot and should be capable of both ROS-agnostic and ROS-aware implementations.

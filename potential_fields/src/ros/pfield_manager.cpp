@@ -294,16 +294,41 @@ void PotentialFieldManager::handleComputeAutonomyVector(
   // Compute the autonomy vector at the given pose
   pfield::SpatialVector queryPose(
     Eigen::Vector3d(
-      request->start.pose.position.x,
-      request->start.pose.position.y,
-      request->start.pose.position.z
+      request->query_pose.pose.position.x,
+      request->query_pose.pose.position.y,
+      request->query_pose.pose.position.z
     ),
     Eigen::Quaterniond(
-      request->start.pose.orientation.w, request->start.pose.orientation.x,
-      request->start.pose.orientation.y, request->start.pose.orientation.z
+      request->query_pose.pose.orientation.w, request->query_pose.pose.orientation.x,
+      request->query_pose.pose.orientation.y, request->query_pose.pose.orientation.z
     )
   );
-  pfield::TaskSpaceTwist autonomyVector = this->pField->evaluateLimitedVelocityAtPose(queryPose);
+
+  TaskSpaceTwist autonomyVector;
+  if (request->planning_method == "whole_body") {
+    // Update obstacles first if joint angles are provided
+    std::vector<double> jointAngles;
+    if (!request->joint_angles.empty()) {
+      jointAngles.assign(request->joint_angles.begin(), request->joint_angles.end());
+      this->pField->updateObstaclesFromKinematics(jointAngles);
+    }
+    else {
+      // Fallback to current joint angles if not provided
+      jointAngles = this->currentJointAngles;
+      RCLCPP_WARN(this->get_logger(), "Whole-body planning requested but no joint angles provided. Using current state.");
+    }
+    autonomyVector = this->pField->evaluateWholeBodyTaskSpaceTwistAtConfiguration(jointAngles, queryPose);
+  }
+  else {
+    // Default to task_space
+    // Update obstacles if joint angles are provided (optional but good for consistency)
+    if (!request->joint_angles.empty()) {
+      std::vector<double> jointAngles(request->joint_angles.begin(), request->joint_angles.end());
+      this->pField->updateObstaclesFromKinematics(jointAngles);
+    }
+    autonomyVector = this->pField->evaluateLimitedVelocityAtPose(queryPose);
+  }
+
   response->autonomy_vector.header.frame_id = this->fixedFrame;
   response->autonomy_vector.header.stamp = this->now();
   response->autonomy_vector.twist.linear.x = autonomyVector.getLinearVelocity().x();

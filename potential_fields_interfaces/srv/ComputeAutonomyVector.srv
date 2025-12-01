@@ -1,3 +1,5 @@
-geometry_msgs/PoseStamped start
+geometry_msgs/PoseStamped query_pose
+float32[] joint_angles
+string planning_method
 ---
 geometry_msgs/TwistStamped autonomy_vector
