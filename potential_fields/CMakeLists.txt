@@ -34,7 +34,8 @@ find_package(hpp-fcl REQUIRED)
 find_package(pinocchio REQUIRED)
 # find_package(Franka REQUIRED)
 find_package(ament_index_cpp REQUIRED)
-find_package(pfield_library REQUIRED)
+# Look in the default user install location if not found in system paths
+find_package(pfield_library REQUIRED HINTS "$ENV{HOME}/pfield_libs_install")
 
 
 # Setup robot_plugins library
