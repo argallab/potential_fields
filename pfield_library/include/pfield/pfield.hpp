@@ -420,6 +420,17 @@ namespace pfield {
       const SpatialVector& eePose);
 
     /**
+     * @brief Computes the task-space twist resulting from whole-body joint velocities.
+     *
+     * @param jointAngles The current joint angles of the robot [rad]
+     * @param eePose The current end-effector pose
+     * @return TaskSpaceTwist The resulting task-space twist
+     */
+    TaskSpaceTwist evaluateWholeBodyTaskSpaceTwistAtConfiguration(
+      const std::vector<double>& jointAngles,
+      const SpatialVector& eePose);
+
+    /**
      * @brief Given a 3D position, computes the task-space wrench
      *        by combining attractive and repulsive forces.
      *
