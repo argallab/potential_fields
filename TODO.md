@@ -18,6 +18,9 @@
 - Investigate Configuration Space planning with the PF
   - Principles of Robot Motion, Choset et al.
   - Modern Robotics, Lynch and Park
+- Update README
+  - D* Threshold in Repulsive Force Equation
+  - Whole Body Velocity Repulsion Explanation
 
 # Future TODOs and Refactors
 - namespace pfield c++ library and externalize from ROS package
