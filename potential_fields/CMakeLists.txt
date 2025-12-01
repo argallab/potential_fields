@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.8)
 project(potential_fields)
 
+# Ensure installed executables can find external libraries in non-standard locations
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -35,7 +38,7 @@ find_package(pinocchio REQUIRED)
 # find_package(Franka REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 # Look in the default user install location if not found in system paths
-find_package(pfield_library REQUIRED HINTS "$ENV{HOME}/pfield_libs_install")
+find_package(pfield_library REQUIRED)
 
 
 # Setup robot_plugins library
