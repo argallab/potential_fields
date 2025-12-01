@@ -145,13 +145,12 @@ The potential functions are scalar fields representing potential energy (Newton-
 
 ## Attractive Potential
 Attractive Potential is computed using a combined Conical and Quadratic potential function. This approach ensures a constant attractive force at large distances (Conical) to prevent high velocities, while switching to a quadratic behavior near the goal to ensure smooth convergence without chattering.
-
-The transition occurs at a distance $d^{*}$, which can be dynamic based on the environment (e.g., clearance from obstacles) or a fixed parameter.
+The transition occurs at a distance \Gamma, which can be dynamic based on the environment (e.g., clearance from obstacles) or a fixed parameter.
 
 $$
 U_{att}(q) = \begin{cases}
-\frac{1}{2}\zeta D(q, q_{goal})^2 & D(q, q_{goal}) \le d^{*} \\
-d^{*} \zeta D(q, q_{goal}) - \frac{1}{2}\zeta (d^*)^2 & D(q, q_{goal}) > d^{*}
+\frac{1}{2}\zeta D(q, q_{goal})^2 & D(q, q_{goal}) \le \Gamma \\
+\Gamma \zeta D(q, q_{goal}) - \frac{1}{2}\zeta \Gamma^2 & D(q, q_{goal}) > \Gamma
 \end{cases}
 $$
 
@@ -159,15 +158,15 @@ The gradient (force) is:
 
 $$
 \mathbf{F}_{att}(q) = -\nabla U_{att}(q) = \begin{cases}
--\zeta (q - q_{goal}) & D(q, q_{goal}) \le d^{*} \\
--\frac{d^{*} \zeta}{D(q, q_{goal})} (q - q_{goal}) & D(q, q_{goal}) > d^{*}
+-\zeta (q - q_{goal}) & D(q, q_{goal}) \le \Gamma \\
+-\frac{\Gamma \zeta}{D(q, q_{goal})} (q - q_{goal}) & D(q, q_{goal}) > \Gamma
 \end{cases}
 $$
 
 Where:
 - $\zeta$ is the *attractive gain* parameter
 - $D(q, q_{goal})$ is the Euclidean distance between $q$ and $q_{goal}$
-- $d^{*}$ is the quadratic threshold distance
+- $\Gamma$ is the quadratic threshold distance
 
 ## Rotational Attraction
 Let $q_c$ be the current unit quaternion and $q_g$ the goal orientation. The geodesic distance $\theta \in [0,\pi]$ is the shortest rotation aligning $q_c$ to $q_g$. Define the quaternion difference
