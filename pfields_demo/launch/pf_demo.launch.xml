@@ -14,20 +14,27 @@
   <arg name="base_pitch" default="0.0" description="Pitch of the robot's base frame relative to RViz fixed frame"/>
   <arg name="base_yaw" default="0.0" description="Yaw of the robot's base frame relative to RViz fixed frame"/>
 
+  <arg name="demo_name" default="pf_demo" description="Name of the demo to run (options: pf_demo, sphere_robot, xarm_demo, local_minima_demo)"/>
+
   <!-- PF Demo Node -->
-  <!-- <node pkg="pfields_demo" exec="pf_demo.py" name="pfield_demo_py" output="screen">
+  <node pkg="pfields_demo" exec="pf_demo.py" name="pfield_demo_py" output="screen" if="$(eval '\'$(var demo_name)\' == \'pf_demo\'')">
     <param name="fixed_frame" value="$(var rviz_fixed_frame)"/>
-  </node> -->
+  </node>
 
   <!-- Sphere Demo Node -->
-  <!-- <node pkg="pfields_demo" exec="sphere_robot_demo.py" name="sphere_robot" output="screen">
+  <node pkg="pfields_demo" exec="sphere_robot_demo.py" name="sphere_robot" output="screen" if="$(eval '\'$(var demo_name)\' == \'sphere_robot\'')">
     <param name="fixed_frame" value="$(var rviz_fixed_frame)"/>
-  </node> -->
+  </node>
 
   <!-- C++ Xarm Demo Node -->
-  <node pkg="pfields_demo" exec="pfield_demo_node" name="pfield_demo_cpp" output="screen">
+  <node pkg="pfields_demo" exec="pfield_demo_node" name="pfield_demo_cpp" output="screen" if="$(eval '\'$(var demo_name)\' == \'xarm_demo\'')">
     <param name="fixed_frame" value="$(var rviz_fixed_frame)"/>
     <param name="ee_link_name" value="$(var end_effector_frame)"/>
+  </node>
+
+  <!-- Local Minima Demo Node -->
+  <node pkg="pfields_demo" exec="local_minima_demo.py" name="local_minima_demo" output="screen" if="$(eval '\'$(var demo_name)\' == \'local_minima_demo\'')">
+    <param name="fixed_frame" value="$(var rviz_fixed_frame)"/>
   </node>
 
   <!-- Static TF: $(var rviz_fixed_frame) -> $(var base_frame) -->

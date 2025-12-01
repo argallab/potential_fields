@@ -65,6 +65,7 @@ install(
   PROGRAMS
   pfields_demo/pf_demo.py
   pfields_demo/sphere_robot_demo.py
+  pfields_demo/local_minima_demo.py
   DESTINATION lib/${PROJECT_NAME}
 )
 
