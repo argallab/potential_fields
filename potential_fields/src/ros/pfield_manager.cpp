@@ -304,7 +304,7 @@ void PotentialFieldManager::handleComputeAutonomyVector(
     )
   );
 
-  TaskSpaceTwist autonomyVector;
+  pfield::TaskSpaceTwist autonomyVector;
   if (request->planning_method == "whole_body") {
     // Update obstacles first if joint angles are provided
     std::vector<double> jointAngles;
