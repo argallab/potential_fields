@@ -346,15 +346,15 @@ This method calculates forces and torques (wrench) directly at the end-effector 
 **Key Evaluations:**
 1.  **Task-Space Wrench:** Sum of attractive and repulsive forces/torques at the end-effector.
 
-    $$ \mathcal{W}_{task} = \begin{bmatrix} \mathbf{F}_{att} + \mathbf{F}_{rep} \\ \boldsymbol{\tau}_{att} \end{bmatrix} $$
+$$ \mathcal{W}_{task} = \begin{bmatrix} \mathbf{F}_{att} + \mathbf{F}_{rep} \\ \boldsymbol{\tau}_{att} \end{bmatrix} $$
 
 2.  **Task-Space Twist:** Wrench converted to velocity using admittance gains ($k_{lin} = k_{ang} = 1.0$).
 
-    $$ \mathcal{V}_{task} = \begin{bmatrix} k_{lin} & \mathbf{0} \\ \mathbf{0} & k_{ang} \end{bmatrix} \mathcal{W}_{task} $$
+$$ \mathcal{V}_{task} = \begin{bmatrix} k_{lin} & \mathbf{0} \\ \mathbf{0} & k_{ang} \end{bmatrix} \mathcal{W}_{task} $$
 
 3.  **Integration:** The twist is integrated (using RK4) to find the next end-effector pose $x_{next}$.
 
-    $$ x_{next} = \text{RK4}(x_{curr}, \mathcal{V}_{task}, \Delta t) $$
+$$ x_{next} = \text{RK4}(x_{curr}, \mathcal{V}_{task}, \Delta t) $$
 
 ### Whole-Body Velocity Path Planning
 This method calculates virtual forces acting on *every* link of the robot body, not just the end-effector. These forces are mapped to joint torques using the Jacobian transpose of each link. The total joint torques are then converted to joint velocities, which are integrated to update the robot's configuration directly.
@@ -364,14 +364,14 @@ This method calculates virtual forces acting on *every* link of the robot body, 
 **Key Evaluations:**
 1.  **Joint Torques:** Sum of end-effector attraction and whole-body repulsion mapped to joint space.
 
-    $$ \boldsymbol{\tau}_{joints} = J_{ee}^T(\mathbf{q}) \mathcal{W}_{att} + \sum_{i \in \text{links}} J_{i}^T(\mathbf{q}) \mathbf{F}_{rep, i} $$
+$$ \boldsymbol{\tau}_{joints} = J_{ee}^T(\mathbf{q}) \mathcal{W}_{att} + \sum_{i \in \text{links}} J_{i}^T(\mathbf{q}) \mathbf{F}_{rep, i} $$
 
 2.  **Joint Velocities:** Torques converted to velocities using an admittance gain.
 
-    $$ \dot{\mathbf{q}} = k_{adm} \boldsymbol{\tau}_{joints} $$
+$$ \dot{\mathbf{q}} = k_{adm} \boldsymbol{\tau}_{joints} $$
 
-    _Soon to be replaced with the [Robot Dynamics Equation](https://github.com/argallab/pfields_2025/issues/23)_
+_Soon to be replaced with the [Robot Dynamics Equation](https://github.com/argallab/pfields_2025/issues/23)_
 
 3.  **Integration:** Joint velocities are integrated (Euler) to find the next joint configuration.
 
-    $$ \mathbf{q}_{next} = \mathbf{q}_{curr} + \dot{\mathbf{q}} \Delta t $$
+$$ \mathbf{q}_{next} = \mathbf{q}_{curr} + \dot{\mathbf{q}} \Delta t $$
