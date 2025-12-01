@@ -26,7 +26,6 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     ros-${ROS_DISTRO}-urdf \
     ros-${ROS_DISTRO}-gz-ros2-control \
     ros-${ROS_DISTRO}-ros-gz-sim \
-    ros-${ROS_DISTRO}-pinocchio \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # install packages
@@ -36,6 +35,8 @@ RUN apt-get update && apt-get install -q -y --no-install-recommends \
     libeigen3-dev \
     libfcl-dev \
     libccd-dev \
+    libassimp-dev \
+    liburdfdom-dev \
     && apt-get clean && rm -rf /var/lib/apt/lists/*
 
 # install ubuntu packages
@@ -161,7 +162,8 @@ RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> ~/.bashrc
 
 # RUN chmod a+x entrypoint.sh
 COPY ./entrypoint.sh /
-RUN chmod a+x /entrypoint.sh
+COPY ./build_pfield_lib.sh /usr/local/bin/
+RUN chmod a+x /entrypoint.sh && chmod a+x /usr/local/bin/build_pfield_lib.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["bash"]
