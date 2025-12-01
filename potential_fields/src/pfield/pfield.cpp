@@ -220,6 +220,27 @@ Eigen::VectorXd PotentialField::evaluateWholeBodyJointVelocitiesAtConfiguration(
   return jointVelocities;
 }
 
+TaskSpaceTwist PotentialField::evaluateWholeBodyTaskSpaceTwistAtConfiguration(
+  const std::vector<double>& jointAngles,
+  const SpatialVector& eePose) {
+  if (!this->pfKinematics) {
+    return TaskSpaceTwist();
+  }
+
+  // 1. Compute whole-body joint velocities
+  Eigen::VectorXd jointVelocities = this->evaluateWholeBodyJointVelocitiesAtConfiguration(jointAngles, eePose);
+
+  // 2. Get End-Effector Jacobian
+  Eigen::MatrixXd J = this->pfKinematics->getSpatialJacobianAtPoint(
+    this->eeLinkName, eePose.getPosition(), jointAngles
+  );
+
+  // 3. Map joint velocities to task-space twist: V = J * q_dot
+  Eigen::VectorXd twistVec = J * jointVelocities;
+
+  return TaskSpaceTwist(twistVec.head(3), twistVec.tail(3));
+}
+
 
 TaskSpaceWrench PotentialField::evaluateWrenchAtPose(const SpatialVector& queryPose) const {
   Eigen::Vector3d attractionForceVector = this->computeAttractiveForceLinear(queryPose);

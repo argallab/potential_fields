@@ -418,8 +418,18 @@ public:
     const SpatialVector& eePose);
 
   /**
-   * @brief Given a 3D position, computes the task-space wrench
-   *        by combining attractive and repulsive forces.
+   * @brief Computes the task-space twist resulting from whole-body joint velocities.
+   *
+   * @param jointAngles The current joint angles of the robot [rad]
+   * @param eePose The current end-effector pose
+   * @return TaskSpaceTwist The resulting task-space twist
+   */
+  TaskSpaceTwist evaluateWholeBodyTaskSpaceTwistAtConfiguration(
+    const std::vector<double>& jointAngles,
+    const SpatialVector& eePose);
+
+  /**
+   * @brief Computes the task-space wrench (force and torque) at the given query pose.
    *
    * @param queryPose The pose in 3D space to compute the wrench.
    * @return TaskSpaceWrench The resultant task-space wrench [N, Nm]
