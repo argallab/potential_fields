@@ -17,9 +17,9 @@
 - Investigate Configuration Space planning with the PF
   - Principles of Robot Motion, Choset et al.
   - Modern Robotics, Lynch and Park
-- Update README
-  - D* Threshold in Repulsive Force Equation
-  - Whole Body Velocity Repulsion Explanation
+- Let user pass either Start pose or start joint angles when planning a path instead of both
+- Allow editing pfield parameters dynamically during runtime via ROS2 parameters
+- Add failure reasons (string) to PlanPath service response for better debugging
 
 # Future TODOs and Refactors
 - Create U-shaped obstacle test case for classic local minima problem
