@@ -20,6 +20,7 @@
 - Let user pass either Start pose or start joint angles when planning a path instead of both
 - Allow editing pfield parameters dynamically during runtime via ROS2 parameters
 - Add failure reasons (string) to PlanPath service response for better debugging
+- Plot Net force vs time as well, maybe force on each joint
 
 # Future TODOs and Refactors
 - Create U-shaped obstacle test case for classic local minima problem

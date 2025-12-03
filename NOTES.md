@@ -301,3 +301,20 @@ sections of the path that are too close to obstacles and replan accordingly.
    year = {2015--2024}
 }
 ```
+
+# 12/3 Meeting Notes
+- Attempted to use dynamics equation but ran into problems
+  - Damping and tuning gain parameters correctly is difficult
+  - Probably better to just use a gain parameter to convert torques to velocities
+- Termination bug was due to small forces so increasing gains helped resolve that
+- Next Step is to revert to gain parameter and test with obstacles at SRA
+
+## Post-Meeting
+Try enforcing maximum force before it becomes a Torque.
+Try using pinocchio to get next joint velocities instead of integrating
+Try implementing dynamics equation with some other library
+Get some videos of a working demo with the dynamics reverted.
+Start Focusing on release-specific tasks:
+  - Documentation
+  - README + Code Documentation
+  - Prep for ROS Index + Release
