@@ -208,30 +208,42 @@ namespace pfield {
     // --- 3. Combine Torques ---
     Eigen::VectorXd totalJointTorques = attractionTorques + repulsionTorques;
 
+    // Clamp maximum joint torques allowed
+    const double maxTau = 100.0; // [Nm] Maximum allowable joint torque
+    double tauNorm = totalJointTorques.norm();
+    if (tauNorm > maxTau) {
+      totalJointTorques *= (maxTau / tauNorm);
+    }
+
     // --- 4. Convert Joint Torques to Joint Velocities using Robot Dynamics Equation ---
+    return this->convertJointTorquesToJointVelocities(totalJointTorques, jointAngles, prevJointVelocities, dt);
+  }
+
+  Eigen::VectorXd PotentialField::convertJointTorquesToJointVelocities(
+    const Eigen::VectorXd& jointTorques, const std::vector<double>& jointAngles,
+    const std::vector<double>& currentJointVelocities, const double dt) const {
+
     if (!this->pfKinematics) {
       // If we don't have access to PFKinematics, use a simple proportional mapping
       const double torqueToVelocityGain = 1.0; // [rad/s] per [Nm]
-      return torqueToVelocityGain * totalJointTorques;
+      return torqueToVelocityGain * jointTorques;
     }
 
     // Retrieve Mass Matrix, Coriolis, and Gravity
     Eigen::MatrixXd M = this->pfKinematics->getMassMatrix(jointAngles);
     // C contains the result of C * q_dot since it's simpler to compute
-    Eigen::VectorXd C = this->pfKinematics->getCoriolisVector(jointAngles, prevJointVelocities);
+    Eigen::VectorXd C = this->pfKinematics->getCoriolisVector(jointAngles, currentJointVelocities);
     Eigen::VectorXd G = this->pfKinematics->getGravityVector(jointAngles);
 
-    // Compute the Joint Accelerations: M * q_ddot = Tau - (G + C*q_dot)
-    // We assume the robot has gravity compensation, so we don't subtract G
-    // We also assume the robot compensates for Coriolis/Centrifugal forces for pure path planning
 
     // Add joint damping to stabilize the motion (M*q_ddot = Tau - D*q_dot)
     // A simple constant damping prevents oscillation from the conservative potential field
-    const double dampingGain = 2.0; // Tunable parameter
-    Eigen::VectorXd dampingTorque = dampingGain * Eigen::Map<const Eigen::VectorXd>(prevJointVelocities.data(), prevJointVelocities.size());
+    const double dampingGain = 20.0;
+    Eigen::VectorXd prevJointVels = Eigen::Map<const Eigen::VectorXd>(currentJointVelocities.data(), currentJointVelocities.size());
+    Eigen::VectorXd dampingTorque = dampingGain * prevJointVels;
 
-    Eigen::VectorXd netTorques = totalJointTorques - dampingTorque; // - C - G;
-    Eigen::VectorXd jointAccelerations = Eigen::VectorXd::Zero(jointAngles.size());
+    Eigen::VectorXd netTorques = jointTorques - C - G - dampingTorque;
+    Eigen::VectorXd jointAccelerations;
     try {
       jointAccelerations = M.llt().solve(netTorques);
     }
@@ -240,12 +252,13 @@ namespace pfield {
       jointAccelerations = netTorques; // Fallback to direct mapping
     }
 
-
     // --- 5. Integrate joint accelerations to get joint velocities ---
-    Eigen::VectorXd jointVelocities = Eigen::VectorXd::Zero(jointAngles.size());
+    Eigen::VectorXd jointVelocities = prevJointVels;
     if (isPositiveFinite(dt)) {
-      jointVelocities = Eigen::Map<const Eigen::VectorXd>(prevJointVelocities.data(), prevJointVelocities.size()) +
-        jointAccelerations * dt;
+      jointVelocities += jointAccelerations * dt;
+    }
+    else {
+      return jointAccelerations; // If dt is invalid, fallback to direct mapping
     }
 
     // --- 6. Apply Joint Velocity/Acceleration Limits ---
@@ -800,7 +813,7 @@ namespace pfield {
     const double stagnationLimitSeconds = 0.5; // Stop if stuck for 0.5 seconds
     const size_t stagnationLimitIterations = static_cast<size_t>(std::ceil(stagnationLimitSeconds / stepDt));
     const size_t stagnationLimit = std::max(static_cast<size_t>(1), stagnationLimitIterations);
-    const double stagnationThreshold = 5e-3; // rad/s (Increased to catch small oscillations)
+    const double stagnationThreshold = 5e-3; // rad/s (Catch small oscillations)
     size_t positionToleranceCounter = 0;
     const double positionToleranceLimitSeconds = 2.0; // Stop if position is met for 2 seconds
     const size_t positionToleranceLimit = static_cast<size_t>(std::ceil(positionToleranceLimitSeconds / stepDt));
@@ -821,7 +834,7 @@ namespace pfield {
 
       // --- 2. Compute whole-body joint velocities considering end-effector attraction and obstacle repulsion ---
       Eigen::VectorXd jointVelocities = this->evaluateWholeBodyJointVelocitiesAtConfiguration(
-        currentJointAngles, prevJointVelocities, currentEEPose, dt
+        currentJointAngles, prevJointVelocities, currentEEPose, stepDt
       );
       // Update prevJointVelocities for next iteration
       prevJointVelocities.assign(jointVelocities.data(), jointVelocities.data() + jointVelocities.size());

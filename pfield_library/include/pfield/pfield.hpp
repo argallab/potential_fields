@@ -563,6 +563,11 @@ namespace pfield {
       const Eigen::Vector3d& angularVelocity,
       double deltaTime);
 
+    Eigen::VectorXd convertJointTorquesToJointVelocities(
+      const Eigen::VectorXd& jointTorques, const std::vector<double>& jointAngles,
+      const std::vector<double>& currentJointVelocities, const double dt) const;
+
+
     /**
      * @brief Computes the attractive force towards the goal position
      *
