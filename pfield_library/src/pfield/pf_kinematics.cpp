@@ -516,6 +516,13 @@ namespace pfield {
         M(i, j) = this->data.M(this->jointQIndices[i], this->jointQIndices[j]);
       }
     }
+
+    // Regularize Mass Matrix
+    // Near singularities, the mass matrix is not very usable and inverting it
+    // creates large velocity spikes, so we can add a small damper to the diagonal
+    const double lambda = 1e-3;
+    M.diagonal().array() += lambda;
+
     return M;
   }
 
