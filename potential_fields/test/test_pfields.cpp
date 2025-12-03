@@ -7,30 +7,30 @@
 #include "robot_plugins/null_motion_plugin.hpp"
 
 TEST(PotentialFieldTest, AddAndRemoveObstacles) {
-  PotentialField pf;
-  PotentialFieldObstacle o1(
+  pfield::PotentialField pf;
+  pfield::PotentialFieldObstacle o1(
     "o1",
     Eigen::Vector3d(1.0f, 1.0f, 1.0f),
     Eigen::Quaterniond::Identity(),
-    ObstacleType::SPHERE,
-    ObstacleGroup::STATIC,
-    ObstacleGeometry{1.0f, 0.0f, 0.0f, 0.0f}
+    pfield::ObstacleType::SPHERE,
+    pfield::ObstacleGroup::STATIC,
+    pfield::ObstacleGeometry{1.0f, 0.0f, 0.0f, 0.0f}
   );
   pf.addObstacle(o1);
   EXPECT_EQ(pf.getEnvObstacles().size(), 1);
 
   // Overwrite same ID
-  PotentialFieldObstacle o1b(
+  pfield::PotentialFieldObstacle o1b(
     "o1",
     Eigen::Vector3d(2.0f, 2.0f, 2.0f),
     Eigen::Quaterniond::Identity(),
-    ObstacleType::SPHERE,
-    ObstacleGroup::STATIC,
-    ObstacleGeometry{1.5f, 0.0f, 0.0f, 0.0f}
+    pfield::ObstacleType::SPHERE,
+    pfield::ObstacleGroup::STATIC,
+    pfield::ObstacleGeometry{1.5f, 0.0f, 0.0f, 0.0f}
   );
   pf.addObstacle(o1b);
   EXPECT_EQ(pf.getEnvObstacles().size(), 1);
-  EXPECT_EQ(pf.getEnvObstacles()[0].getType(), ObstacleType::SPHERE);
+  EXPECT_EQ(pf.getEnvObstacles()[0].getType(), pfield::ObstacleType::SPHERE);
   EXPECT_EQ(pf.getEnvObstacles()[0].getPosition().x(), 2.0f);
   EXPECT_EQ(pf.getEnvObstacles()[0].getPosition().y(), 2.0f);
   EXPECT_EQ(pf.getEnvObstacles()[0].getPosition().z(), 2.0f);
@@ -38,13 +38,13 @@ TEST(PotentialFieldTest, AddAndRemoveObstacles) {
 
 
   // Add another and remove
-  pf.addObstacle(PotentialFieldObstacle(
+  pf.addObstacle(pfield::PotentialFieldObstacle(
     "o2",
     Eigen::Vector3d(-1.0, -1.0, 0.0),
     Eigen::Quaterniond::Identity(),
-    ObstacleType::BOX,
-    ObstacleGroup::STATIC,
-    ObstacleGeometry{1.0, 2.0, 8.0, 1.0}
+    pfield::ObstacleType::BOX,
+    pfield::ObstacleGroup::STATIC,
+    pfield::ObstacleGeometry{1.0, 2.0, 8.0, 1.0}
   ));
   EXPECT_EQ(pf.getEnvObstacles().size(), 2);
   EXPECT_TRUE(pf.removeObstacle("o2"));
@@ -53,50 +53,50 @@ TEST(PotentialFieldTest, AddAndRemoveObstacles) {
 }
 
 TEST(PotentialFieldTest, ClearObstacles) {
-  PotentialField pf;
-  pf.addObstacle(PotentialFieldObstacle(
+  pfield::PotentialField pf;
+  pf.addObstacle(pfield::PotentialFieldObstacle(
     "o1",
     Eigen::Vector3d::Zero(),
     Eigen::Quaterniond::Identity(),
-    ObstacleType::SPHERE,
-    ObstacleGroup::STATIC,
-    ObstacleGeometry{2.0, 0.0, 0.0, 0.0}
+    pfield::ObstacleType::SPHERE,
+    pfield::ObstacleGroup::STATIC,
+    pfield::ObstacleGeometry{2.0, 0.0, 0.0, 0.0}
   ));
-  pf.addObstacle(PotentialFieldObstacle(
+  pf.addObstacle(pfield::PotentialFieldObstacle(
     "o2",
     Eigen::Vector3d::Zero(),
     Eigen::Quaterniond::Identity(),
-    ObstacleType::SPHERE,
-    ObstacleGroup::STATIC,
-    ObstacleGeometry{2.0, 0.0, 0.0, 0.0}
+    pfield::ObstacleType::SPHERE,
+    pfield::ObstacleGroup::STATIC,
+    pfield::ObstacleGeometry{2.0, 0.0, 0.0, 0.0}
   ));
   pf.clearObstacles();
   EXPECT_TRUE(pf.getEnvObstacles().empty());
 }
 
 TEST(PotentialFieldTest, VelocityAtGoalIsZero) {
-  SpatialVector goal(Eigen::Vector3d(1.0, 1.0, 1.0));
-  PotentialField pf(goal, 1.0, 0.0, 0.0);
-  TaskSpaceTwist v = pf.evaluateVelocityAtPose(goal);
+  pfield::SpatialVector goal(Eigen::Vector3d(1.0, 1.0, 1.0));
+  pfield::PotentialField pf(goal, 1.0, 0.0, 0.0);
+  pfield::TaskSpaceTwist v = pf.evaluateVelocityAtPose(goal);
   EXPECT_EQ(v.getLinearVelocity(), Eigen::Vector3d::Zero());
   EXPECT_EQ(v.getAngularVelocity(), Eigen::Vector3d::Zero());
 }
 
 TEST(PotentialFieldTest, AttractiveFieldPullsTowardGoal) {
-  SpatialVector goal;
-  PotentialField pf(goal, 1.0f, 0.0, 0.0);
-  SpatialVector query(Eigen::Vector3d(1.0f, 0.0f, 0.0f));
-  TaskSpaceTwist vel = pf.evaluateVelocityAtPose(query);
+  pfield::SpatialVector goal;
+  pfield::PotentialField pf(goal, 1.0f, 0.0, 0.0);
+  pfield::SpatialVector query(Eigen::Vector3d(1.0f, 0.0f, 0.0f));
+  pfield::TaskSpaceTwist vel = pf.evaluateVelocityAtPose(query);
   EXPECT_LT(vel.getLinearVelocity().x(), 0);  // should pull toward origin
   EXPECT_NEAR(vel.getLinearVelocity().y(), 0.0, 1e-5);
   EXPECT_NEAR(vel.getLinearVelocity().z(), 0.0, 1e-5);
 }
 
 TEST(PotentialFieldTest, AttractiveGainScaling) {
-  PotentialField pf(3.0, 0.0, 0.0, 0.0, 10.0, 1.0, 5.0, 5.0);
-  pf.setGoalPose(SpatialVector(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity()));
-  SpatialVector query(Eigen::Vector3d(2.0, 0.0, 0.0));
-  TaskSpaceTwist vel = pf.evaluateVelocityAtPose(query);
+  pfield::PotentialField pf(3.0, 0.0, 0.0, 0.0, 10.0, 1.0, 5.0, 5.0);
+  pf.setGoalPose(pfield::SpatialVector(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity()));
+  pfield::SpatialVector query(Eigen::Vector3d(2.0, 0.0, 0.0));
+  pfield::TaskSpaceTwist vel = pf.evaluateVelocityAtPose(query);
   // With d* = 1.0 (fixed, dynamic disabled), distance(=2) > d* so we are in the conical region.
   // Expected force magnitude = gain * d* = 3 * 1 = 3 toward the goal (negative x).
   EXPECT_NEAR(vel.getLinearVelocity().x(), -3.0, 1e-6);
@@ -104,55 +104,55 @@ TEST(PotentialFieldTest, AttractiveGainScaling) {
 }
 
 TEST(PotentialFieldTest, NoGoalNoAttraction) {
-  PotentialField pf(1.0, 0.0, 0.0); // Attractive gain 1.0, but no goal set
-  SpatialVector query(Eigen::Vector3d(2.0, 0.0, 0.0));
-  TaskSpaceTwist vel = pf.evaluateVelocityAtPose(query);
+  pfield::PotentialField pf(1.0, 0.0, 0.0); // Attractive gain 1.0, but no goal set
+  pfield::SpatialVector query(Eigen::Vector3d(2.0, 0.0, 0.0));
+  pfield::TaskSpaceTwist vel = pf.evaluateVelocityAtPose(query);
   EXPECT_EQ(vel.getLinearVelocity(), Eigen::Vector3d::Zero());
   EXPECT_EQ(vel.getAngularVelocity(), Eigen::Vector3d::Zero());
 }
 
 TEST(PotentialFieldTest, RepulsiveFieldPushesAwayFromObstacle) {
-  auto goalSV = SpatialVector(Eigen::Vector3d(0.0, 0.0, 0.0));
-  PotentialField pf(goalSV, 0.0, 1.0, 0.0);  // no attraction
-  auto sphereObst = PotentialFieldObstacle(
+  auto goalSV = pfield::SpatialVector(Eigen::Vector3d(0.0, 0.0, 0.0));
+  pfield::PotentialField pf(goalSV, 0.0, 1.0, 0.0);  // no attraction
+  auto sphereObst = pfield::PotentialFieldObstacle(
     "o0",
     goalSV.getPosition(),
     Eigen::Quaterniond::Identity(),
-    ObstacleType::SPHERE,
-    ObstacleGroup::STATIC,
-    ObstacleGeometry{2.0, 0.0, 0.0, 0.0}
+    pfield::ObstacleType::SPHERE,
+    pfield::ObstacleGroup::STATIC,
+    pfield::ObstacleGeometry{2.0, 0.0, 0.0, 0.0}
   );
-  auto boxObst = PotentialFieldObstacle(
+  auto boxObst = pfield::PotentialFieldObstacle(
     "o1",
     goalSV.getPosition(),
     Eigen::Quaterniond::Identity(),
-    ObstacleType::BOX,
-    ObstacleGroup::STATIC,
-    ObstacleGeometry{2.0, 2.0, 2.0, 0.0}
+    pfield::ObstacleType::BOX,
+    pfield::ObstacleGroup::STATIC,
+    pfield::ObstacleGeometry{2.0, 2.0, 2.0, 0.0}
   );
-  auto cylinderObst = PotentialFieldObstacle(
+  auto cylinderObst = pfield::PotentialFieldObstacle(
     "o2",
     goalSV.getPosition(),
     Eigen::Quaterniond::Identity(),
-    ObstacleType::CYLINDER,
-    ObstacleGroup::STATIC,
-    ObstacleGeometry{1.0, 0.0, 0.0, 2.0}
+    pfield::ObstacleType::CYLINDER,
+    pfield::ObstacleGroup::STATIC,
+    pfield::ObstacleGeometry{1.0, 0.0, 0.0, 2.0}
   );
   pf.addObstacle(sphereObst);
-  SpatialVector query(Eigen::Vector3d(1.0, 0.0, 0.0));
-  TaskSpaceTwist vel = pf.evaluateVelocityAtPose(query);
+  pfield::SpatialVector query(Eigen::Vector3d(1.0, 0.0, 0.0));
+  pfield::TaskSpaceTwist vel = pf.evaluateVelocityAtPose(query);
   EXPECT_GT(vel.getLinearVelocity().x(), 0);  // push away from origin
   EXPECT_NEAR(vel.getLinearVelocity().y(), 0.0, 1e-5);
   EXPECT_NEAR(vel.getLinearVelocity().z(), 0.0, 1e-5);
   pf.addObstacle(boxObst);
-  SpatialVector query2(Eigen::Vector3d(0.0, 1.0, 0.0));
-  TaskSpaceTwist vel2 = pf.evaluateVelocityAtPose(query2);
+  pfield::SpatialVector query2(Eigen::Vector3d(0.0, 1.0, 0.0));
+  pfield::TaskSpaceTwist vel2 = pf.evaluateVelocityAtPose(query2);
   EXPECT_GT(vel2.getLinearVelocity().y(), 0);  // push away from origin
   EXPECT_NEAR(vel2.getLinearVelocity().x(), 0.0, 1e-5);
   EXPECT_NEAR(vel2.getLinearVelocity().z(), 0.0, 1e-5);
   pf.addObstacle(cylinderObst);
-  SpatialVector query3(Eigen::Vector3d(0.0, 0.0, 1.0));
-  TaskSpaceTwist vel3 = pf.evaluateVelocityAtPose(query3);
+  pfield::SpatialVector query3(Eigen::Vector3d(0.0, 0.0, 1.0));
+  pfield::TaskSpaceTwist vel3 = pf.evaluateVelocityAtPose(query3);
   EXPECT_GT(vel3.getLinearVelocity().z(), 0);  // push away from origin
   EXPECT_NEAR(vel3.getLinearVelocity().x(), 0.0, 1e-5);
   EXPECT_NEAR(vel3.getLinearVelocity().y(), 0.0, 1e-5);
@@ -160,10 +160,10 @@ TEST(PotentialFieldTest, RepulsiveFieldPushesAwayFromObstacle) {
 
 TEST(PotentialFieldTest, BoxWithinObstacleAxisAligned) {
   Eigen::Vector3d center(1, 2, 3);
-  ObstacleGeometry geom{0.0, 2.0, 4.0, 6.0};  // length=2, width=4, height=6
-  PotentialFieldObstacle box(
+  pfield::ObstacleGeometry geom{0.0, 2.0, 4.0, 6.0};  // length=2, width=4, height=6
+  pfield::PotentialFieldObstacle box(
     "o1", center, Eigen::Quaterniond::Identity(),
-    ObstacleType::BOX, ObstacleGroup::STATIC, geom);
+    pfield::ObstacleType::BOX, pfield::ObstacleGroup::STATIC, geom);
   // Points exactly on faces and inside
   EXPECT_TRUE(box.withinObstacle(Eigen::Vector3d(2.0, 2, 3)));  // +x face
   EXPECT_TRUE(box.withinObstacle(Eigen::Vector3d(0.0, 2, 3)));  // -x face
@@ -174,10 +174,10 @@ TEST(PotentialFieldTest, BoxWithinObstacleAxisAligned) {
 
 TEST(PotentialFieldTest, BoxWithinInfluenceZoneAxisAligned) {
   Eigen::Vector3d center(0, 0, 0);
-  ObstacleGeometry geom{0.0, 1.0, 1.0, 1.0};
-  PotentialFieldObstacle box(
+  pfield::ObstacleGeometry geom{0.0, 1.0, 1.0, 1.0};
+  pfield::PotentialFieldObstacle box(
     "o1", center, Eigen::Quaterniond::Identity(),
-    ObstacleType::BOX, ObstacleGroup::STATIC, geom);
+    pfield::ObstacleType::BOX, pfield::ObstacleGroup::STATIC, geom);
   // half-dims = (1,1,1)/2 * scale = (1,1,1)
   EXPECT_TRUE(box.withinInfluenceZone(Eigen::Vector3d(1.0, 0.5, 0.0), 2.0));
   // New semantics: absolute influence distance from surface. Pick a point farther than 2.0m from the box surface
@@ -188,10 +188,10 @@ TEST(PotentialFieldTest, BoxWithinObstacleRotated) {
   Eigen::Vector3d center(0, 0, 0);
   // rotate box 45 about Z
   Eigen::AngleAxisd rot(M_PI / 4, Eigen::Vector3d::UnitZ());
-  ObstacleGeometry geom{0.0, 2.0, 2.0, 2.0};
-  PotentialFieldObstacle box(
+  pfield::ObstacleGeometry geom{0.0, 2.0, 2.0, 2.0};
+  pfield::PotentialFieldObstacle box(
     "o1", center, Eigen::Quaterniond(rot),
-    ObstacleType::BOX, ObstacleGroup::STATIC, geom);
+    pfield::ObstacleType::BOX, pfield::ObstacleGroup::STATIC, geom);
   // In world frame, a local-axis-aligned point (1,0,0) maps to (cos45,sin45,0)
   Eigen::Vector3d query = rot * Eigen::Vector3d(1.0, 0, 0);
   EXPECT_TRUE(box.withinObstacle(query));
@@ -206,10 +206,10 @@ TEST(PotentialFieldTest, RotatedBoxOutsideInfluenceHasNoRepulsion) {
   // Define a unit box (length=width=height=2) rotated 45 degrees about Z
   Eigen::Vector3d center(0, 0, 0);
   Eigen::AngleAxisd rot(M_PI / 4, Eigen::Vector3d::UnitZ());
-  ObstacleGeometry geom{0.0, 2.0, 2.0, 2.0};
-  PotentialFieldObstacle box(
+  pfield::ObstacleGeometry geom{0.0, 2.0, 2.0, 2.0};
+  pfield::PotentialFieldObstacle box(
     "obb_rot", center, Eigen::Quaterniond(rot),
-    ObstacleType::BOX, ObstacleGroup::STATIC, geom);
+    pfield::ObstacleType::BOX, pfield::ObstacleGroup::STATIC, geom);
 
   // Influence distance measured from the box surface
   const double Q = 2.0;         // influence distance
@@ -224,11 +224,11 @@ TEST(PotentialFieldTest, RotatedBoxOutsideInfluenceHasNoRepulsion) {
   EXPECT_FALSE(box.withinInfluenceZone(worldOutside, Q));
 
   // With zero attractive gain, being outside the influence means zero repulsive velocity
-  PotentialField pf(0.0, 1.0, 0.0); // attractiveGain=0, repulsiveGain=1, rotational=0
+  pfield::PotentialField pf(0.0, 1.0, 0.0); // attractiveGain=0, repulsiveGain=1, rotational=0
   pf.setInfluenceDistance(Q);
   pf.addObstacle(box);
-  SpatialVector query(worldOutside);
-  TaskSpaceTwist vel = pf.evaluateVelocityAtPose(query);
+  pfield::SpatialVector query(worldOutside);
+  pfield::TaskSpaceTwist vel = pf.evaluateVelocityAtPose(query);
   EXPECT_NEAR(vel.getLinearVelocity().x(), 0.0, 1e-6);
   EXPECT_NEAR(vel.getLinearVelocity().y(), 0.0, 1e-6);
   EXPECT_NEAR(vel.getLinearVelocity().z(), 0.0, 1e-6);
@@ -236,10 +236,10 @@ TEST(PotentialFieldTest, RotatedBoxOutsideInfluenceHasNoRepulsion) {
 
 TEST(PotentialFieldTest, CylinderWithinObstacleAxisAligned) {
   Eigen::Vector3d center(5, -5, 0);
-  ObstacleGeometry geom{3.0, 0.0, 0.0, 4.0};  // radius=3, height=4
-  PotentialFieldObstacle cyl(
+  pfield::ObstacleGeometry geom{3.0, 0.0, 0.0, 4.0};  // radius=3, height=4
+  pfield::PotentialFieldObstacle cyl(
     "o1", center, Eigen::Quaterniond::Identity(),
-    ObstacleType::CYLINDER, ObstacleGroup::STATIC, geom);
+    pfield::ObstacleType::CYLINDER, pfield::ObstacleGroup::STATIC, geom);
   // radial and z within half-height=2
   EXPECT_TRUE(cyl.withinObstacle(Eigen::Vector3d(8, -5, 1.0)));
   EXPECT_FALSE(cyl.withinObstacle(Eigen::Vector3d(9, -5, 1.0)));   // outside radius
@@ -248,10 +248,10 @@ TEST(PotentialFieldTest, CylinderWithinObstacleAxisAligned) {
 
 TEST(PotentialFieldTest, CylinderWithinInfluenceZoneAxisAligned) {
   Eigen::Vector3d center(0, 0, 0);
-  ObstacleGeometry geom{1.0, 0.0, 0.0, 2.0};
-  PotentialFieldObstacle cyl(
+  pfield::ObstacleGeometry geom{1.0, 0.0, 0.0, 2.0};
+  pfield::PotentialFieldObstacle cyl(
     "o1", center, Eigen::Quaterniond::Identity(),
-    ObstacleType::CYLINDER, ObstacleGroup::STATIC, geom);
+    pfield::ObstacleType::CYLINDER, pfield::ObstacleGroup::STATIC, geom);
   // effective radius=3, half-height=3
   EXPECT_TRUE(cyl.withinInfluenceZone(Eigen::Vector3d(2.9, 0, 0), 3.0));
   // Far enough that distance to side surface > 3.0 (surface distance = 4.1 - 1.0 = 3.1)
@@ -262,10 +262,10 @@ TEST(PotentialFieldTest, CylinderWithinObstacleRotated) {
   Eigen::Vector3d center(0, 0, 0);
   // rotate cylinder so its axis tilts 90 into Y
   Eigen::AngleAxisd tilt(M_PI / 2, Eigen::Vector3d::UnitX());
-  ObstacleGeometry geom{2.0, 0.0, 0.0, 4.0};  // radius=2, height=4
-  PotentialFieldObstacle cyl(
+  pfield::ObstacleGeometry geom{2.0, 0.0, 0.0, 4.0};  // radius=2, height=4
+  pfield::PotentialFieldObstacle cyl(
     "o1", center, Eigen::Quaterniond(tilt),
-    ObstacleType::CYLINDER, ObstacleGroup::STATIC, geom);
+    pfield::ObstacleType::CYLINDER, pfield::ObstacleGroup::STATIC, geom);
   // In local frame this point is on the +Z face; after tilt it's along +Y
   Eigen::Vector3d worldPoint = tilt * Eigen::Vector3d(0, 0, 2.0);
   EXPECT_TRUE(cyl.withinObstacle(worldPoint));
@@ -275,53 +275,53 @@ TEST(PotentialFieldTest, CylinderWithinObstacleRotated) {
 }
 
 TEST(PotentialFieldTest, NearZeroDistanceAttraction) {
-  PotentialField pf(SpatialVector(Eigen::Vector3d(1.0, 1.0, 1.0)), 1.0, 0.0, 0.0);
-  SpatialVector nearGoal(Eigen::Vector3d(1 + 2e-3, 1.0, 1.0));
-  TaskSpaceTwist vel = pf.evaluateVelocityAtPose(nearGoal);
+  pfield::PotentialField pf(pfield::SpatialVector(Eigen::Vector3d(1.0, 1.0, 1.0)), 1.0, 0.0, 0.0);
+  pfield::SpatialVector nearGoal(Eigen::Vector3d(1 + 2e-3, 1.0, 1.0));
+  pfield::TaskSpaceTwist vel = pf.evaluateVelocityAtPose(nearGoal);
   EXPECT_GT(std::abs(vel.getLinearVelocity().x()), 1e-3);  // Should be small but not zero
   EXPECT_NEAR(vel.getLinearVelocity().y(), 0.0, 1e-6);
   EXPECT_NEAR(vel.getLinearVelocity().z(), 0.0, 1e-6);
 }
 
 TEST(PotentialFieldTest, RepulsionAtSurfaceBoundary) {
-  PotentialField pf(0.0, 1.0, 0.0); // no attraction
-  PotentialFieldObstacle obs(
+  pfield::PotentialField pf(0.0, 1.0, 0.0); // no attraction
+  pfield::PotentialFieldObstacle obs(
     "o1",
     Eigen::Vector3d::Zero(),
     Eigen::Quaterniond::Identity(),
-    ObstacleType::SPHERE,
-    ObstacleGroup::STATIC,
-    ObstacleGeometry{1.0, 0.0, 0.0, 0.0}
+    pfield::ObstacleType::SPHERE,
+    pfield::ObstacleGroup::STATIC,
+    pfield::ObstacleGeometry{1.0, 0.0, 0.0, 0.0}
   );
   pf.addObstacle(obs);
   const double influenceZoneRadius = pf.getInfluenceDistance() + obs.getGeometry().radius;
-  SpatialVector onBoundary(Eigen::Vector3d(influenceZoneRadius, 0.0, 0.0));  // At influence radius
-  SpatialVector outsideBoundary(Eigen::Vector3d(influenceZoneRadius + 0.1, 0.0, 0.0));  // Outside influence radius
-  SpatialVector insideBoundary(Eigen::Vector3d(influenceZoneRadius - 0.1, 0.0, 0.0));  // Inside influence radius
-  TaskSpaceTwist vBoundary = pf.evaluateVelocityAtPose(onBoundary);
-  TaskSpaceTwist vOutside = pf.evaluateVelocityAtPose(outsideBoundary);
-  TaskSpaceTwist vInside = pf.evaluateVelocityAtPose(insideBoundary);
+  pfield::SpatialVector onBoundary(Eigen::Vector3d(influenceZoneRadius, 0.0, 0.0));  // At influence radius
+  pfield::SpatialVector outsideBoundary(Eigen::Vector3d(influenceZoneRadius + 0.1, 0.0, 0.0));  // Outside influence radius
+  pfield::SpatialVector insideBoundary(Eigen::Vector3d(influenceZoneRadius - 0.1, 0.0, 0.0));  // Inside influence radius
+  pfield::TaskSpaceTwist vBoundary = pf.evaluateVelocityAtPose(onBoundary);
+  pfield::TaskSpaceTwist vOutside = pf.evaluateVelocityAtPose(outsideBoundary);
+  pfield::TaskSpaceTwist vInside = pf.evaluateVelocityAtPose(insideBoundary);
   EXPECT_NEAR(vBoundary.getLinearVelocity().x(), 0.0, 1e-6);  // At boundary, repulsive force should approach 0
   EXPECT_NEAR(vOutside.getLinearVelocity().x(), 0.0, 1e-6); // Outside influence zone, no repulsion
   EXPECT_GT(vInside.getLinearVelocity().x(), 0.0);  // Should be pushing away from obstacle
 }
 
 TEST(PotentialFieldTest, RepulsionMonotonicity) {
-  SpatialVector goal; // Default goal at origin
-  PotentialField pf(0.0, 0.0, 0.0);
-  PotentialFieldObstacle obs(
+  pfield::SpatialVector goal; // Default goal at origin
+  pfield::PotentialField pf(0.0, 0.0, 0.0);
+  pfield::PotentialFieldObstacle obs(
     "o1",
     Eigen::Vector3d::Zero(),
     Eigen::Quaterniond::Identity(),
-    ObstacleType::SPHERE,
-    ObstacleGroup::STATIC,
-    ObstacleGeometry{0.5, 0.0, 0.0, 0.0}
+    pfield::ObstacleType::SPHERE,
+    pfield::ObstacleGroup::STATIC,
+    pfield::ObstacleGeometry{0.5, 0.0, 0.0, 0.0}
   );
   pf.setInfluenceDistance(4.0);
   pf.setRepulsiveGain(2.0);
   pf.addObstacle(obs);
-  SpatialVector q1(Eigen::Vector3d(1.0, 0.0, 0.0));
-  SpatialVector q2(Eigen::Vector3d(2.0, 0.0, 0.0));
+  pfield::SpatialVector q1(Eigen::Vector3d(1.0, 0.0, 0.0));
+  pfield::SpatialVector q2(Eigen::Vector3d(2.0, 0.0, 0.0));
   auto v1 = pf.evaluateVelocityAtPose(q1);
   auto v2 = pf.evaluateVelocityAtPose(q2);
   // both push along +x; closer point should see stronger force
@@ -329,27 +329,27 @@ TEST(PotentialFieldTest, RepulsionMonotonicity) {
 }
 
 TEST(PotentialFieldTest, SymmetricObstaclesCancelAxes) {
-  SpatialVector goal; // Default goal at origin
-  PotentialField pf(0.0, 0.0, 0.0);
-  pf.addObstacle(PotentialFieldObstacle(
+  pfield::SpatialVector goal; // Default goal at origin
+  pfield::PotentialField pf(0.0, 0.0, 0.0);
+  pf.addObstacle(pfield::PotentialFieldObstacle(
     "o1",
     Eigen::Vector3d(-1, 0, 0),
     Eigen::Quaterniond::Identity(),
-    ObstacleType::SPHERE,
-    ObstacleGroup::STATIC,
-    ObstacleGeometry{0.5, 0.0, 0.0, 0.0}
+    pfield::ObstacleType::SPHERE,
+    pfield::ObstacleGroup::STATIC,
+    pfield::ObstacleGeometry{0.5, 0.0, 0.0, 0.0}
   ));
-  pf.addObstacle(PotentialFieldObstacle(
+  pf.addObstacle(pfield::PotentialFieldObstacle(
     "o2",
     Eigen::Vector3d(1, 0, 0),
     Eigen::Quaterniond::Identity(),
-    ObstacleType::SPHERE,
-    ObstacleGroup::STATIC,
-    ObstacleGeometry{0.5, 0.0, 0.0, 0.0}
+    pfield::ObstacleType::SPHERE,
+    pfield::ObstacleGroup::STATIC,
+    pfield::ObstacleGeometry{0.5, 0.0, 0.0, 0.0}
   ));
   pf.setInfluenceDistance(6.0);
   pf.setRepulsiveGain(5.0);
-  SpatialVector q(Eigen::Vector3d(0, 2.0, 0));  // directly above both
+  pfield::SpatialVector q(Eigen::Vector3d(0, 2.0, 0));  // directly above both
   auto vel = pf.evaluateVelocityAtPose(q);
   // x‐components should cancel, only y‐component remains
   EXPECT_NEAR(vel.getLinearVelocity().x(), 0.0, 1e-5);
@@ -358,19 +358,19 @@ TEST(PotentialFieldTest, SymmetricObstaclesCancelAxes) {
 
 
 TEST(PotentialFieldTest, RotationalAttraction) {
-  SpatialVector goal;
-  SpatialVector query; // Same position, different orientation
+  pfield::SpatialVector goal;
+  pfield::SpatialVector query; // Same position, different orientation
   query.setOrientationEuler(0, 0, M_PI_2);  // 90 degrees yaw
   // Construct with full limits: attractiveGain=0, repulsiveGain=0 rotationalGain=10,
   // maxLinearVel=0, maxAngularVel=15, maxLinearAccel=0, maxAngularAccel=5.
   // Raw angular velocity magnitude (gain * angle) = 10 * (pi/2) ≈ 15.7079 which will be velocity-capped to 15.
-  PotentialField pf(goal, 0.0, 0.0, 10.0, 0.0, 15.0, 0.0, 5.0, 1e-3);
-  TaskSpaceWrench rawWrench = pf.evaluateWrenchAtPose(query);
+  pfield::PotentialField pf(goal, 0.0, 0.0, 10.0, 0.0, 15.0, 0.0, 5.0, 1e-3);
+  pfield::TaskSpaceWrench rawWrench = pf.evaluateWrenchAtPose(query);
   double rawOmegaMag = rawWrench.torque.norm();
   // Implementation uses bounded sine form: 2*sin(angle/2) * gain
   EXPECT_NEAR(rawOmegaMag, 10.0 * 2.0 * std::sin(0.5 * goal.angularDistance(query)), 1e-6); // pre-constraint check
   // Use limited velocity to reflect soft saturation constraint (dt=0 => velocity soft-cap only)
-  TaskSpaceTwist vel = pf.evaluateLimitedVelocityAtPose(query);
+  pfield::TaskSpaceTwist vel = pf.evaluateLimitedVelocityAtPose(query);
   // Linear velocity should be ~0 (positions are equal)
   EXPECT_NEAR(vel.getLinearVelocity().x(), 0.0, 1e-3);
   EXPECT_NEAR(vel.getLinearVelocity().y(), 0.0, 1e-3);
@@ -395,10 +395,10 @@ TEST(PotentialFieldTest, RotationalAttraction) {
 }
 
 TEST(PotentialFieldTest, TranslationAndRotation) {
-  SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
-  SpatialVector query(Eigen::Vector3d(1.0, 0.0, 0.0));
+  pfield::SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
+  pfield::SpatialVector query(Eigen::Vector3d(1.0, 0.0, 0.0));
   query.setOrientationEuler(0, 0, M_PI_2);
-  PotentialField pf(goal, 1.0, 0.0, 10.0);
+  pfield::PotentialField pf(goal, 1.0, 0.0, 10.0);
   auto vel = pf.evaluateVelocityAtPose(query);
   // translational: pulls toward origin (x < 0)
   EXPECT_LT(vel.getLinearVelocity().x(), 0.0);
@@ -408,20 +408,20 @@ TEST(PotentialFieldTest, TranslationAndRotation) {
 
 TEST(PotentialFieldTest, WrenchToTwistConversion) {
   // wrenchToTwist uses unit gains; twist should equal wrench components
-  PotentialField pf; // default gains
-  TaskSpaceWrench w(Eigen::Vector3d(1.0, -2.0, 3.5), Eigen::Vector3d(0.25, -0.5, 1.0));
-  TaskSpaceTwist t = pf.wrenchToTwist(w);
+  pfield::PotentialField pf; // default gains
+  pfield::TaskSpaceWrench w(Eigen::Vector3d(1.0, -2.0, 3.5), Eigen::Vector3d(0.25, -0.5, 1.0));
+  pfield::TaskSpaceTwist t = pf.wrenchToTwist(w);
   EXPECT_NEAR((t.getLinearVelocity() - w.force).norm(), 0.0, 1e-12);
   EXPECT_NEAR((t.getAngularVelocity() - w.torque).norm(), 0.0, 1e-12);
 }
 
 TEST(PotentialFieldTest, ApplyVelocityLimitsAccelerationDominates) {
   // When going from 0 to a large twist in a short dt, acceleration limits should dominate
-  PotentialField pf; // defaults: vmax=5 m/s, amax=1 m/s^2; wmax=1 rad/s, alpha_max=1 rad/s^2
-  TaskSpaceTwist prev(Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero());
-  TaskSpaceTwist cmd(Eigen::Vector3d(10.0, 0.0, 0.0), Eigen::Vector3d(0.0, 2.0, 0.0));
+  pfield::PotentialField pf; // defaults: vmax=5 m/s, amax=1 m/s^2; wmax=1 rad/s, alpha_max=1 rad/s^2
+  pfield::TaskSpaceTwist prev(Eigen::Vector3d::Zero(), Eigen::Vector3d::Zero());
+  pfield::TaskSpaceTwist cmd(Eigen::Vector3d(10.0, 0.0, 0.0), Eigen::Vector3d(0.0, 2.0, 0.0));
   const double dt = 0.1; // s
-  TaskSpaceTwist lim = pf.applyMotionConstraints(cmd, prev, dt);
+  pfield::TaskSpaceTwist lim = pf.applyMotionConstraints(cmd, prev, dt);
   // Implementation clamps velocity first, then acceleration if still exceeding accel caps
   // From zero, commanded 10 m/s gets clamped to vmax=5 m/s; accel check then reduces to prev + amax*dt = 0.1 m/s
   // With soft saturation re-applied, expect a value slightly below 0.1; allow small tolerance
@@ -437,12 +437,12 @@ TEST(PotentialFieldTest, ApplyVelocityLimitsAccelerationDominates) {
 TEST(PotentialFieldTest, ApplyVelocityLimitsVelocityCapOnly) {
   // If previous twist is already at velocity cap in same direction, velocity cap should apply without accel limiting
   // Construct a PF and set previous to max values; request a larger command, expect capped at max
-  PotentialField pf; // defaults
+  pfield::PotentialField pf; // defaults
   // Previous at vmax along +X and wmax along +Z
-  TaskSpaceTwist prev(Eigen::Vector3d(5.0, 0.0, 0.0), Eigen::Vector3d(0.0, 0.0, 1.0));
-  TaskSpaceTwist cmd(Eigen::Vector3d(10.0, 0.0, 0.0), Eigen::Vector3d(0.0, 0.0, 2.0));
+  pfield::TaskSpaceTwist prev(Eigen::Vector3d(5.0, 0.0, 0.0), Eigen::Vector3d(0.0, 0.0, 1.0));
+  pfield::TaskSpaceTwist cmd(Eigen::Vector3d(10.0, 0.0, 0.0), Eigen::Vector3d(0.0, 0.0, 2.0));
   const double dt = 0.2; // acceleration from 5->5 after cap is zero
-  TaskSpaceTwist lim = pf.applyMotionConstraints(cmd, prev, dt);
+  pfield::TaskSpaceTwist lim = pf.applyMotionConstraints(cmd, prev, dt);
   // First soft-saturation on cmd gives v1 = vmax*tanh(10/5) then re-soft-saturation yields v = vmax*tanh(v1/vmax)
   {
     const double vmax = pf.getMaxLinearVelocity();
@@ -464,7 +464,7 @@ TEST(PotentialFieldTest, ApplyVelocityLimitsVelocityCapOnly) {
 }
 
 TEST(PotentialFieldTest, IntegrateLinearVelocity) {
-  PotentialField pf;
+  pfield::PotentialField pf;
   Eigen::Vector3d p0(1.0, 2.0, 3.0);
   Eigen::Vector3d v(1.0, 0.0, -2.0);
   double dt = 0.5;
@@ -475,7 +475,7 @@ TEST(PotentialFieldTest, IntegrateLinearVelocity) {
 }
 
 TEST(PotentialFieldTest, IntegrateAngularVelocityAboutZ) {
-  PotentialField pf;
+  pfield::PotentialField pf;
   Eigen::Quaterniond q0 = Eigen::Quaterniond::Identity();
   Eigen::Vector3d w(0.0, 0.0, 1.0); // rad/s about Z
   double dt = M_PI / 4.0; // 45 degrees
@@ -489,13 +489,13 @@ TEST(PotentialFieldTest, IntegrateAngularVelocityAboutZ) {
 
 TEST(PotentialFieldTest, InterpolateNextPoseTranslationalStep) {
   // With rotational gain zero, pose should move toward goal along -x with dt*speed
-  SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
+  pfield::SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
   // Construct with all limits (attractiveGain=1, rotationalGain=0, vmax_lin=5, vmax_ang=1, amax_lin=1, amax_ang=1)
-  PotentialField pf(1.0, 0.0, 5.0, 1.0, 1.0, 1.0);
+  pfield::PotentialField pf(1.0, 0.0, 5.0, 1.0, 1.0, 1.0);
   pf.setGoalPose(goal);
-  SpatialVector current(Eigen::Vector3d(1.0, 0.0, 0.0), Eigen::Quaterniond::Identity());
+  pfield::SpatialVector current(Eigen::Vector3d(1.0, 0.0, 0.0), Eigen::Quaterniond::Identity());
   double dt = 0.1; // raw speed at x=1 would be 1 m/s; accel limit (1 m/s^2 * 0.1 s) => 0.1 m/s applied
-  SpatialVector next = pf.interpolateNextPose(current, TaskSpaceTwist(), dt);
+  pfield::SpatialVector next = pf.interpolateNextPose(current, pfield::TaskSpaceTwist(), dt);
   // Expected new x: 1.0 + (-0.1 m/s)*0.1 s = 0.99
   EXPECT_NEAR(next.getPosition().x(), 0.99, 1e-4);
   EXPECT_NEAR(next.getPosition().y(), 0.0, 1e-4);
@@ -507,13 +507,13 @@ TEST(PotentialFieldTest, InterpolateNextPoseTranslationalStep) {
 
 TEST(PotentialFieldTest, EvaluateWrenchAtPosePureTorque) {
   // Same position but 90deg yaw error -> zero force, non-zero torque
-  SpatialVector goal;
+  pfield::SpatialVector goal;
   goal.setOrientationEuler(0, 0, 0);
-  SpatialVector query;
+  pfield::SpatialVector query;
   query.setOrientationEuler(0, 0, M_PI_2);
   // No translational attraction, only rotational
-  PotentialField pf(goal, 0.0, 0.0, 2.0);
-  TaskSpaceWrench w = pf.evaluateWrenchAtPose(query);
+  pfield::PotentialField pf(goal, 0.0, 0.0, 2.0);
+  pfield::TaskSpaceWrench w = pf.evaluateWrenchAtPose(query);
   EXPECT_NEAR(w.force.norm(), 0.0, 1e-9);
   // Torque axis should match quaternion error axis up to sign
   Eigen::Quaterniond q_err = query.getOrientation().conjugate() * goal.getOrientation();
@@ -535,20 +535,20 @@ TEST(PotentialFieldTest, EvaluateWrenchAtPosePureTorque) {
 TEST(PotentialFieldTest, NoOvershootApproachGoalMonotonic) {
   // Verify that with a reasonable timestep the interpolated poses approach the goal monotonically
   // without crossing to the opposite side (no sign change) and without increasing distance.
-  SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
+  pfield::SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
   // Use attractive gain = 1, no rotation component
-  PotentialField pf(goal, 1.0, 0.0, 0.0);
+  pfield::PotentialField pf(goal, 1.0, 0.0, 0.0);
   // Start 1 m along +X
-  SpatialVector current(Eigen::Vector3d(1.0, 0.0, 0.0), Eigen::Quaterniond::Identity());
+  pfield::SpatialVector current(Eigen::Vector3d(1.0, 0.0, 0.0), Eigen::Quaterniond::Identity());
   const double dt = 0.1; // dt < 1/gain ensures (1 - k dt) > 0 so analytical solution has no overshoot
   const unsigned int steps = 50; // sufficient steps to converge near tolerance
-  TaskSpaceTwist prevTwist; // starts at zero
+  pfield::TaskSpaceTwist prevTwist; // starts at zero
   double previousDistance = current.getPosition().norm();
   for (unsigned int i = 0; i < steps; ++i) {
-    SpatialVector next = pf.interpolateNextPose(current, prevTwist, dt);
+    pfield::SpatialVector next = pf.interpolateNextPose(current, prevTwist, dt);
     // Reconstruct the constrained twist that would be used for the next step (matching interpolateNextPose logic)
-    TaskSpaceTwist rawTwist = pf.wrenchToTwist(pf.evaluateWrenchAtPose(next));
-    TaskSpaceTwist twistNow = pf.applyMotionConstraints(rawTwist, prevTwist, dt);
+    pfield::TaskSpaceTwist rawTwist = pf.wrenchToTwist(pf.evaluateWrenchAtPose(next));
+    pfield::TaskSpaceTwist twistNow = pf.applyMotionConstraints(rawTwist, prevTwist, dt);
     // Distance to goal should not increase
     double dist = next.getPosition().norm();
     EXPECT_LE(dist, previousDistance + 1e-9) << "Distance increased at step " << i;
@@ -571,9 +571,9 @@ TEST(PotentialFieldTest, NoOvershootApproachGoalMonotonic) {
 }
 
 TEST(PotentialFieldTest, PlanPathSinglePointWhenAlreadyAtGoal) {
-  SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
+  pfield::SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
   // Construct PF with goal in constructor
-  PotentialField pf(goal, 1.0, 0.0, 0.0);
+  pfield::PotentialField pf(goal, 1.0, 0.0, 0.0);
   // Provide a simple IK solver from the NullMotionPlugin
   NullMotionPlugin nullPlugin;
   auto ik = nullPlugin.getIKSolver();
@@ -581,7 +581,7 @@ TEST(PotentialFieldTest, PlanPathSinglePointWhenAlreadyAtGoal) {
   const std::vector<double> startJointAngles = {};
   const double dt = 0.05;
   const double tol = 1e-3; // matches translationalTolerance
-  PlannedPath path = pf.planPathFromTaskSpaceWrench(goal, startJointAngles, dt, tol); // startPose == goal
+  pfield::PlannedPath path = pf.planPathFromTaskSpaceWrench(goal, startJointAngles, dt, tol); // startPose == goal
   ASSERT_EQ(path.numPoints, 1u);
   ASSERT_EQ(path.poses.size(), 1u);
   ASSERT_EQ(path.twists.size(), 1u);
@@ -594,9 +594,9 @@ TEST(PotentialFieldTest, PlanPathSinglePointWhenAlreadyAtGoal) {
 }
 
 TEST(PotentialFieldTest, PlanPathMonotonicConvergenceToGoal) {
-  SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
-  PotentialField pf(goal, 1.0, 0.0, 0.0); // pure translation attraction
-  SpatialVector start(Eigen::Vector3d(2.0, 0.0, 0.0), Eigen::Quaterniond::Identity());
+  pfield::SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
+  pfield::PotentialField pf(goal, 1.0, 0.0, 0.0); // pure translation attraction
+  pfield::SpatialVector start(Eigen::Vector3d(2.0, 0.0, 0.0), Eigen::Quaterniond::Identity());
   NullMotionPlugin nullPlugin;
   auto ik = nullPlugin.getIKSolver();
   pf.setIKSolver(ik);
@@ -604,7 +604,7 @@ TEST(PotentialFieldTest, PlanPathMonotonicConvergenceToGoal) {
   const double dt = 0.1;
   const double tol = 1e-3;
   const size_t maxIters = 500;
-  PlannedPath path = pf.planPathFromTaskSpaceWrench(start, startJointAngles, dt, tol, maxIters);
+  pfield::PlannedPath path = pf.planPathFromTaskSpaceWrench(start, startJointAngles, dt, tol, maxIters);
   ASSERT_GT(path.numPoints, 1u); // should have progressed
   // Distances should be non-increasing
   double prevDist = (path.poses.front().getPosition() - goal.getPosition()).norm();
@@ -623,9 +623,9 @@ TEST(PotentialFieldTest, PlanPathMonotonicConvergenceToGoal) {
 }
 
 TEST(PotentialFieldTest, PlanPathTimeStampConsistency) {
-  SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
-  PotentialField pf(goal, 1.0, 0.0, 0.0);
-  SpatialVector start(Eigen::Vector3d(1.0, 0.0, 0.0), Eigen::Quaterniond::Identity());
+  pfield::SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
+  pfield::PotentialField pf(goal, 1.0, 0.0, 0.0);
+  pfield::SpatialVector start(Eigen::Vector3d(1.0, 0.0, 0.0), Eigen::Quaterniond::Identity());
   NullMotionPlugin nullPlugin;
   auto ik = nullPlugin.getIKSolver();
   pf.setIKSolver(ik);
@@ -633,7 +633,7 @@ TEST(PotentialFieldTest, PlanPathTimeStampConsistency) {
   const double dt = 0.05;
   const double tol = 1e-3;
   const size_t maxIters = 400;
-  PlannedPath path = pf.planPathFromTaskSpaceWrench(start, startJointAngles, dt, tol, maxIters);
+  pfield::PlannedPath path = pf.planPathFromTaskSpaceWrench(start, startJointAngles, dt, tol, maxIters);
   ASSERT_EQ(path.dt, dt); // stored dt
   // timeStamps[i] should be approximately i*dt
   for (size_t i = 0; i < path.timeStamps.size(); ++i) {
@@ -648,9 +648,9 @@ TEST(PotentialFieldTest, PlanPathTimeStampConsistency) {
 TEST(PotentialFieldTest, PlanPathTwistMatchesRK4ConstrainedTwist) {
   // planPathFromTaskSpaceWrench records the RK4-averaged constrained twist (with opposing-force removal) per step.
   // Reconstruct that twist using the same method and compare strictly.
-  SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
-  PotentialField pf(goal, 1.0, 0.0, 0.0);
-  SpatialVector start(Eigen::Vector3d(1.5, 0.0, 0.0), Eigen::Quaterniond::Identity());
+  pfield::SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
+  pfield::PotentialField pf(goal, 1.0, 0.0, 0.0);
+  pfield::SpatialVector start(Eigen::Vector3d(1.5, 0.0, 0.0), Eigen::Quaterniond::Identity());
   NullMotionPlugin nullPlugin;
   auto ik = nullPlugin.getIKSolver();
   pf.setIKSolver(ik);
@@ -658,31 +658,31 @@ TEST(PotentialFieldTest, PlanPathTwistMatchesRK4ConstrainedTwist) {
   const double dt = 0.1;
   const double tol = 1e-3;
   const size_t maxIters = 200;
-  PlannedPath path = pf.planPathFromTaskSpaceWrench(start, startJointAngles, dt, tol, maxIters);
+  pfield::PlannedPath path = pf.planPathFromTaskSpaceWrench(start, startJointAngles, dt, tol, maxIters);
   ASSERT_EQ(path.poses.size(), path.twists.size());
-  TaskSpaceTwist prevLimited; // starts at zero
+  pfield::TaskSpaceTwist prevLimited; // starts at zero
   for (size_t i = 0; i < path.poses.size(); ++i) {
-    const SpatialVector& current = path.poses[i];
+    const pfield::SpatialVector& current = path.poses[i];
     // k1
-    TaskSpaceTwist k1 = pf.constrainedTwistAtPose(current, prevLimited, dt);
-    SpatialVector T2(
+    pfield::TaskSpaceTwist k1 = pf.constrainedTwistAtPose(current, prevLimited, dt);
+    pfield::SpatialVector T2(
       pf.integrateLinearVelocity(current.getPosition(), k1.getLinearVelocity(), 0.5 * dt),
       pf.integrateAngularVelocity(current.getOrientation(), k1.getAngularVelocity(), 0.5 * dt)
     );
     // k2
-    TaskSpaceTwist k2 = pf.constrainedTwistAtPose(T2, k1, 0.5 * dt);
-    SpatialVector T3(
+    pfield::TaskSpaceTwist k2 = pf.constrainedTwistAtPose(T2, k1, 0.5 * dt);
+    pfield::SpatialVector T3(
       pf.integrateLinearVelocity(current.getPosition(), k2.getLinearVelocity(), 0.5 * dt),
       pf.integrateAngularVelocity(current.getOrientation(), k2.getAngularVelocity(), 0.5 * dt)
     );
     // k3
-    TaskSpaceTwist k3 = pf.constrainedTwistAtPose(T3, k2, 0.5 * dt);
-    SpatialVector T4(
+    pfield::TaskSpaceTwist k3 = pf.constrainedTwistAtPose(T3, k2, 0.5 * dt);
+    pfield::SpatialVector T4(
       pf.integrateLinearVelocity(current.getPosition(), k3.getLinearVelocity(), dt),
       pf.integrateAngularVelocity(current.getOrientation(), k3.getAngularVelocity(), dt)
     );
     // k4
-    TaskSpaceTwist k4 = pf.constrainedTwistAtPose(T4, k3, dt);
+    pfield::TaskSpaceTwist k4 = pf.constrainedTwistAtPose(T4, k3, dt);
 
     Eigen::Vector3d v_bar = (
       k1.getLinearVelocity() + 2.0 * k2.getLinearVelocity() + 2.0 * k3.getLinearVelocity() + k4.getLinearVelocity()
@@ -690,7 +690,7 @@ TEST(PotentialFieldTest, PlanPathTwistMatchesRK4ConstrainedTwist) {
     Eigen::Vector3d w_bar = (
       k1.getAngularVelocity() + 2.0 * k2.getAngularVelocity() + 2.0 * k3.getAngularVelocity() + k4.getAngularVelocity()
       ) / 6.0;
-    TaskSpaceTwist expected = pf.applyMotionConstraints(TaskSpaceTwist(v_bar, w_bar), prevLimited, dt);
+    pfield::TaskSpaceTwist expected = pf.applyMotionConstraints(pfield::TaskSpaceTwist(v_bar, w_bar), prevLimited, dt);
 
     // compare components strictly
     EXPECT_NEAR((expected.getLinearVelocity() - path.twists[i].getLinearVelocity()).norm(), 0.0, 1e-9);
@@ -702,15 +702,15 @@ TEST(PotentialFieldTest, PlanPathTwistMatchesRK4ConstrainedTwist) {
 // ===== Dynamic threshold and clearance helpers =====
 
 TEST(PotentialFieldDynamicThresholdTest, MinObstacleClearanceAtAndAlongSegment) {
-  PotentialField pf; // defaults
+  pfield::PotentialField pf; // defaults
   // Add a unit sphere at the origin
-  pf.addObstacle(PotentialFieldObstacle(
+  pf.addObstacle(pfield::PotentialFieldObstacle(
     "sphere1",
     Eigen::Vector3d::Zero(),
     Eigen::Quaterniond::Identity(),
-    ObstacleType::SPHERE,
-    ObstacleGroup::STATIC,
-    ObstacleGeometry{1.0, 0.0, 0.0, 0.0}
+    pfield::ObstacleType::SPHERE,
+    pfield::ObstacleGroup::STATIC,
+    pfield::ObstacleGeometry{1.0, 0.0, 0.0, 0.0}
   ));
 
   // Point outside: distance to surface = 3 - 1 = 2
@@ -730,67 +730,97 @@ TEST(PotentialFieldDynamicThresholdTest, MinObstacleClearanceAtAndAlongSegment) 
 
 TEST(PotentialFieldDynamicThresholdTest, NoObstaclesBaselinePlusStopping) {
   // With no obstacles, d* = baseline + 0.5 * stoppingDistance, clamped to [dMin, influenceDistance]
-  PotentialField pf; // defaults: vmax=5, amax=1, baseline ~ 1.0, influence=1.0
+  pfield::PotentialField pf; // defaults: vmax=5, amax=1, baseline ~ 1.0, influence=1.0
   pf.setInfluenceDistance(10.0); // widen clamp upper bound so stopping distance affects result
   pf.setDynamicQuadraticThreshold(true);
-  SpatialVector query(Eigen::Vector3d(2.0, 0.0, 0.0));
+  pfield::SpatialVector query(Eigen::Vector3d(2.0, 0.0, 0.0));
 
   // Stopping distance evaluates to 12.5
-  const double stopping = 0.5 * (DEFAULT_MAX_LINEAR_VELOCITY * DEFAULT_MAX_LINEAR_VELOCITY) / DEFAULT_MAX_LINEAR_ACCELERATION;
+  const double stopping = 0.5 * (pfield::DEFAULT_MAX_LINEAR_VELOCITY * pfield::DEFAULT_MAX_LINEAR_VELOCITY)
+    / pfield::DEFAULT_MAX_LINEAR_ACCELERATION;
   const double expected = 1.0 + 0.5 * stopping; // baseline(=1.0) + 6.25 = 7.25
   EXPECT_NEAR(pf.computeDynamicQuadraticThreshold(query), expected, 1e-9);
 }
 
 TEST(PotentialFieldDynamicThresholdTest, ClampedByInfluenceInClutter) {
   // Place an obstacle at the goal so clearance ~ 0; dynamic d* should clamp to influenceDistance
-  SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
-  PotentialField pf(goal, 1.0, 0.0, 0.0);
+  pfield::SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
+  pfield::PotentialField pf(goal, 1.0, 0.0, 0.0);
   pf.setInfluenceDistance(3.0); // small influence to exercise clamping
   pf.setDynamicQuadraticThreshold(true);
   // Obstacle centered at goal
-  pf.addObstacle(PotentialFieldObstacle(
+  pf.addObstacle(pfield::PotentialFieldObstacle(
     "clutter",
     goal.getPosition(),
     Eigen::Quaterniond::Identity(),
-    ObstacleType::SPHERE,
-    ObstacleGroup::STATIC,
-    ObstacleGeometry{0.9, 0.0, 0.0, 0.0}
+    pfield::ObstacleType::SPHERE,
+    pfield::ObstacleGroup::STATIC,
+    pfield::ObstacleGeometry{0.9, 0.0, 0.0, 0.0}
   ));
-  SpatialVector query(Eigen::Vector3d(5.0, 0.0, 0.0));
+  pfield::SpatialVector query(Eigen::Vector3d(5.0, 0.0, 0.0));
   const double dstar = pf.computeDynamicQuadraticThreshold(query);
   EXPECT_NEAR(dstar, pf.getInfluenceDistance(), 1e-12);
 }
+
+// Mock IKSolver that returns a non-zero Jacobian for testing
+class MockIKSolver : public pfield::IKSolver {
+public:
+  MockIKSolver() : pfield::IKSolver("MockIKSolver") {}
+  ~MockIKSolver() override = default;
+
+  bool solve(const Eigen::Isometry3d&, const std::vector<double>& seed,
+    std::vector<double>& solution, Eigen::Matrix<double, 6, Eigen::Dynamic>& J, std::string&) override {
+    solution = seed;
+    J.resize(6, solution.size());
+    J.setIdentity();
+    return true;
+  }
+
+  bool computeJacobian(const std::vector<double>& jointPositions, Eigen::Matrix<double, 6, Eigen::Dynamic>& J) override {
+    J.resize(6, jointPositions.size());
+    J.setIdentity();
+    return true;
+  }
+
+  std::vector<std::string> getJointNames() const override { return {}; }
+  std::vector<double> getHomeConfiguration() const override { return {}; }
+};
 
 TEST(PotentialFieldTest, EvaluateWholeBodyJointVelocitiesBasic) {
   // Test that evaluateWholeBodyJointVelocitiesAtConfiguration returns joint velocities
   // with correct dimensions and reasonable values
 
-  // Create a PotentialField with a goal away from origin
-  SpatialVector goal(Eigen::Vector3d(2.0, 0.0, 0.0));
-  PotentialField pf(goal, 1.0, 0.0, 1.0);  // attractive gain, rotational gain, repulsive gain
+  // Create a pfield::PotentialField with a goal away from origin
+  pfield::SpatialVector goal(Eigen::Vector3d(2.0, 0.0, 0.0));
+  pfield::PotentialField pf(goal, 1.0, 0.0, 1.0);  // attractive gain, rotational gain, repulsive gain
 
-  // Initialize with URDF (using null motion plugin approach for testing)
-  NullMotionPlugin plugin;
-  pf.setIKSolver(plugin.getIKSolver());
+  // Initialize with MockIKSolver
+  pf.setIKSolver(std::make_shared<MockIKSolver>());
 
   // Define a simple 3-DOF joint configuration
   std::vector<double> jointAngles = {0.1, 0.2, 0.3};
 
   // Current EE pose (not at goal, so there should be attraction)
-  SpatialVector eePose(Eigen::Vector3d(0.5, 0.0, 0.0));
+  pfield::SpatialVector eePose(Eigen::Vector3d(0.5, 0.0, 0.0));
 
   // Add an obstacle to create some repulsion
-  pf.addObstacle(PotentialFieldObstacle(
+  pf.addObstacle(pfield::PotentialFieldObstacle(
     "test_obstacle",
     Eigen::Vector3d(1.0, 0.5, 0.0),
     Eigen::Quaterniond::Identity(),
-    ObstacleType::SPHERE,
-    ObstacleGroup::STATIC,
-    ObstacleGeometry{0.3, 0.0, 0.0, 0.0}
+    pfield::ObstacleType::SPHERE,
+    pfield::ObstacleGroup::STATIC,
+    pfield::ObstacleGeometry{0.3, 0.0, 0.0, 0.0}
   ));
 
   // Evaluate joint velocities
-  Eigen::VectorXd jointVels = pf.evaluateWholeBodyJointVelocitiesAtConfiguration(jointAngles, eePose);
+  Eigen::VectorXd jointVels;
+  try {
+    jointVels = pf.evaluateWholeBodyJointVelocitiesAtConfiguration(jointAngles, eePose);
+  }
+  catch (const std::exception& e) {
+    FAIL() << "Exception thrown during pfield::evaluateWholeBodyJointVelocitiesAtConfiguration: " << e.what();
+  }
 
   // Verify the output has the correct size
   EXPECT_EQ(jointVels.size(), 3);
@@ -801,10 +831,10 @@ TEST(PotentialFieldTest, EvaluateWholeBodyJointVelocitiesBasic) {
   EXPECT_GT(totalVelMagnitude, 0.0);
 
   // Test boundary case: when already at goal with no obstacles nearby, velocities should be small
-  SpatialVector atGoalPose = goal;
+  pfield::SpatialVector atGoalPose = goal;
   std::vector<double> zeroJointAngles = {0.0, 0.0, 0.0};
-  PotentialField pfAtGoal(goal, 1.0, 0.0, 0.0);  // no repulsive gain
-  pfAtGoal.setIKSolver(plugin.getIKSolver());
+  pfield::PotentialField pfAtGoal(goal, 1.0, 0.0, 0.0);  // no repulsive gain
+  pfAtGoal.setIKSolver(std::make_shared<MockIKSolver>());
 
   Eigen::VectorXd zeroVels = pfAtGoal.evaluateWholeBodyJointVelocitiesAtConfiguration(zeroJointAngles, atGoalPose);
   EXPECT_EQ(zeroVels.size(), 3);

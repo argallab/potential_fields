@@ -6,6 +6,8 @@
 #include <eigen3/Eigen/Dense>
 using namespace std;
 
+namespace pfield {
+
 // constexpr double PI = 3.14159265359;
 
 /**
@@ -197,5 +199,7 @@ unsigned int franka_J_ik_swivel(const array<double, 3>& r,
   const double q1_sing = M_PI_2,
   const unsigned int n_points = 600,
   const unsigned int n_fine_search = 3);
+
+} // namespace pfield
 
 #endif

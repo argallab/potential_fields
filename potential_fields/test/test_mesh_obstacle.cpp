@@ -1,5 +1,5 @@
-// Unit tests for mesh collision helpers: pointInsideMesh, computeUnsignedDistanceToMesh,
-// getClosestPointOnMesh, and PotentialFieldObstacle::computeSignedDistanceAndNormal.
+// Unit tests for mesh collision helpers: pfield::pointInsideMesh, pfield::computeUnsignedDistanceToMesh,
+// getClosestPointOnMesh, and pfield::PotentialFieldObstacle::computeSignedDistanceAndNormal.
 // We build a synthetic unit cube mesh programmatically to avoid external resources.
 
 #include "pfield/pf_obstacle.hpp"
@@ -124,7 +124,7 @@ endsolid unit_cube
   }
 
 
-  MeshCollisionData buildUnitCubeMesh() {
+  pfield::MeshCollisionData buildUnitCubeMesh() {
     // Cube centered at origin spanning [-0.5,0.5] in each axis.
     std::vector<Eigen::Vector3d> verts = {
       {-0.5, -0.5, -0.5}, {0.5, -0.5, -0.5}, {0.5, 0.5, -0.5}, {-0.5, 0.5, -0.5}, // bottom
@@ -152,8 +152,8 @@ endsolid unit_cube
     model->addSubModel(fclVerts, fclTris);
     model->endModel();
 
-    // Populate MeshCollisionData similar to loadMesh
-    MeshCollisionData data;
+    // Populate pfield::MeshCollisionData similar to loadMesh
+    pfield::MeshCollisionData data;
     data.bvh = model;
     data.vertices = verts;
     data.triangles = tris;
@@ -180,7 +180,7 @@ endsolid unit_cube
 TEST(MeshCollision, LoadMesh_FromAsciiSTL_UnitCube) {
   const std::string uri = writeUnitCubeAsciiSTLToTemp();
 
-  auto meshPtr = loadMesh(uri);
+  auto meshPtr = pfield::loadMesh(uri);
   ASSERT_TRUE(meshPtr) << "loadMesh returned null";
 
   // Basic geometry checks should match the synthetic cube.
@@ -205,14 +205,14 @@ TEST(MeshCollision, LoadMesh_FromAsciiSTL_UnitCube) {
   ASSERT_TRUE(meshPtr->collisionObject);
 
   // Quick smoke tests on the helpers
-  EXPECT_TRUE(pointInsideMesh(*meshPtr, Eigen::Vector3d(0.0, 0.0, 0.0)));
-  EXPECT_FALSE(pointInsideMesh(*meshPtr, Eigen::Vector3d(0.6, 0.0, 0.0)));
+  EXPECT_TRUE(pfield::pointInsideMesh(*meshPtr, Eigen::Vector3d(0.0, 0.0, 0.0)));
+  EXPECT_FALSE(pfield::pointInsideMesh(*meshPtr, Eigen::Vector3d(0.6, 0.0, 0.0)));
 
-  EXPECT_NEAR(computeUnsignedDistanceToMesh(*meshPtr, Eigen::Vector3d(0.8, 0.0, 0.0)), 0.3, 1e-6);
+  EXPECT_NEAR(pfield::computeUnsignedDistanceToMesh(*meshPtr, Eigen::Vector3d(0.8, 0.0, 0.0)), 0.3, 1e-6);
   {
     const Eigen::Vector3d p(0.0, 0.0, 0.3);
-    const double d = computeUnsignedDistanceToMesh(*meshPtr, p);
-    const bool inside = pointInsideMesh(*meshPtr, p);
+    const double d = pfield::computeUnsignedDistanceToMesh(*meshPtr, p);
+    const bool inside = pfield::pointInsideMesh(*meshPtr, p);
     const double signed_d = inside ? -std::abs(d) : std::abs(d);
     EXPECT_NEAR(signed_d, -0.2, 1e-6);
   }
@@ -220,65 +220,65 @@ TEST(MeshCollision, LoadMesh_FromAsciiSTL_UnitCube) {
 
 
 TEST(MeshCollision, PointInsideAndOutsideCube) {
-  MeshCollisionData cube = buildUnitCubeMesh();
+  pfield::MeshCollisionData cube = buildUnitCubeMesh();
   // Cube is {-0.5,-0.5,-0.5} to {0.5,0.5,0.5}
-  EXPECT_TRUE(pointInsideMesh(cube, Eigen::Vector3d(0.0, 0.0, 0.0)));
-  EXPECT_TRUE(pointInsideMesh(cube, Eigen::Vector3d(0.2, -0.1, 0.3)));
-  EXPECT_FALSE(pointInsideMesh(cube, Eigen::Vector3d(0.6, 0.0, 0.0)));
-  EXPECT_FALSE(pointInsideMesh(cube, Eigen::Vector3d(0.0, 0.0, 0.6)));
+  EXPECT_TRUE(pfield::pointInsideMesh(cube, Eigen::Vector3d(0.0, 0.0, 0.0)));
+  EXPECT_TRUE(pfield::pointInsideMesh(cube, Eigen::Vector3d(0.2, -0.1, 0.3)));
+  EXPECT_FALSE(pfield::pointInsideMesh(cube, Eigen::Vector3d(0.6, 0.0, 0.0)));
+  EXPECT_FALSE(pfield::pointInsideMesh(cube, Eigen::Vector3d(0.0, 0.0, 0.6)));
 }
 
 TEST(MeshCollision, DistanceOutsideCube) {
-  MeshCollisionData cube = buildUnitCubeMesh();
+  pfield::MeshCollisionData cube = buildUnitCubeMesh();
   // Point on surface should give ~0 distance (tolerate small numerical err)
-  EXPECT_NEAR(computeUnsignedDistanceToMesh(cube, Eigen::Vector3d(0.5, 0.0, 0.0)), 0.0, 1e-6);
+  EXPECT_NEAR(pfield::computeUnsignedDistanceToMesh(cube, Eigen::Vector3d(0.5, 0.0, 0.0)), 0.0, 1e-6);
   // Point outside along +X: cube max x = 0.5, point=0.8 => expected distance 0.3
-  EXPECT_NEAR(computeUnsignedDistanceToMesh(cube, Eigen::Vector3d(0.8, 0.0, 0.0)), 0.3, 1e-6);
+  EXPECT_NEAR(pfield::computeUnsignedDistanceToMesh(cube, Eigen::Vector3d(0.8, 0.0, 0.0)), 0.3, 1e-6);
   // Outside in diagonal direction: compare to analytical distance to box
   Eigen::Vector3d p(0.8, 0.9, 0.0); // outside in x & y
   double dx = 0.8 - 0.5; // 0.3
   double dy = 0.9 - 0.5; // 0.4
   double expected = std::sqrt(dx * dx + dy * dy);
-  EXPECT_NEAR(computeUnsignedDistanceToMesh(cube, p), expected, 1e-6);
+  EXPECT_NEAR(pfield::computeUnsignedDistanceToMesh(cube, p), expected, 1e-6);
 }
 
 TEST(MeshCollision, DistanceInsideCube_SignedViaInsideCheck) {
-  MeshCollisionData cube = buildUnitCubeMesh();
+  pfield::MeshCollisionData cube = buildUnitCubeMesh();
   // Center of cube is 0.5m away from any face; distance should be -0.5
   {
     const Eigen::Vector3d p(0.0, 0.0, 0.0);
-    const double d = computeUnsignedDistanceToMesh(cube, p);
-    const bool inside = pointInsideMesh(cube, p);
+    const double d = pfield::computeUnsignedDistanceToMesh(cube, p);
+    const bool inside = pfield::pointInsideMesh(cube, p);
     const double signed_d = inside ? -std::abs(d) : std::abs(d);
     EXPECT_NEAR(signed_d, -0.5, 1e-6);
   }
   // Point closer to +Z face: distance should be -(0.5 - 0.3) = -0.2
   {
     const Eigen::Vector3d p(0.0, 0.0, 0.3);
-    const double d = computeUnsignedDistanceToMesh(cube, p);
-    const bool inside = pointInsideMesh(cube, p);
+    const double d = pfield::computeUnsignedDistanceToMesh(cube, p);
+    const bool inside = pfield::pointInsideMesh(cube, p);
     const double signed_d = inside ? -std::abs(d) : std::abs(d);
     EXPECT_NEAR(signed_d, -0.2, 1e-6);
   }
 }
 
 TEST(MeshCollision, ClosestPointBasicCases) {
-  MeshCollisionData cube = buildUnitCubeMesh();
+  pfield::MeshCollisionData cube = buildUnitCubeMesh();
   Eigen::Vector3d cp;
   // Outside near +X face, within YZ extents
-  ASSERT_TRUE(getClosestPointOnMesh(cube, Eigen::Vector3d(0.8, 0.2, 0.0), cp));
+  ASSERT_TRUE(pfield::getClosestPointOnMesh(cube, Eigen::Vector3d(0.8, 0.2, 0.0), cp));
   EXPECT_NEAR(cp.x(), 0.5, 1e-6);
   EXPECT_NEAR(cp.y(), 0.2, 1e-6);
   EXPECT_NEAR(cp.z(), 0.0, 1e-6);
 
   // Outside beyond +X and +Y, Z in-range -> clamp Y to +0.5
-  ASSERT_TRUE(getClosestPointOnMesh(cube, Eigen::Vector3d(0.8, 0.9, 0.1), cp));
+  ASSERT_TRUE(pfield::getClosestPointOnMesh(cube, Eigen::Vector3d(0.8, 0.9, 0.1), cp));
   EXPECT_NEAR(cp.x(), 0.5, 1e-6);
   EXPECT_NEAR(cp.y(), 0.5, 1e-6);
   EXPECT_NEAR(cp.z(), 0.1, 1e-6);
 
   // Inside near +Z face; closest point lies on z=+0.5 plane
-  ASSERT_TRUE(getClosestPointOnMesh(cube, Eigen::Vector3d(0.1, -0.2, 0.4), cp));
+  ASSERT_TRUE(pfield::getClosestPointOnMesh(cube, Eigen::Vector3d(0.1, -0.2, 0.4), cp));
   EXPECT_NEAR(cp.x(), 0.1, 1e-6);
   EXPECT_NEAR(cp.y(), -0.2, 1e-6);
   EXPECT_NEAR(cp.z(), 0.5, 1e-6);
@@ -286,11 +286,11 @@ TEST(MeshCollision, ClosestPointBasicCases) {
 
 TEST(PFObstacle, SignedDistanceAndNormal_Sphere) {
   // Sphere of radius 1 at origin
-  PotentialFieldObstacle sphere(
+  pfield::PotentialFieldObstacle sphere(
     "world",
     Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity(),
-    ObstacleType::SPHERE, ObstacleGroup::STATIC,
-    ObstacleGeometry(/*radius*/1.0, /*L*/0.0, /*W*/0.0, /*H*/0.0));
+    pfield::ObstacleType::SPHERE, pfield::ObstacleGroup::STATIC,
+    pfield::ObstacleGeometry(/*radius*/1.0, /*L*/0.0, /*W*/0.0, /*H*/0.0));
 
   double sd; Eigen::Vector3d n;
   sphere.computeSignedDistanceAndNormal(Eigen::Vector3d(2.0, 0.0, 0.0), sd, n);
@@ -308,11 +308,11 @@ TEST(PFObstacle, SignedDistanceAndNormal_Sphere) {
 
 TEST(PFObstacle, SignedDistanceAndNormal_Box_AxisAligned) {
   // Axis-aligned box: length=2, width=2, height=2 centered at origin
-  PotentialFieldObstacle box(
+  pfield::PotentialFieldObstacle box(
     "world",
     Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity(),
-    ObstacleType::BOX, ObstacleGroup::STATIC,
-    ObstacleGeometry(/*r*/0.0, /*L*/2.0, /*W*/2.0, /*H*/2.0));
+    pfield::ObstacleType::BOX, pfield::ObstacleGroup::STATIC,
+    pfield::ObstacleGeometry(/*r*/0.0, /*L*/2.0, /*W*/2.0, /*H*/2.0));
 
   double sd; Eigen::Vector3d n;
   // Outside along +X
@@ -332,11 +332,11 @@ TEST(PFObstacle, SignedDistanceAndNormal_Box_AxisAligned) {
 
 TEST(PFObstacle, SignedDistanceAndNormal_Cylinder) {
   // Cylinder radius=1, height=2 centered at origin, axis along Z
-  PotentialFieldObstacle cyl(
+  pfield::PotentialFieldObstacle cyl(
     "world",
     Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity(),
-    ObstacleType::CYLINDER, ObstacleGroup::STATIC,
-    ObstacleGeometry(/*r*/1.0, /*L*/0.0, /*W*/0.0, /*H*/2.0));
+    pfield::ObstacleType::CYLINDER, pfield::ObstacleGroup::STATIC,
+    pfield::ObstacleGeometry(/*r*/1.0, /*L*/0.0, /*W*/0.0, /*H*/2.0));
 
   double sd; Eigen::Vector3d n;
   // Outside on the side within height
@@ -363,12 +363,12 @@ TEST(PFObstacle, SignedDistanceAndNormal_Cylinder) {
 
 TEST(PFObstacle, SignedDistanceAndNormal_MeshCube) {
   // Create a PF obstacle of type MESH and inject our synthetic cube mesh
-  PotentialFieldObstacle meshObs(
+  pfield::PotentialFieldObstacle meshObs(
     "world",
     Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity(),
-    ObstacleType::MESH, ObstacleGroup::STATIC,
-    ObstacleGeometry(/*r*/0.0, /*L*/1.0, /*W*/1.0, /*H*/1.0));
-  auto cubePtr = std::make_shared<MeshCollisionData>(buildUnitCubeMesh());
+    pfield::ObstacleType::MESH, pfield::ObstacleGroup::STATIC,
+    pfield::ObstacleGeometry(/*r*/0.0, /*L*/1.0, /*W*/1.0, /*H*/1.0));
+  auto cubePtr = std::make_shared<pfield::MeshCollisionData>(buildUnitCubeMesh());
   // Assign the synthetic mesh directly (allowed by private->public hack at include)
   meshObs.setMeshCollisionData(cubePtr);
 
@@ -389,15 +389,15 @@ TEST(PFObstacle, SignedDistanceAndNormal_MeshCube) {
 }
 
 TEST(MeshCollision, BroadPhaseRejectsFarPoint) {
-  MeshCollisionData cube = buildUnitCubeMesh();
+  pfield::MeshCollisionData cube = buildUnitCubeMesh();
   // AABB max extent is 1.0 in each axis, far point should be rejected quickly.
-  EXPECT_FALSE(pointInsideMesh(cube, Eigen::Vector3d(5.0, 5.0, 5.0)));
+  EXPECT_FALSE(pfield::pointInsideMesh(cube, Eigen::Vector3d(5.0, 5.0, 5.0)));
 }
 
 TEST(MeshCollision, InfluenceMarginDerivationExample) {
   // Construct obstacle using the cube mesh logic by feeding a dummy resource is not feasible here.
   // Instead validate that maxExtent computed matches cube side length (1.0) and radius is sqrt(3)/2.
-  MeshCollisionData cube = buildUnitCubeMesh();
+  pfield::MeshCollisionData cube = buildUnitCubeMesh();
   EXPECT_NEAR(cube.maxExtent, 1.0, 1e-9);
   EXPECT_NEAR(cube.radius, std::sqrt(0.75), 1e-9); // max vertex norm = sqrt( (0.5)^2 *3 )
 }
@@ -412,7 +412,7 @@ TEST(MeshCollision, LoadMeshFromFile) {
   // Use file:// URI so geometric_shapes can load from filesystem
   std::string uri = std::string("file://") + objPath.string();
 
-  auto mesh1 = loadMesh(uri);
+  auto mesh1 = pfield::loadMesh(uri);
   ASSERT_TRUE(mesh1);
   EXPECT_TRUE(mesh1->bvh);
   EXPECT_TRUE(mesh1->collisionObject);
@@ -433,17 +433,17 @@ TEST(MeshCollision, LoadMeshFromFile) {
   EXPECT_NEAR(mesh1->maxExtent, 1.0, 1e-9);
 
   // Cache behavior: same URI should return the same shared instance
-  auto mesh2 = loadMesh(uri);
+  auto mesh2 = pfield::loadMesh(uri);
   ASSERT_TRUE(mesh2);
   EXPECT_EQ(mesh1.get(), mesh2.get());
 
   // Distance queries via COAL-backed methods
-  EXPECT_NEAR(computeUnsignedDistanceToMesh(*mesh1, Eigen::Vector3d(0.5, 0.0, 0.0)), 0.0, 1e-6);
-  EXPECT_NEAR(computeUnsignedDistanceToMesh(*mesh1, Eigen::Vector3d(0.8, 0.0, 0.0)), 0.3, 1e-6);
+  EXPECT_NEAR(pfield::computeUnsignedDistanceToMesh(*mesh1, Eigen::Vector3d(0.5, 0.0, 0.0)), 0.0, 1e-6);
+  EXPECT_NEAR(pfield::computeUnsignedDistanceToMesh(*mesh1, Eigen::Vector3d(0.8, 0.0, 0.0)), 0.3, 1e-6);
   {
     const Eigen::Vector3d p(0.0, 0.0, 0.0);
-    const double d = computeUnsignedDistanceToMesh(*mesh1, p);
-    const bool inside = pointInsideMesh(*mesh1, p);
+    const double d = pfield::computeUnsignedDistanceToMesh(*mesh1, p);
+    const bool inside = pfield::pointInsideMesh(*mesh1, p);
     const double signed_d = inside ? -std::abs(d) : std::abs(d);
     EXPECT_NEAR(signed_d, -0.5, 1e-6);
   }

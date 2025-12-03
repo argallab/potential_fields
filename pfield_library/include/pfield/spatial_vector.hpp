@@ -19,6 +19,8 @@
 #include <eigen3/Eigen/Core>
 #include <eigen3/Eigen/Geometry>
 
+namespace pfield {
+
 class SpatialVector {
 public:
   SpatialVector() :
@@ -101,5 +103,7 @@ private:
   // Orientation Vector
   Eigen::Quaterniond orientation;
 };
+
+} // namespace pfield
 
 #endif // SPATIAL_VECTOR_HPP

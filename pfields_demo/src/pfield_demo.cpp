@@ -62,9 +62,9 @@ void PFDemo::handleRunPlanPathDemo(
   startPose.header.stamp = this->now();
   startPose.header.frame_id = this->fixedFrame;
   // startPose.pose = this->getEndEffectorPose();
-  startPose.pose.position.x = 0.39;
+  startPose.pose.position.x = 0.6;
   startPose.pose.position.y = 0.0;
-  startPose.pose.position.z = 0.2935;
+  startPose.pose.position.z = 0.3;
   // Z axis pointing down, X axis forward
   startPose.pose.orientation.x = 1.0;
   startPose.pose.orientation.y = 0.0;
@@ -75,10 +75,9 @@ void PFDemo::handleRunPlanPathDemo(
   goalPose.header.stamp = this->now();
   goalPose.header.frame_id = this->fixedFrame;
   goalPose.pose = startPose.pose;
-  goalPose.pose.position.x += 0.225; // Move +X 225mm
-  goalPose.pose.position.y += 0.12; // Move +Y 120mm
-  goalPose.pose.position.y += 0.12; // Move +Y 120mm
-  goalPose.pose.position.z += 0.05; // Move +Z 50mm
+  goalPose.pose.position.x = 0.5;
+  goalPose.pose.position.y = 0.2;
+  goalPose.pose.position.z = 0.3;
 
   pathPlanRequest->start = startPose;
   pathPlanRequest->starting_joint_angles = std::vector<float>(7, 0.0); // 7-DOF at zero position

@@ -9,12 +9,11 @@
 ---
 
 # Immediate TODOs
-- Documentation for whole body velocity planning method
 - Test Whole Body Velocity Path Planning with PF and Xarm
 - Include installation instructions for fcl, pinnochio, libfranka and other external dependencies in README
 - Fix DOCKER image to include all dependencies and build colcon build out of the box
   - Split into separate images for PF and robot dependencies
-- Use `ros-jazzy-coal` as dependency for COAL. Clean up library usage for mesh collisions.
+- Use `ros-jazzy-coal` as dependency for COAL. Clean up library usage for mesh collisions. (May not need this anymore)
 - Investigate Configuration Space planning with the PF
   - Principles of Robot Motion, Choset et al.
   - Modern Robotics, Lynch and Park
@@ -23,9 +22,6 @@
   - Whole Body Velocity Repulsion Explanation
 
 # Future TODOs and Refactors
-- namespace pfield c++ library and externalize from ROS package
-  - Allow optional robot dependencies in pfield_lib CMakeLists.txt
-  - ROS package should simply link with pfield_lib like a standard library
 - Create U-shaped obstacle test case for classic local minima problem
 - Improve Extent Estimator ("Extentimator") to be more accurate and be realistic for robot arms
   - Add unit tests for Extent Estimator

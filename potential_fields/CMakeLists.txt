@@ -1,6 +1,9 @@
 cmake_minimum_required(VERSION 3.8)
 project(potential_fields)
 
+# Ensure installed executables can find external libraries in non-standard locations
+set(CMAKE_INSTALL_RPATH_USE_LINK_PATH TRUE)
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -33,54 +36,14 @@ find_package(geometric_shapes REQUIRED)
 find_package(hpp-fcl REQUIRED)
 find_package(pinocchio REQUIRED)
 # find_package(Franka REQUIRED)
-find_package(kdl_parser REQUIRED)
-find_package(orocos_kdl REQUIRED)
 find_package(ament_index_cpp REQUIRED)
+# Look in the default user install location if not found in system paths
+find_package(pfield_library REQUIRED)
 
-
-# Setup pfield_lib library
-add_library(pfield_lib SHARED
-  src/pfield/mesh_collision.cpp
-  src/pfield/pf_obstacle.cpp
-  src/pfield/pfield.cpp
-  src/pfield/spatial_vector.cpp
-  src/pfield/pf_kinematics.cpp
-)
-
-ament_target_dependencies(pfield_lib
-  Eigen3
-  geometric_shapes
-  urdf
-)
-target_include_directories(pfield_lib PUBLIC
-  include/potential_fields/pfield
-  ${EIGEN3_INCLUDE_DIR}
-  ${pinocchio_INCLUDE_DIRS}
-)
-target_link_libraries(pfield_lib
-  ${EIGEN3_LIBRARIES}
-  pinocchio::pinocchio
-  hpp-fcl::hpp-fcl
-)
-
-# Use precompiled headers to speed up builds (CMake >= 3.16)
-if(CMAKE_VERSION VERSION_GREATER_EQUAL 3.16)
-  target_precompile_headers(pfield_lib PRIVATE
-    <Eigen/Dense>
-    <Eigen/Core>
-    <Eigen/Geometry>
-    <vector>
-    <string>
-    <cmath>
-    <memory>
-  )
-endif()
 
 # Setup robot_plugins library
 add_library(robot_plugins SHARED
   src/robot_plugins/examples_common.cpp
-  src/robot_plugins/geofik.cpp
-  src/robot_plugins/weighted_ik.cpp
   src/robot_plugins/franka_plugin.cpp
   src/robot_plugins/xarm_plugin.cpp
 )
@@ -89,12 +52,11 @@ ament_target_dependencies(robot_plugins
   rclcpp
   geometry_msgs
   sensor_msgs
-  kdl_parser
-  orocos_kdl
   ament_index_cpp
   urdf
   # Franka
 )
+target_link_libraries(robot_plugins pfield_library::pfield_library)
 target_include_directories(robot_plugins PUBLIC
   include/potential_fields/robot_plugins
 )
@@ -143,16 +105,8 @@ ament_target_dependencies(pfield_manager
 
 target_link_libraries(pfield_manager
   ${potential_fields_interfaces_LIBRARIES}
-  pfield_lib
+  pfield_library::pfield_library
   robot_plugins
-)
-
-# Install the shared library so runtime linker can find it
-install(
-  TARGETS pfield_lib
-  ARCHIVE DESTINATION lib
-  LIBRARY DESTINATION lib
-  RUNTIME DESTINATION bin
 )
 
 # Install the robot_plugins shared library so it is available at runtime
@@ -188,27 +142,32 @@ if(BUILD_TESTING)
   ament_add_gtest(test_spatial_vector
     test/test_spatial_vector.cpp
   )
-  target_link_libraries(test_spatial_vector pfield_lib)
+  target_link_libraries(test_spatial_vector pfield_library::pfield_library)
+  ament_target_dependencies(test_spatial_vector rclcpp)
 
   ament_add_gtest(test_pfields
     test/test_pfields.cpp
   )
-  target_link_libraries(test_pfields pfield_lib)
+  target_link_libraries(test_pfields pfield_library::pfield_library)
+  ament_target_dependencies(test_pfields rclcpp geometry_msgs sensor_msgs)
 
   ament_add_gtest(test_mesh_obstacle
     test/test_mesh_obstacle.cpp
   )
-  target_link_libraries(test_mesh_obstacle pfield_lib)
+  target_link_libraries(test_mesh_obstacle pfield_library::pfield_library)
+  ament_target_dependencies(test_mesh_obstacle rclcpp)
 
   ament_add_gtest(test_pf_obstacles
     test/test_pf_obstacles.cpp
   )
-  target_link_libraries(test_pf_obstacles pfield_lib)
+  target_link_libraries(test_pf_obstacles pfield_library::pfield_library)
+  ament_target_dependencies(test_pf_obstacles rclcpp)
 
   ament_add_gtest(test_visualization_profiling
     test/test_visualization_profiling.cpp
   )
-  target_link_libraries(test_visualization_profiling pfield_lib)
+  target_link_libraries(test_visualization_profiling pfield_library::pfield_library)
+  ament_target_dependencies(test_visualization_profiling rclcpp)
 
   install(
     TARGETS test_spatial_vector

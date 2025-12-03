@@ -43,6 +43,9 @@
 #include "robot_plugins/franka_plugin.hpp"
 #include "robot_plugins/xarm_plugin.hpp"
 
+#include <ament_index_cpp/get_package_share_directory.hpp>
+#include "pfield/mesh_collision.hpp"
+
 PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager") {
   RCLCPP_INFO(this->get_logger(), "PotentialFieldManager Initialized");
   // Declare parameters
@@ -81,7 +84,7 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   this->motionPluginType = this->get_parameter("motion_plugin_type").as_string();
 
   // Initialize the potential fields
-  this->pField = std::make_shared<PotentialField>(
+  this->pField = std::make_shared<pfield::PotentialField>(
     this->attractiveGain, this->repulsiveGain, this->rotationalAttractiveGain,
     this->maxLinearVelocity, this->maxAngularVelocity,
     this->maxLinearAcceleration, this->maxAngularAcceleration,
@@ -116,19 +119,23 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   RCLCPP_INFO(this->get_logger(), "Using Motion Plugin: %s", this->motionPlugin->getName().c_str());
 
   // Save the IKSolver from the motion plugin
-  this->ikSolver = this->motionPlugin->getIKSolver();
-  if (!this->ikSolver) {
-    RCLCPP_WARN(this->get_logger(), "IKSolver not available from motionPlugin");
+  if (this->motionPluginType.empty() || this->motionPluginType == "null") {
+    this->ikSolver = nullptr;
+    RCLCPP_INFO(this->get_logger(), "Motion plugin is null; using internal Pinocchio IK solver.");
   }
   else {
+    this->ikSolver = this->motionPlugin->getIKSolver();
+  }
+
+  if (!this->ikSolver && !this->motionPluginType.empty() && this->motionPluginType != "null") {
+    RCLCPP_WARN(this->get_logger(), "IKSolver not available from motionPlugin");
+  }
+  else if (this->ikSolver) {
     RCLCPP_INFO(this->get_logger(), "Using IKSolver: %s", this->ikSolver->getName().c_str());
   }
 
   // Once IKSolver is initialized, assign it to the PF instance
   this->pField->setIKSolver(this->ikSolver);
-
-  // Initialize currentJointAngles
-  this->currentJointAngles.resize(this->pField->getNumJoints(), 0.0);
 
   // Allow the user to not use a URDF
   if (!this->urdfFileName.empty() && this->urdfFileName.ends_with(".urdf")) {
@@ -159,7 +166,7 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   this->goalPoseSub = this->create_subscription<geometry_msgs::msg::PoseStamped>("pfield/planning_goal_pose",
     goalPoseQos,
     [this](const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
-    const SpatialVector goalPose(
+    const pfield::SpatialVector goalPose(
       Eigen::Vector3d(
         msg->pose.position.x,
         msg->pose.position.y,
@@ -182,13 +189,13 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
     [this](const ObstacleArray::SharedPtr msg) {
     const auto& obstacles = msg->obstacles;
     for (const auto& obst : obstacles) {
-      PotentialFieldObstacle obstacle(
+      pfield::PotentialFieldObstacle obstacle(
         obst.frame_id,
         Eigen::Vector3d(obst.pose.position.x, obst.pose.position.y, obst.pose.position.z),
         Eigen::Quaterniond(obst.pose.orientation.w, obst.pose.orientation.x, obst.pose.orientation.y, obst.pose.orientation.z),
-        stringToObstacleType(obst.type),
-        stringToObstacleGroup(obst.group),
-        ObstacleGeometry{obst.radius, obst.length, obst.width, obst.height},
+        pfield::stringToObstacleType(obst.type),
+        pfield::stringToObstacleGroup(obst.group),
+        pfield::ObstacleGeometry{obst.radius, obst.length, obst.width, obst.height},
         obst.mesh_resource,
         Eigen::Vector3d(obst.scale_x, obst.scale_y, obst.scale_z)
       );
@@ -203,7 +210,7 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   this->queryPoseSub = this->create_subscription<geometry_msgs::msg::Pose>("pfield/query_pose",
     queryPoseQos,
     [this](const geometry_msgs::msg::Pose::SharedPtr msg) {
-    const SpatialVector queryPose(
+    const pfield::SpatialVector queryPose(
       Eigen::Vector3d(
         msg->position.x,
         msg->position.y,
@@ -240,6 +247,10 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   // std::string filename = "pfield_data";
   // this->exportFieldDataToCSV(filename);
 
+  // Initialize currentJointAngles and queryPose
+  this->queryPose = pfield::SpatialVector();
+  this->currentJointAngles.resize(this->pField->getNumJoints(), 0.0);
+
   // Run the timer for visualizing the potential field
   this->timer = this->create_wall_timer(
     std::chrono::duration<double>(1.0 / this->visualizerFrequency),
@@ -258,22 +269,20 @@ void PotentialFieldManager::integrateQueryPoseFromField() {
   // Advance pose using constrained interpolation (acceleration limits applied internally)
   const double dt = this->now().seconds() - this->lastQueryUpdate.seconds();
   this->lastQueryUpdate = this->now();
-  TaskSpaceWrench wrench = this->pField->evaluateWrenchAtPoseWithOpposingForceRemoval(this->queryPose);
-  TaskSpaceTwist twist = this->pField->applyMotionConstraints(
+  pfield::TaskSpaceWrench wrench = this->pField->evaluateWrenchAtPoseWithOpposingForceRemoval(this->queryPose);
+  pfield::TaskSpaceTwist twist = this->pField->applyMotionConstraints(
     this->pField->wrenchToTwist(wrench), this->prevQueryTwist, dt);
   Eigen::Vector3d nextPosition = this->pField->integrateLinearVelocity(
     this->queryPose.getPosition(), twist.linearVelocity, dt);
   Eigen::Quaterniond nextOrientation = this->pField->integrateAngularVelocity(
     this->queryPose.getOrientation(), twist.angularVelocity, dt);
   // Update the query pose
-  this->queryPose = SpatialVector(nextPosition, nextOrientation);
+  this->queryPose = pfield::SpatialVector(nextPosition, nextOrientation);
   // Update robot obstacles based on query pose using IK
-  if (this->ikSolver) {
-    std::vector<double> newJoints = this->pField->computeInverseKinematics(this->queryPose, this->currentJointAngles);
-    if (!newJoints.empty()) {
-      this->currentJointAngles = newJoints;
-      this->pField->updateObstaclesFromKinematics(this->currentJointAngles);
-    }
+  std::vector<double> newJoints = this->pField->computeInverseKinematics(this->queryPose, this->currentJointAngles);
+  if (!newJoints.empty()) {
+    this->currentJointAngles = newJoints;
+    this->pField->updateObstaclesFromKinematics(this->currentJointAngles);
   }
   // Supply velocity-limited twist as previous for next acceleration limiting
   this->prevQueryTwist = twist;
@@ -283,7 +292,7 @@ void PotentialFieldManager::handleComputeAutonomyVector(
   const ComputeAutonomyVector::Request::SharedPtr request, ComputeAutonomyVector::Response::SharedPtr response) {
   RCLCPP_INFO(this->get_logger(), "Received autonomy vector request");
   // Compute the autonomy vector at the given pose
-  SpatialVector queryPose(
+  pfield::SpatialVector queryPose(
     Eigen::Vector3d(
       request->query_pose.pose.position.x,
       request->query_pose.pose.position.y,
@@ -295,7 +304,7 @@ void PotentialFieldManager::handleComputeAutonomyVector(
     )
   );
 
-  TaskSpaceTwist autonomyVector;
+  pfield::TaskSpaceTwist autonomyVector;
   if (request->planning_method == "whole_body") {
     // Update obstacles first if joint angles are provided
     std::vector<double> jointAngles;
@@ -348,7 +357,7 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
     request->delta_time, request->goal_tolerance, request->max_iterations
   );
 
-  auto startSV = SpatialVector(
+  auto startSV = pfield::SpatialVector(
     Eigen::Vector3d(
       request->start.pose.position.x,
       request->start.pose.position.y,
@@ -361,13 +370,13 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
       request->start.pose.orientation.z
     )
   );
-  PlannedPath planningResult;
+  // Convert starting_joint_angles (std::vector<float>) to std::vector<double> expected by planPathFromTaskSpaceWrench
+  std::vector<double> startJointAnglesDouble(
+    request->starting_joint_angles.cbegin(), request->starting_joint_angles.cend()
+  );
+  pfield::PlannedPath planningResult;
   try {
     // Plan a path using the request parameters and store the result
-    // Convert starting_joint_angles (std::vector<float>) to std::vector<double> expected by planPathFromTaskSpaceWrench
-    std::vector<double> startJointAnglesDouble(
-      request->starting_joint_angles.cbegin(), request->starting_joint_angles.cend()
-    );
     if (request->planning_method == "task_space") {
       RCLCPP_INFO(this->get_logger(), "Using Task-Space Wrench Planning");
       planningResult = this->pField->planPathFromTaskSpaceWrench(
@@ -481,6 +490,8 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
       startSV.getPosition().x(), startSV.getPosition().y(), startSV.getPosition().z()
     );
     this->queryPose = startSV;
+    // Update currentJointAngles to match the start of the path so IK has a good seed
+    this->currentJointAngles = startJointAnglesDouble;
   }
   if (!response->success) {
     // If planning failed, log final pose and distance to goal
@@ -508,7 +519,7 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
 }
 
 
-MarkerArray PotentialFieldManager::visualizePF(std::shared_ptr<PotentialField> pf) {
+MarkerArray PotentialFieldManager::visualizePF(std::shared_ptr<pfield::PotentialField> pf) {
   MarkerArray markerArray;
   auto start = this->now();
   MarkerArray goalMarkerArray = this->createGoalMarker(pf);
@@ -554,7 +565,7 @@ MarkerArray PotentialFieldManager::visualizePF(std::shared_ptr<PotentialField> p
 MarkerArray PotentialFieldManager::createQueryPoseMarker() {
   MarkerArray markerArray;
   // Mirror goal visualization: a center sphere (blue) and 3 RGB unit arrows for +X,+Y,+Z
-  const SpatialVector qp = this->queryPose;
+  const pfield::SpatialVector qp = this->queryPose;
   // Center sphere (blue)
   Marker qpSphere;
   qpSphere.header.frame_id = this->fixedFrame;
@@ -624,11 +635,11 @@ MarkerArray PotentialFieldManager::createQueryPoseMarker() {
   return markerArray;
 }
 
-MarkerArray PotentialFieldManager::createThresholdMarkers(std::shared_ptr<PotentialField> pf) {
+MarkerArray PotentialFieldManager::createThresholdMarkers(std::shared_ptr<pfield::PotentialField> pf) {
   MarkerArray markerArray;
   if (!pf->isGoalSet()) { return markerArray; }
   // Create a translucent sphere representing the dStarThreshold around the goal
-  const SpatialVector goalPose = pf->getGoalPose();
+  const pfield::SpatialVector goalPose = pf->getGoalPose();
   Marker thresholdMarker;
   thresholdMarker.header.frame_id = this->fixedFrame;
   thresholdMarker.header.stamp = this->now();
@@ -656,7 +667,7 @@ MarkerArray PotentialFieldManager::createThresholdMarkers(std::shared_ptr<Potent
   return markerArray;
 }
 
-MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<PotentialField> pf) {
+MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<pfield::PotentialField> pf) {
   MarkerArray markerArray;
 
   // Clear previous markers to prevent trails
@@ -675,10 +686,10 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<Potenti
   deleteInf.ns = "environment_influence_zones";
   markerArray.markers.push_back(deleteInf);
 
-  std::vector<PotentialFieldObstacle> envObstacles = pf->getEnvObstacles();
-  std::vector<PotentialFieldObstacle> robotObstacles = pf->getRobotObstacles();
+  std::vector<pfield::PotentialFieldObstacle> envObstacles = pf->getEnvObstacles();
+  std::vector<pfield::PotentialFieldObstacle> robotObstacles = pf->getRobotObstacles();
   // Combine both environment and robot obstacles for visualization
-  std::vector<PotentialFieldObstacle> obstacles;
+  std::vector<pfield::PotentialFieldObstacle> obstacles;
   obstacles.insert(obstacles.end(), envObstacles.begin(), envObstacles.end());
   obstacles.insert(obstacles.end(), robotObstacles.begin(), robotObstacles.end());
 
@@ -696,7 +707,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<Potenti
     obstacleMarker.header.frame_id = this->fixedFrame;
     obstacleMarker.header.stamp = this->now();
     obstacleMarker.frame_locked = true;
-    if (obstacle.getGroup() == ObstacleGroup::ROBOT) {
+    if (obstacle.getGroup() == pfield::ObstacleGroup::ROBOT) {
       obstacleMarker.ns = "robot_obstacles";
     }
     else {
@@ -714,7 +725,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<Potenti
     obstacleMarker.pose.orientation.z = orientation.z();
     obstacleMarker.pose.orientation.w = orientation.w();
     switch (obstacle.getType()) {
-    case ObstacleType::SPHERE: {
+    case pfield::ObstacleType::SPHERE: {
       // Scale is the Diameter of the Sphere
       obstacleMarker.type = Marker::SPHERE;
       obstacleMarker.scale.x = obstacle.getGeometry().radius * 2.0f;
@@ -722,21 +733,21 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<Potenti
       obstacleMarker.scale.z = obstacle.getGeometry().radius * 2.0f;
       break;
     }
-    case ObstacleType::BOX: {
+    case pfield::ObstacleType::BOX: {
       obstacleMarker.type = Marker::CUBE;
       obstacleMarker.scale.x = obstacle.getGeometry().length;
       obstacleMarker.scale.y = obstacle.getGeometry().width;
       obstacleMarker.scale.z = obstacle.getGeometry().height;
       break;
     }
-    case ObstacleType::CYLINDER: {
+    case pfield::ObstacleType::CYLINDER: {
       obstacleMarker.type = Marker::CYLINDER;
       obstacleMarker.scale.x = obstacle.getGeometry().radius * 2.0f; // Diameter
       obstacleMarker.scale.y = obstacle.getGeometry().radius * 2.0f; // Diameter
       obstacleMarker.scale.z = obstacle.getGeometry().height; // Height
       break;
     }
-    case ObstacleType::MESH: {
+    case pfield::ObstacleType::MESH: {
       if (!obstacle.getMeshResource().empty()) {
         obstacleMarker.type = Marker::MESH_RESOURCE;
         obstacleMarker.mesh_resource = obstacle.getMeshResource();
@@ -757,7 +768,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<Potenti
       break;
     }
     }
-    if (obstacle.getGroup() == ObstacleGroup::ROBOT) {
+    if (obstacle.getGroup() == pfield::ObstacleGroup::ROBOT) {
       // Robot obstacles in green
       obstacleMarker.color.r = 0.0f;
       obstacleMarker.color.g = 1.0f;
@@ -772,7 +783,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<Potenti
     obstacleMarker.color.a = 1.0f; // Opaque
     obstacleMarker.lifetime = rclcpp::Duration(0, 0); // No lifetime
     markerArray.markers.push_back(obstacleMarker);
-    if (obstacle.getGroup() == ObstacleGroup::ROBOT) {
+    if (obstacle.getGroup() == pfield::ObstacleGroup::ROBOT) {
       // Skip influence zone visualization for robot obstacles
       continue;
     }
@@ -798,7 +809,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<Potenti
     influenceMarker.lifetime = rclcpp::Duration(0, 0); // No lifetime
     const double influenceDistance = pf->getInfluenceDistance();
     switch (obstacle.getType()) {
-    case ObstacleType::SPHERE: {
+    case pfield::ObstacleType::SPHERE: {
       // Inflated sphere diameter = 2 * (radius + influenceDistance).
       influenceMarker.type = Marker::SPHERE;
       const double influenceZoneDiameter = 2.0 * (obstacle.getGeometry().radius + influenceDistance);
@@ -807,7 +818,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<Potenti
       influenceMarker.scale.z = influenceZoneDiameter;
       break;
     }
-    case ObstacleType::BOX: {
+    case pfield::ObstacleType::BOX: {
       // Inflated box dimensions = base dims + 2 * influenceDistance along each axis.
       influenceMarker.type = Marker::CUBE;
       influenceMarker.scale.x = obstacle.getGeometry().length + 2.0 * influenceDistance;
@@ -815,7 +826,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<Potenti
       influenceMarker.scale.z = obstacle.getGeometry().height + 2.0 * influenceDistance;
       break;
     }
-    case ObstacleType::CYLINDER: {
+    case pfield::ObstacleType::CYLINDER: {
       // Inflated cylinder: diameter = 2 * (radius + d), height = height + 2 * d.
       influenceMarker.type = Marker::CYLINDER;
       const double r = obstacle.getGeometry().radius;
@@ -824,7 +835,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<Potenti
       influenceMarker.scale.z = obstacle.getGeometry().height + 2.0 * influenceDistance;
       break;
     }
-    case ObstacleType::MESH: {
+    case pfield::ObstacleType::MESH: {
       // Visualize the influence zone as an "inflated" version of the original mesh.
       // We approximate a Minkowski sum by scaling the mesh per-axis so its AABB grows by +2d.
       // This preserves the silhouette and is a better visual cue than a plain inflated AABB cube.
@@ -866,7 +877,7 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<Potenti
   return markerArray;
 }
 
-MarkerArray PotentialFieldManager::createGoalMarker(std::shared_ptr<PotentialField> pf) {
+MarkerArray PotentialFieldManager::createGoalMarker(std::shared_ptr<pfield::PotentialField> pf) {
   // Create a green sphere marker
   MarkerArray markerArray;
   if (!pf->isGoalSet()) { return markerArray; }
@@ -878,7 +889,7 @@ MarkerArray PotentialFieldManager::createGoalMarker(std::shared_ptr<PotentialFie
   goalMarker.id = 0;
   goalMarker.type = Marker::SPHERE;
   goalMarker.action = Marker::ADD;
-  SpatialVector goalPose = pf->getGoalPose();
+  pfield::SpatialVector goalPose = pf->getGoalPose();
   goalMarker.pose.position.x = goalPose.getPosition().x();
   goalMarker.pose.position.y = goalPose.getPosition().y();
   goalMarker.pose.position.z = goalPose.getPosition().z();
@@ -942,7 +953,7 @@ MarkerArray PotentialFieldManager::createGoalMarker(std::shared_ptr<PotentialFie
   return goalMarkerArray;
 }
 
-MarkerArray PotentialFieldManager::createPotentialVectorMarkers(std::shared_ptr<PotentialField> pf) {
+MarkerArray PotentialFieldManager::createPotentialVectorMarkers(std::shared_ptr<pfield::PotentialField> pf) {
   MarkerArray markerArray;
   int id = 0;
   const auto limits = pf->computeFieldBounds(this->queryPose, this->visualizerBufferArea);
@@ -954,8 +965,8 @@ MarkerArray PotentialFieldManager::createPotentialVectorMarkers(std::shared_ptr<
         Eigen::Vector3d point(x, y, z);
         if (pf->isPointInsideObstacle(point)) { continue; }
         Marker vectorMarker;
-        SpatialVector position{point};
-        TaskSpaceTwist velocity = pf->evaluateLimitedVelocityAtPose(position);
+        pfield::SpatialVector position{point};
+        pfield::TaskSpaceTwist velocity = pf->evaluateLimitedVelocityAtPose(position);
         const Eigen::Vector3d v = velocity.getLinearVelocity();
         const double magnitude = v.norm();
         vectorMarker.header.frame_id = this->fixedFrame;
@@ -1030,7 +1041,7 @@ geometry_msgs::msg::Twist clampTwist(const geometry_msgs::msg::Twist& twist, con
   return clampedTwist;
 }
 
-void PotentialFieldManager::exportFieldDataToCSV(std::shared_ptr<PotentialField> pf, const std::string& base_filename) {
+void PotentialFieldManager::exportFieldDataToCSV(std::shared_ptr<pfield::PotentialField> pf, const std::string& base_filename) {
   // Write obstacle positions to a CSV file
   std::string obstacles_filename = "data/" + base_filename + "_obstacles.csv";
   std::ofstream obstacles_file(obstacles_filename);
@@ -1038,9 +1049,9 @@ void PotentialFieldManager::exportFieldDataToCSV(std::shared_ptr<PotentialField>
     obstacles_file << "obstacle_x,obstacle_y,obstacle_z,type,influence,repulsive_gain,radius,length,width,height\n";
     for (const auto& obstacle : pf->getEnvObstacles()) {
       const Eigen::Vector3d& position = obstacle.getPosition();
-      const ObstacleGeometry& g = obstacle.getGeometry();
+      const pfield::ObstacleGeometry& g = obstacle.getGeometry();
       obstacles_file << position.x() << "," << position.y() << "," << position.z() << ","
-        << obstacleTypeToString(obstacle.getType()) << "," << this->pField->getInfluenceDistance() << ","
+        << pfield::obstacleTypeToString(obstacle.getType()) << "," << this->pField->getInfluenceDistance() << ","
         << this->pField->getRepulsiveGain() << ","
         << g.radius << "," << g.length << "," << g.width << "," << g.height
         << "\n";
@@ -1064,8 +1075,8 @@ void PotentialFieldManager::exportFieldDataToCSV(std::shared_ptr<PotentialField>
         if (pf->isPointInsideObstacle(point)) {
           continue;
         }
-        SpatialVector position{point};
-        TaskSpaceTwist velocity = pf->evaluateLimitedVelocityAtPose(position);
+        pfield::SpatialVector position{point};
+        pfield::TaskSpaceTwist velocity = pf->evaluateLimitedVelocityAtPose(position);
         vectors_file << x << "," << y << "," << z << ","
           << velocity.getLinearVelocity().x() << ","
           << velocity.getLinearVelocity().y() << ","
@@ -1080,6 +1091,28 @@ void PotentialFieldManager::exportFieldDataToCSV(std::shared_ptr<PotentialField>
 }
 
 int main(int argc, char* argv[]) {
+  // Set the URI resolver for the pfield library to handle package:// URIs
+  pfield::setURIResolver([](const std::string& uri) -> std::string {
+    const std::string packagePrefix = "package://";
+    if (uri.find(packagePrefix) == 0) {
+      size_t start = packagePrefix.length();
+      size_t end = uri.find('/', start);
+      if (end != std::string::npos) {
+        std::string packageName = uri.substr(start, end - start);
+        std::string relativePath = uri.substr(end); // includes the leading slash
+        try {
+          std::string packagePath = ament_index_cpp::get_package_share_directory(packageName);
+          return packagePath + relativePath;
+        }
+        catch (const std::exception& e) {
+          std::cerr << "Error resolving package URI: " << uri << " - " << e.what() << std::endl;
+          return uri; // Fallback to original
+        }
+      }
+    }
+    return uri;
+  });
+
   rclcpp::init(argc, argv);
   rclcpp::spin(std::make_shared<PotentialFieldManager>());
   rclcpp::shutdown();
