@@ -9,10 +9,12 @@
 #include <pinocchio/multibody/model.hpp>
 #include <pinocchio/multibody/data.hpp>
 #include <pinocchio/parsers/urdf.hpp>
+#include <pinocchio/algorithm/rnea.hpp> // Required for gravity and coriolis
+#include <pinocchio/algorithm/crba.hpp> // Required for mass matrix
 
 #include <coal/collision.h>
 
-  #include "pfield/pf_obstacle.hpp"
+#include "pfield/pf_obstacle.hpp"
 #include <urdf_model/model.h>
 #include <urdf_parser/urdf_parser.h>
 
@@ -139,6 +141,12 @@ namespace pfield {
       const std::string& eeLinkName,
       int maxIterations = 100,
       double tolerance = 1e-4);
+
+    Eigen::VectorXd jointValuesToVector(const std::vector<double>& jointValues);
+    Eigen::MatrixXd getMassMatrix(const std::vector<double>& jointAngles);
+    Eigen::VectorXd getCoriolisVector(const std::vector<double>& jointAngles, const std::vector<double>& jointVelocities);
+    Eigen::VectorXd getGravityVector(const std::vector<double>& jointAngles);
+
 
   private:
     pinocchio::Model model;

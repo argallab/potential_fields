@@ -415,20 +415,32 @@ namespace pfield {
 
     // ============ Force and Velocity Computation ============
 
+    /**
+     * @brief Computes the whole-body joint velocities resulting from the combination
+     *        of the attractive and repulsive forces at the given configuration and joint velocities.
+     *
+     * @param jointAngles The current joint angles of the robot [rad]
+     * @param prevJointVelocities The previous joint velocities of the robot [rad/s]
+     * @param eePose The current end-effector pose
+     * @param dt The time step over which to integrate acceleration [s]
+     * @return Eigen::VectorXd The resulting whole-body joint velocities [rad/s]
+     */
     Eigen::VectorXd evaluateWholeBodyJointVelocitiesAtConfiguration(
-      const std::vector<double>& jointAngles,
-      const SpatialVector& eePose);
+      const std::vector<double>& jointAngles, const std::vector<double>& prevJointVelocities,
+      const SpatialVector& eePose, const double dt);
 
     /**
      * @brief Computes the task-space twist resulting from whole-body joint velocities.
      *
      * @param jointAngles The current joint angles of the robot [rad]
+     * @param prevJointVelocities The previous joint velocities of the robot [rad/s]
+     * @param dt The time step over which to integrate acceleration [s]
      * @param eePose The current end-effector pose
      * @return TaskSpaceTwist The resulting task-space twist
      */
     TaskSpaceTwist evaluateWholeBodyTaskSpaceTwistAtConfiguration(
-      const std::vector<double>& jointAngles,
-      const SpatialVector& eePose);
+      const std::vector<double>& jointAngles, const std::vector<double>& prevJointVelocities,
+      const SpatialVector& eePose, const double dt);
 
     /**
      * @brief Given a 3D position, computes the task-space wrench

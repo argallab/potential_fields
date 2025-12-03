@@ -317,7 +317,10 @@ void PotentialFieldManager::handleComputeAutonomyVector(
       jointAngles = this->currentJointAngles;
       RCLCPP_WARN(this->get_logger(), "Whole-body planning requested but no joint angles provided. Using current state.");
     }
-    autonomyVector = this->pField->evaluateWholeBodyTaskSpaceTwistAtConfiguration(jointAngles, queryPose);
+    const std::vector<double> prevJointVelocities(request->prev_joint_velocities.cbegin(), request->prev_joint_velocities.cend());
+    autonomyVector = this->pField->evaluateWholeBodyTaskSpaceTwistAtConfiguration(
+      jointAngles, prevJointVelocities, queryPose, request->delta_time
+    );
   }
   else {
     // Default to task_space
