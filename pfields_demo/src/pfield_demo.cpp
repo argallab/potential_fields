@@ -80,7 +80,9 @@ void PFDemo::handleRunPlanPathDemo(
   goalPose.pose.position.z = 0.3;
 
   pathPlanRequest->start = startPose;
-  pathPlanRequest->starting_joint_angles = std::vector<float>(7, 0.0); // 7-DOF at zero position
+  // Use a non-singular start configuration (slightly bent) instead of all zeros
+  // xArm7: [J1, J2, J3, J4, J5, J6, J7]
+  pathPlanRequest->starting_joint_angles = {0.0, -0.5, 0.0, 0.5, 0.0, 0.5, 0.0}; 
   pathPlanRequest->goal = goalPose;
   pathPlanRequest->delta_time = 0.02; // 2 ms between waypoints
   pathPlanRequest->goal_tolerance = 0.001; // 1 mm tolerance
