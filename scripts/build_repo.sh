@@ -5,8 +5,6 @@
 # First, run the pfield_library build script
 # Can set environment variable if needed
 # export LD_LIBRARY_PATH=$HOME/pfield_libs_install/lib:$LD_LIBRARY_PATH
-cd ${HOME}/final_project/pfields_2025
-
 # if given -build_pf arg, then run the pfield_library build
 if [[ "$1" == "-build_pf" ]]; then
     echo -e "\e[32mBuilding pfield_library...\e[0m"
