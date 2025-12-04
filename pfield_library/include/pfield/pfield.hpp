@@ -795,6 +795,7 @@ namespace pfield {
     const double rotationalThreshold = 0.05; // Threshold for rotational geodesic distance [rad]
     const double defaultDStarThreshold = 1.0; // [m] distance for switching to quadratic attractive potential from conical
     const double softSatBeta = 1.0; // Soft-saturation parameter, higher = more aggressive curve
+    const double torqueToVelocityGain = 1.0; // [rad/s] per [Nm] for admittance control conversion
     bool dynamicQuadraticThresholdEnabled = false; // if true, use dynamic d* based on obstacles/kinematics
   };
 

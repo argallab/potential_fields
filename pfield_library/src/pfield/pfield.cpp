@@ -209,7 +209,10 @@ namespace pfield {
     Eigen::VectorXd totalJointTorques = attractionTorques + repulsionTorques;
 
     // --- 4. Convert Joint Torques to Joint Velocities using Robot Dynamics Equation ---
-    return this->convertJointTorquesToJointVelocities(totalJointTorques, jointAngles, prevJointVelocities, dt);
+    const bool useRobotDynamicsEquation = false; // TODO(Sharwin24): Fix this method and figure out why it's unstable
+    return useRobotDynamicsEquation ?
+      this->convertJointTorquesToJointVelocities(totalJointTorques, jointAngles, prevJointVelocities, dt) :
+      totalJointTorques * this->torqueToVelocityGain;
   }
 
   Eigen::VectorXd PotentialField::convertJointTorquesToJointVelocities(
@@ -218,8 +221,7 @@ namespace pfield {
 
     if (!this->pfKinematics) {
       // If we don't have access to PFKinematics, use a simple proportional mapping
-      const double torqueToVelocityGain = 1.0; // [rad/s] per [Nm]
-      return torqueToVelocityGain * jointTorques;
+      return this->torqueToVelocityGain * jointTorques;
     }
 
     // Retrieve Mass Matrix, Coriolis, and Gravity
