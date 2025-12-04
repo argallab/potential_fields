@@ -208,13 +208,6 @@ namespace pfield {
     // --- 3. Combine Torques ---
     Eigen::VectorXd totalJointTorques = attractionTorques + repulsionTorques;
 
-    // Clamp maximum joint torques allowed
-    const double maxTau = 100.0; // [Nm] Maximum allowable joint torque
-    double tauNorm = totalJointTorques.norm();
-    if (tauNorm > maxTau) {
-      totalJointTorques *= (maxTau / tauNorm);
-    }
-
     // --- 4. Convert Joint Torques to Joint Velocities using Robot Dynamics Equation ---
     return this->convertJointTorquesToJointVelocities(totalJointTorques, jointAngles, prevJointVelocities, dt);
   }
@@ -252,7 +245,7 @@ namespace pfield {
       jointAccelerations = netTorques; // Fallback to direct mapping
     }
 
-    // --- 5. Integrate joint accelerations to get joint velocities ---
+    // --- Integrate joint accelerations to get joint velocities ---
     Eigen::VectorXd jointVelocities = prevJointVels;
     if (isPositiveFinite(dt)) {
       jointVelocities += jointAccelerations * dt;
@@ -261,7 +254,7 @@ namespace pfield {
       return jointAccelerations; // If dt is invalid, fallback to direct mapping
     }
 
-    // --- 6. Apply Joint Velocity/Acceleration Limits ---
+    // --- Apply Joint Velocity/Acceleration Limits ---
     if (this->pfKinematics) {
       const auto& model = this->pfKinematics->getModel();
       for (size_t i = 0; i < jointVelocities.size() && i < (size_t)model.velocityLimit.size(); ++i) {
@@ -608,6 +601,13 @@ namespace pfield {
     // and we want to avoid double-counting repulsion on the end-effector link.
     Eigen::Vector3d attractionForceVector = this->computeAttractiveForceLinear(eePose);
     Eigen::Vector3d attractionMomentVector = this->computeAttractiveMoment(eePose);
+
+    // Enforce Maximum Force based on maximum linear acceleration allowed
+    const double maxForce = this->maxLinearAcceleration * this->pfKinematics->getEndEffectorMass(this->eeLinkName);
+    const double forceNorm = attractionForceVector.norm();
+    if (forceNorm > maxForce && forceNorm > NEAR_ZERO_THRESHOLD) {
+      attractionForceVector = (attractionForceVector / forceNorm) * maxForce;
+    }
 
     // Pack wrench into 6D vector
     Eigen::VectorXd taskForce(6);

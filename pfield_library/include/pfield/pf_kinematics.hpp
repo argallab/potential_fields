@@ -142,6 +142,8 @@ namespace pfield {
       int maxIterations = 100,
       double tolerance = 1e-4);
 
+    double getEndEffectorMass(const std::string& eeLinkName) const;
+
     Eigen::VectorXd jointValuesToVector(const std::vector<double>& jointValues);
     Eigen::MatrixXd getMassMatrix(const std::vector<double>& jointAngles);
     Eigen::VectorXd getCoriolisVector(const std::vector<double>& jointAngles, const std::vector<double>& jointVelocities);

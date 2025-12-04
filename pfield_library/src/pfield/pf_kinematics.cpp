@@ -490,6 +490,21 @@ namespace pfield {
     return {}; // Failed to converge
   }
 
+  double PFKinematics::getEndEffectorMass(const std::string& eeLinkName) const {
+    if (!this->robotModel) {
+      return 0.0;
+    }
+
+    if (this->robotModel->links_.count(eeLinkName) > 0) {
+      const auto& eeLink = this->robotModel->links_.at(eeLinkName);
+      if (eeLink && eeLink->inertial) {
+        return eeLink->inertial->mass;
+      }
+    }
+
+    return 0.0;
+  }
+
   Eigen::VectorXd PFKinematics::jointValuesToVector(const std::vector<double>& jointValues) {
     Eigen::VectorXd q = Eigen::VectorXd::Zero(this->model.nq);
     for (size_t i = 0; i < jointValues.size() && i < this->jointQIndices.size(); ++i) {
