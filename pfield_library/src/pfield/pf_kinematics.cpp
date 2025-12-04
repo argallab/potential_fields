@@ -491,18 +491,14 @@ namespace pfield {
   }
 
   double PFKinematics::getEndEffectorMass(const std::string& eeLinkName) const {
-    if (!this->robotModel) {
-      return 0.0;
-    }
-
+    if (!this->robotModel) { return 1.0; }
     if (this->robotModel->links_.count(eeLinkName) > 0) {
       const auto& eeLink = this->robotModel->links_.at(eeLinkName);
       if (eeLink && eeLink->inertial) {
         return eeLink->inertial->mass;
       }
     }
-
-    return 0.0;
+    return 1.0;
   }
 
   Eigen::VectorXd PFKinematics::jointValuesToVector(const std::vector<double>& jointValues) {
