@@ -15,9 +15,9 @@ namespace pfield {
     this->urdfFileName = urdfFilePath;
     this->eeLinkName = eeLinkName;
     this->pfKinematics = std::make_unique<PFKinematics>(this->urdfFileName);
-    const double maxExtent = this->pfKinematics->estimateRobotExtentRadius();
     // Assign influence distance using maximum robot extent or the default, whichever is more generous
     // TODO(Sharwin24): Uncomment this once the estimateRobotExtenRadius function is fixed and verified to be accurate
+    // const double maxExtent = this->pfKinematics->estimateRobotExtentRadius();
     // this->influenceDistance = std::max(this->influenceDistance, maxExtent);
   }
 
@@ -810,7 +810,6 @@ namespace pfield {
     // Create path and initialize loop variables
     PlannedPath path;
     const double stepDt = (dt > 0.0) ? dt : 0.1;
-    std::vector<double> currentJointAngles = startJointAngles;
     double timeStamp = 0.0;
     // Set up stagnation and position tolerance counters/limits
     size_t stagnationCounter = 0;
@@ -821,14 +820,15 @@ namespace pfield {
     size_t positionToleranceCounter = 0;
     const double positionToleranceLimitSeconds = 2.0; // Stop if position is met for 2 seconds
     const size_t positionToleranceLimit = static_cast<size_t>(std::ceil(positionToleranceLimitSeconds / stepDt));
-
-    // Compute initial end-effector pose from joint angles using forward kinematics
+    
     if (!this->pfKinematics) {
       // Cannot proceed without kinematics
       path.success = false;
       return path;
     }
-
+    // TODO(Sharwin24): User should provide start pose and startJointAngles should be derived from kinematics
+    // Compute initial end-effector pose from joint angles using forward kinematics
+    std::vector<double> currentJointAngles = startJointAngles;
     SpatialVector currentEEPose = this->pfKinematics->computeEndEffectorPose(currentJointAngles, this->eeLinkName);
     std::vector<double> prevJointVelocities(currentJointAngles.size(), 0.0);
 

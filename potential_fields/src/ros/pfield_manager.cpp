@@ -210,7 +210,7 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   this->queryPoseSub = this->create_subscription<geometry_msgs::msg::Pose>("pfield/query_pose",
     queryPoseQos,
     [this](const geometry_msgs::msg::Pose::SharedPtr msg) {
-    const pfield::SpatialVector queryPose(
+    const pfield::SpatialVector newQuery(
       Eigen::Vector3d(
         msg->position.x,
         msg->position.y,
@@ -223,7 +223,17 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
         msg->orientation.z
       )
     );
-    this->queryPose = queryPose;
+    Eigen::Vector3d eulerAngles = newQuery.getOrientation().toRotationMatrix().eulerAngles(0, 1, 2);
+    const double roll = eulerAngles[0];
+    const double pitch = eulerAngles[1];
+    const double yaw = eulerAngles[2];
+    RCLCPP_INFO(
+      this->get_logger(),
+      "Query Pose set: pos=(%.2f, %.2f, %.2f) [m], RPY=(%.2f, %.2f, %.2f) [rad]",
+      newQuery.getPosition().x(), newQuery.getPosition().y(), newQuery.getPosition().z(),
+      roll, pitch, yaw
+    );
+    this->queryPose = newQuery;
   }
   );
 
@@ -279,7 +289,8 @@ void PotentialFieldManager::integrateQueryPoseFromField() {
   // Update the query pose
   this->queryPose = pfield::SpatialVector(nextPosition, nextOrientation);
   // Update robot obstacles based on query pose using IK
-  std::vector<double> newJoints = this->pField->computeInverseKinematics(this->queryPose, this->currentJointAngles);
+  std::vector<double> zeroJoints(this->pField->getNumJoints(), 0.0);
+  std::vector<double> newJoints = this->pField->computeInverseKinematics(this->queryPose, zeroJoints);
   if (!newJoints.empty()) {
     this->currentJointAngles = newJoints;
     this->pField->updateObstaclesFromKinematics(this->currentJointAngles);
@@ -499,15 +510,13 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
   );
   // Right before exiting, update the query pose to the start of the planned path
   // to visualize the planned trajectory from the new query pose
-  if (response->success) {
-    RCLCPP_INFO(this->get_logger(),
-      "Updating query pose to start of planned path at pos=(%.3f, %.3f, %.3f)",
-      startSV.getPosition().x(), startSV.getPosition().y(), startSV.getPosition().z()
-    );
-    this->queryPose = startSV;
-    // Update currentJointAngles to match the start of the path so IK has a good seed
-    this->currentJointAngles = startJointAnglesDouble;
-  }
+  this->queryPose = planningResult.poses.front();
+  // Update currentJointAngles to match the start of the path so IK has a good seed
+  // this->currentJointAngles = startJointAnglesDouble;
+  RCLCPP_INFO(this->get_logger(),
+    "Updating query pose to start of planned path at pos=(%.3f, %.3f, %.3f)",
+    this->queryPose.getPosition().x(), this->queryPose.getPosition().y(), this->queryPose.getPosition().z()
+  );
   if (!response->success) {
     // If planning failed, log final pose and distance to goal
     if (planningResult.poses.empty()) {
@@ -515,12 +524,13 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
       return;
     }
     const auto& finalPose = planningResult.poses.back();
-    const Eigen::Vector3d goalPos = this->pField->getGoalPose().getPosition();
-    const double distanceToGoal = (finalPose.getPosition() - goalPos).norm();
+    const auto& goal = this->pField->getGoalPose();
+    const double distanceToGoal = (finalPose.getPosition() - goal.getPosition()).norm();
+    const double angleToGoal = (finalPose.angularDistance(goal));
     RCLCPP_WARN(this->get_logger(),
-      "Planning failed to reach goal. Final pose: pos=(%.3f, %.3f, %.3f), distance to goal=%.6f m",
+      "Planning failed to reach goal. Final pose: pos=(%.3f, %.3f, %.3f), distance to goal=%.4f/%.4f m, angle to goal=%.3f/%.3f rad",
       finalPose.getPosition().x(), finalPose.getPosition().y(), finalPose.getPosition().z(),
-      distanceToGoal
+      distanceToGoal, request->goal_tolerance, angleToGoal, 0.05
     );
   }
   // Create a CSV file of the planned path for analysis

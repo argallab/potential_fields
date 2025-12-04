@@ -29,6 +29,7 @@ private:
   // Create a service client for planning paths
   rclcpp::Client<PlanPath>::SharedPtr planPathClient;
   rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr goalPosePub;
+  rclcpp::Publisher<geometry_msgs::msg::Pose>::SharedPtr queryPosePub;
   rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr eeVelocityPub;
   rclcpp::Publisher<potential_fields_interfaces::msg::ObstacleArray>::SharedPtr obstaclePub;
   rclcpp::Service<std_srvs::srv::Empty>::SharedPtr runPlanPathDemoService;

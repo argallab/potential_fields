@@ -22,7 +22,8 @@ PFDemo::PFDemo() : Node("pfield_demo") {
   this->fixedFrame = this->get_parameter("fixed_frame").as_string();
   this->eeLinkName = this->get_parameter("ee_link_name").as_string();
 
-  this->goalPosePub = this->create_publisher<geometry_msgs::msg::PoseStamped>("/pfield/planning_goal_pose", 10);
+  this->goalPosePub = this->create_publisher<geometry_msgs::msg::PoseStamped>("pfield/planning_goal_pose", 10);
+  this->queryPosePub = this->create_publisher<geometry_msgs::msg::Pose>("pfield/query_pose", 10);
 
   // Wait for the service to be available
   this->planPathClient = this->create_client<PlanPath>("pfield/plan_path");
@@ -41,7 +42,7 @@ PFDemo::PFDemo() : Node("pfield_demo") {
   this->tfBuffer = std::make_shared<tf2_ros::Buffer>(this->get_clock());
   this->tfListener = std::make_shared<tf2_ros::TransformListener>(*this->tfBuffer, this);
 
-  // this->createAndPublishObstacles();
+  this->createAndPublishObstacles();
 
   // Initialize demo service
   this->runPlanPathDemoService = this->create_service<std_srvs::srv::Empty>(
@@ -61,48 +62,41 @@ void PFDemo::handleRunPlanPathDemo(
   geometry_msgs::msg::PoseStamped startPose;
   startPose.header.stamp = this->now();
   startPose.header.frame_id = this->fixedFrame;
-  // startPose.pose = this->getEndEffectorPose();
-  startPose.pose.position.x = 0.39;
-  startPose.pose.position.y = -0.01;
-  startPose.pose.position.z = 0.2935;
+  startPose.pose = this->getEndEffectorPose();
+  // startPose.pose.position.x = 0.39;
+  // startPose.pose.position.y = -0.01;
+  // startPose.pose.position.z = 0.2935;
   // Use Eigen to build quaternion from Euler angles (roll, pitch, yaw)
-  double roll = 0.0;
-  double pitch = M_PI_2;
-  double yaw = 0.0;
-
-  Eigen::AngleAxisd roll_ang(roll, Eigen::Vector3d::UnitX());
-  Eigen::AngleAxisd pitch_ang(pitch, Eigen::Vector3d::UnitY());
-  Eigen::AngleAxisd yaw_ang(yaw, Eigen::Vector3d::UnitZ());
-
+  // Eigen::AngleAxisd roll_ang(0.0, Eigen::Vector3d::UnitX());
+  // Eigen::AngleAxisd pitch_ang(M_PI_2, Eigen::Vector3d::UnitY());
+  // Eigen::AngleAxisd yaw_ang(M_PI, Eigen::Vector3d::UnitZ());
   // Compose as R = Rz(yaw) * Ry(pitch) * Rx(roll)
-  Eigen::Quaterniond q = yaw_ang * pitch_ang * roll_ang;
+  // Eigen::Quaterniond q = roll_ang * pitch_ang * yaw_ang;
   // Eigen::Quaterniond q = Eigen::Quaterniond::Identity();
-
-  startPose.pose.orientation.w = q.w();
-  startPose.pose.orientation.x = q.x();
-  startPose.pose.orientation.y = q.y();
-  startPose.pose.orientation.z = q.z();
+  // startPose.pose.orientation.w = q.w();
+  // startPose.pose.orientation.x = q.x();
+  // startPose.pose.orientation.y = q.y();
+  // startPose.pose.orientation.z = q.z();
 
   geometry_msgs::msg::PoseStamped goalPose;
   goalPose.header.stamp = this->now();
   goalPose.header.frame_id = this->fixedFrame;
   goalPose.pose = startPose.pose;
-  goalPose.pose.position.x += 0.2;
-  // goalPose.pose.position.y = 0.2;
-  // goalPose.pose.position.z = 0.3;
+  goalPose.pose.position.x += 0.1;
+  goalPose.pose.position.y += 0.1;
+  goalPose.pose.position.z += 0.05;
 
-  pathPlanRequest->start = startPose;
-  // Use a non-singular start configuration (slightly bent) instead of all zeros
-  // xArm7: [J1, J2, J3, J4, J5, J6, J7]
-  // pathPlanRequest->starting_joint_angles = {0.0, -0.5, 0.0, 0.5, 0.0, 0.5, 0.0};
+  // pathPlanRequest->start = startPose;
+  pathPlanRequest->starting_joint_angles = {0.0, 0.0, 0.0, 0.0, 0.0, -M_PI_2, 0.0};
   pathPlanRequest->goal = goalPose;
   pathPlanRequest->delta_time = 0.002; // 2 ms between waypoints
-  pathPlanRequest->goal_tolerance = 0.001; // 1 mm tolerance
+  pathPlanRequest->goal_tolerance = 0.01; // 10 mm tolerance
   pathPlanRequest->max_iterations = 20000; // Max iterations for planning
   pathPlanRequest->planning_method = "whole_body"; // "task_space" or "whole_body"
   const double dt = pathPlanRequest->delta_time;
 
   // Publish the goal pose
+  this->queryPosePub->publish(startPose.pose);
   this->goalPosePub->publish(goalPose);
 
   RCLCPP_INFO(this->get_logger(), "Sending plan_path request (async)...");
@@ -110,7 +104,9 @@ void PFDemo::handleRunPlanPathDemo(
   // Send request asynchronously and attach a callback to process the result
   this->planPathClient->async_send_request(
     pathPlanRequest,
-    [this, dt](ServiceResponseFuture<PlanPath> future) { this->handlePlanPathResponse(future, dt); }
+    [this, dt](ServiceResponseFuture<PlanPath> future) { 
+      this->handlePlanPathResponse(future, dt); 
+    }
   );
 }
 
@@ -142,7 +138,7 @@ void PFDemo::handlePlanPathResponse(rclcpp::Client<PlanPath>::SharedFuture futur
   }
 
   // Begin streaming EE velocity commands to follow the path
-  // this->startEEVelocityStreaming(pathPlanResponse->end_effector_velocity_trajectory, dt);
+  this->startEEVelocityStreaming(pathPlanResponse->end_effector_velocity_trajectory, dt);
 }
 
 void PFDemo::createAndPublishObstacles() {
@@ -160,7 +156,7 @@ void PFDemo::createAndPublishObstacles() {
   sphere.pose.orientation.y = 0.0;
   sphere.pose.orientation.z = 0.0;
   sphere.pose.orientation.w = 1.0;
-  sphere.radius = 0.01;
+  sphere.radius = 0.015;
   allObstacles.obstacles.push_back(sphere);
 
   this->obstaclePub->publish(allObstacles);
@@ -180,7 +176,7 @@ geometry_msgs::msg::Pose PFDemo::getEndEffectorPose() {
     eePose.orientation.z = tf.transform.rotation.z;
     eePose.orientation.w = tf.transform.rotation.w;
     RCLCPP_INFO(this->get_logger(),
-      "Found TF (%s -> %s): (%.2f, %.2f, %.2f) [mm]", this->fixedFrame.c_str(), this->eeLinkName.c_str(),
+      "Found TF (%s -> %s): (%.2f, %.2f, %.2f) [m]", this->fixedFrame.c_str(), this->eeLinkName.c_str(),
       eePose.position.x, eePose.position.y, eePose.position.z
     );
     return eePose;
