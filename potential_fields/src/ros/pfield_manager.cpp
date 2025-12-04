@@ -317,7 +317,10 @@ void PotentialFieldManager::handleComputeAutonomyVector(
       jointAngles = this->currentJointAngles;
       RCLCPP_WARN(this->get_logger(), "Whole-body planning requested but no joint angles provided. Using current state.");
     }
-    autonomyVector = this->pField->evaluateWholeBodyTaskSpaceTwistAtConfiguration(jointAngles, queryPose);
+    const std::vector<double> prevJointVelocities(request->prev_joint_velocities.cbegin(), request->prev_joint_velocities.cend());
+    autonomyVector = this->pField->evaluateWholeBodyTaskSpaceTwistAtConfiguration(
+      jointAngles, prevJointVelocities, queryPose, request->delta_time
+    );
   }
   else {
     // Default to task_space
@@ -374,6 +377,18 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
   std::vector<double> startJointAnglesDouble(
     request->starting_joint_angles.cbegin(), request->starting_joint_angles.cend()
   );
+  if (startJointAnglesDouble.empty()) {
+    RCLCPP_WARN(this->get_logger(), "No starting joint angles provided in PlanPath request. Using IK");
+    startJointAnglesDouble = this->pField->computeInverseKinematics(startSV, this->currentJointAngles);
+    std::string jointAnglesStr;
+    for (size_t i = 0; i < startJointAnglesDouble.size(); ++i) {
+      jointAnglesStr += std::to_string(startJointAnglesDouble[i]);
+      if (i < startJointAnglesDouble.size() - 1) {
+        jointAnglesStr += ", ";
+      }
+    }
+    RCLCPP_INFO(this->get_logger(), "IK Found StartJointAngles: [%s]", jointAnglesStr.c_str());
+  }
   pfield::PlannedPath planningResult;
   try {
     // Plan a path using the request parameters and store the result
@@ -582,9 +597,9 @@ MarkerArray PotentialFieldManager::createQueryPoseMarker() {
   qpSphere.pose.orientation.y = qp.getOrientation().y();
   qpSphere.pose.orientation.z = qp.getOrientation().z();
   qpSphere.pose.orientation.w = qp.getOrientation().w();
-  qpSphere.scale.x = 0.15;
-  qpSphere.scale.y = 0.15;
-  qpSphere.scale.z = 0.15;
+  qpSphere.scale.x = this->TASK_SPACE_POSE_SPHERE_DIAMETER;
+  qpSphere.scale.y = this->TASK_SPACE_POSE_SPHERE_DIAMETER;
+  qpSphere.scale.z = this->TASK_SPACE_POSE_SPHERE_DIAMETER;
   qpSphere.color.r = 0.0f;
   qpSphere.color.g = 0.0f;
   qpSphere.color.b = 1.0f; // Blue center sphere for query pose
@@ -625,9 +640,9 @@ MarkerArray PotentialFieldManager::createQueryPoseMarker() {
     axis.pose.orientation.z = Q.z();
     axis.pose.orientation.w = Q.w();
     // ARROW scale: x=length, y=shaft diameter, z=head diameter
-    axis.scale.x = 0.5f;  // length
-    axis.scale.y = 0.04f; // shaft diameter
-    axis.scale.z = 0.10f; // head diameter
+    axis.scale.x = this->TASK_SPACE_AXIS_LENGTH;
+    axis.scale.y = this->TASK_SPACE_AXIS_SHAFT_DIAMETER;
+    axis.scale.z = this->TASK_SPACE_AXIS_HEAD_DIAMETER;
     axis.color.a = 0.9f;
     axis.lifetime = rclcpp::Duration(0, 0);
     markerArray.markers.push_back(axis);
@@ -897,9 +912,9 @@ MarkerArray PotentialFieldManager::createGoalMarker(std::shared_ptr<pfield::Pote
   goalMarker.pose.orientation.y = goalPose.getOrientation().y();
   goalMarker.pose.orientation.z = goalPose.getOrientation().z();
   goalMarker.pose.orientation.w = goalPose.getOrientation().w();
-  goalMarker.scale.x = 0.15;
-  goalMarker.scale.y = 0.15;
-  goalMarker.scale.z = 0.15;
+  goalMarker.scale.x = this->TASK_SPACE_POSE_SPHERE_DIAMETER;
+  goalMarker.scale.y = this->TASK_SPACE_POSE_SPHERE_DIAMETER;
+  goalMarker.scale.z = this->TASK_SPACE_POSE_SPHERE_DIAMETER;
   goalMarker.color.r = 0.0f;
   goalMarker.color.g = 1.0f;
   goalMarker.color.b = 0.0f;
@@ -939,9 +954,9 @@ MarkerArray PotentialFieldManager::createGoalMarker(std::shared_ptr<pfield::Pote
     axis.pose.orientation.z = Q.z();
     axis.pose.orientation.w = Q.w();
     // ARROW scale: x=length, y=shaft diameter, z=head diameter
-    axis.scale.x = 0.5f;  // 0.5 meter length
-    axis.scale.y = 0.04f; // shaft diameter
-    axis.scale.z = 0.10f; // head diameter
+    axis.scale.x = this->TASK_SPACE_AXIS_LENGTH;
+    axis.scale.y = this->TASK_SPACE_AXIS_SHAFT_DIAMETER;
+    axis.scale.z = this->TASK_SPACE_AXIS_HEAD_DIAMETER;
     axis.color.a = 0.9f; // slightly opaque
     axis.lifetime = rclcpp::Duration(0, 0); // No lifetime
     goalAxes.push_back(axis);

@@ -726,6 +726,9 @@ TEST(PotentialFieldDynamicThresholdTest, MinObstacleClearanceAtAndAlongSegment) 
   // Segment that stays outside at x=3: min clearance remains 2
   EXPECT_NEAR(pf.minClearanceAlongSegment(Eigen::Vector3d(3.0, 0.0, 0.0),
     Eigen::Vector3d(3.0, 2.0, 0.0), 11), 2.0, 1e-12);
+  // Segment that starts inside and exits: min clearance is 0 because start point is inside
+  EXPECT_NEAR(pf.minClearanceAlongSegment(Eigen::Vector3d(0.5, 0.0, 0.0),
+    Eigen::Vector3d(2.0, 0.0, 0.0), 10), 0.0, 1e-12);
 }
 
 TEST(PotentialFieldDynamicThresholdTest, NoObstaclesBaselinePlusStopping) {
@@ -733,12 +736,16 @@ TEST(PotentialFieldDynamicThresholdTest, NoObstaclesBaselinePlusStopping) {
   pfield::PotentialField pf; // defaults: vmax=5, amax=1, baseline ~ 1.0, influence=1.0
   pf.setInfluenceDistance(10.0); // widen clamp upper bound so stopping distance affects result
   pf.setDynamicQuadraticThreshold(true);
+  // We must set a goal, otherwise computeDynamicQuadraticThreshold returns baseline immediately
+  pf.setGoalPose(pfield::SpatialVector(Eigen::Vector3d(10.0, 0.0, 0.0), Eigen::Quaterniond::Identity()));
+
   pfield::SpatialVector query(Eigen::Vector3d(2.0, 0.0, 0.0));
 
   // Stopping distance evaluates to 12.5
   const double stopping = 0.5 * (pfield::DEFAULT_MAX_LINEAR_VELOCITY * pfield::DEFAULT_MAX_LINEAR_VELOCITY)
     / pfield::DEFAULT_MAX_LINEAR_ACCELERATION;
-  const double expected = 1.0 + 0.5 * stopping; // baseline(=1.0) + 6.25 = 7.25
+  // d* = baseline (1.0) + 0.5 * stopping
+  const double expected = 1.0 + 0.5 * stopping;
   EXPECT_NEAR(pf.computeDynamicQuadraticThreshold(query), expected, 1e-9);
 }
 
@@ -815,8 +822,10 @@ TEST(PotentialFieldTest, EvaluateWholeBodyJointVelocitiesBasic) {
 
   // Evaluate joint velocities
   Eigen::VectorXd jointVels;
+  const std::vector<double> prevJointVels = std::vector<double>(jointAngles.size(), 0.0); // assume starting from rest
+  const double dt = 0.1; // time step for integration
   try {
-    jointVels = pf.evaluateWholeBodyJointVelocitiesAtConfiguration(jointAngles, eePose);
+    jointVels = pf.evaluateWholeBodyJointVelocitiesAtConfiguration(jointAngles, prevJointVels, eePose, dt);
   }
   catch (const std::exception& e) {
     FAIL() << "Exception thrown during pfield::evaluateWholeBodyJointVelocitiesAtConfiguration: " << e.what();
@@ -836,8 +845,28 @@ TEST(PotentialFieldTest, EvaluateWholeBodyJointVelocitiesBasic) {
   pfield::PotentialField pfAtGoal(goal, 1.0, 0.0, 0.0);  // no repulsive gain
   pfAtGoal.setIKSolver(std::make_shared<MockIKSolver>());
 
-  Eigen::VectorXd zeroVels = pfAtGoal.evaluateWholeBodyJointVelocitiesAtConfiguration(zeroJointAngles, atGoalPose);
+  Eigen::VectorXd zeroVels = pfAtGoal.evaluateWholeBodyJointVelocitiesAtConfiguration(
+    zeroJointAngles, prevJointVels, atGoalPose, dt
+  );
   EXPECT_EQ(zeroVels.size(), 3);
   // At goal with no obstacles, velocities should be very small
   EXPECT_LT(zeroVels.norm(), 0.1);
+}
+
+TEST(PotentialFieldTest, EvaluateWholeBodyJointVelocities_NoKinematics_ShouldNotCrash) {
+  pfield::PotentialField pf;
+  // Ensure kinematics is null (default)
+
+  std::vector<double> q = {0.0, 0.0};
+  std::vector<double> dq = {0.0, 0.0};
+  pfield::SpatialVector eePose;
+
+  // This test expects the function to handle null kinematics gracefully.
+  // If the implementation calls `computeEndEffectorAttractionJointTorques` which uses `pfKinematics`
+  // before checking for null, this test will crash (segfault), revealing a bug.
+
+  // Note: Based on the read_file output, step 1 calls `computeEndEffectorAttractionJointTorques`
+  // and step 4 checks `if (!this->pfKinematics)`. This suggests a potential crash if step 1 uses kinematics.
+
+  EXPECT_NO_THROW(pf.evaluateWholeBodyJointVelocitiesAtConfiguration(q, dq, eePose, 0.1));
 }

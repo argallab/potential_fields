@@ -197,8 +197,8 @@ namespace pfield {
   }
 
   Eigen::VectorXd PotentialField::evaluateWholeBodyJointVelocitiesAtConfiguration(
-    const std::vector<double>& jointAngles,
-    const SpatialVector& eePose) {
+    const std::vector<double>& jointAngles, const std::vector<double>& prevJointVelocities, const SpatialVector& eePose,
+    const double dt) {
     // --- 1. Compute End-Effector Attraction Joint Torques ---
     Eigen::VectorXd attractionTorques = this->computeEndEffectorAttractionJointTorques(eePose, jointAngles);
 
@@ -206,31 +206,81 @@ namespace pfield {
     Eigen::VectorXd repulsionTorques = this->computeWholeBodyRepulsionJointTorques(jointAngles);
 
     // --- 3. Combine Torques ---
-    Eigen::VectorXd totalTorques = attractionTorques + repulsionTorques;
+    Eigen::VectorXd totalJointTorques = attractionTorques + repulsionTorques;
 
-    // --- 4. Convert Joint Torques to Joint Velocities (Admittance Control) ---
-    // Treating joints as simple dampers: q_dot = gain * torque
-    // For more accurate dynamics, we can use the robot dynamics equation
-    // including the coriolis, inertia, and gravity terms.
-    const double admittanceGain = 1.0;
-    Eigen::VectorXd jointVelocities = totalTorques * admittanceGain;
+    // --- 4. Convert Joint Torques to Joint Velocities using Robot Dynamics Equation ---
+    const bool useRobotDynamicsEquation = false; // TODO(Sharwin24): Fix this method and figure out why it's unstable
+    return useRobotDynamicsEquation ?
+      this->convertJointTorquesToJointVelocities(totalJointTorques, jointAngles, prevJointVelocities, dt) :
+      totalJointTorques * this->torqueToVelocityGain;
+  }
 
-    // --- 5. Apply Joint Velocity Limits / Saturation ---
-    // TODO(Sharwin24): Implement joint velocity clamping based on robot-specific limits
-    // This may be handled by the dynamics equation when converting from joint torques to velocities
+  Eigen::VectorXd PotentialField::convertJointTorquesToJointVelocities(
+    const Eigen::VectorXd& jointTorques, const std::vector<double>& jointAngles,
+    const std::vector<double>& currentJointVelocities, const double dt) const {
+
+    if (!this->pfKinematics) {
+      // If we don't have access to PFKinematics, use a simple proportional mapping
+      return this->torqueToVelocityGain * jointTorques;
+    }
+
+    // Retrieve Mass Matrix, Coriolis, and Gravity
+    Eigen::MatrixXd M = this->pfKinematics->getMassMatrix(jointAngles);
+    // C contains the result of C * q_dot since it's simpler to compute
+    Eigen::VectorXd C = this->pfKinematics->getCoriolisVector(jointAngles, currentJointVelocities);
+    Eigen::VectorXd G = this->pfKinematics->getGravityVector(jointAngles);
+
+    // Add joint damping to stabilize the motion (M*q_ddot = Tau - D*q_dot)
+    // A simple constant damping prevents oscillation from the conservative potential field
+    const double dampingGain = 20.0;
+    Eigen::VectorXd prevJointVels = Eigen::Map<const Eigen::VectorXd>(currentJointVelocities.data(), currentJointVelocities.size());
+    Eigen::VectorXd dampingTorque = dampingGain * prevJointVels;
+
+    Eigen::VectorXd netTorques = jointTorques - C - G - dampingTorque;
+    Eigen::VectorXd jointAccelerations;
+    try {
+      jointAccelerations = M.llt().solve(netTorques);
+    }
+    catch (const std::exception& e) {
+      std::cerr << "Error solving for joint accelerations: " << e.what() << std::endl;
+      jointAccelerations = netTorques; // Fallback to direct mapping
+    }
+
+    // --- Integrate joint accelerations to get joint velocities ---
+    Eigen::VectorXd jointVelocities = prevJointVels;
+    if (isPositiveFinite(dt)) {
+      jointVelocities += jointAccelerations * dt;
+    }
+    else {
+      return jointAccelerations; // If dt is invalid, fallback to direct mapping
+    }
+
+    // --- Apply Joint Velocity/Acceleration Limits ---
+    if (this->pfKinematics) {
+      const auto& model = this->pfKinematics->getModel();
+      for (size_t i = 0; i < jointVelocities.size() && i < (size_t)model.velocityLimit.size(); ++i) {
+        double limit = model.velocityLimit[i];
+        // Pinocchio sometimes sets limits to infinity or very large values if undefined
+        if (limit > 1e-3 && limit < 1e10) {
+          jointVelocities[i] = std::clamp(jointVelocities[i], -limit, limit);
+        }
+      }
+    }
 
     return jointVelocities;
   }
 
   TaskSpaceTwist PotentialField::evaluateWholeBodyTaskSpaceTwistAtConfiguration(
-    const std::vector<double>& jointAngles,
-    const SpatialVector& eePose) {
+    const std::vector<double>& jointAngles, const std::vector<double>& prevJointVelocities,
+    const SpatialVector& eePose, const double dt) {
     if (!this->pfKinematics) {
       return TaskSpaceTwist();
     }
 
     // 1. Compute whole-body joint velocities
-    Eigen::VectorXd jointVelocities = this->evaluateWholeBodyJointVelocitiesAtConfiguration(jointAngles, eePose);
+    Eigen::VectorXd jointVelocities = this->evaluateWholeBodyJointVelocitiesAtConfiguration(
+      jointAngles, prevJointVelocities, eePose, dt
+    );
 
     // 2. Get End-Effector Jacobian
     Eigen::MatrixXd J = this->pfKinematics->getSpatialJacobianAtPoint(
@@ -553,16 +603,14 @@ namespace pfield {
     Eigen::Vector3d attractionForceVector = this->computeAttractiveForceLinear(eePose);
     Eigen::Vector3d attractionMomentVector = this->computeAttractiveMoment(eePose);
 
-    // Pack wrench into 6D vector
-    Eigen::VectorXd taskForce(6);
-    taskForce << attractionForceVector, attractionMomentVector;
-
     // Get end-effector Jacobian (6xN)
     Eigen::MatrixXd J_ee;
+    double eeMass = 5.0; // Fallback to 5kg
     if (this->pfKinematics) {
       J_ee = this->pfKinematics->getSpatialJacobianAtPoint(
         this->eeLinkName, eePose.getPosition(), jointAngles
       );
+      eeMass = this->pfKinematics->getEndEffectorMass(this->eeLinkName);
     }
     else if (this->ikSolver) {
       Eigen::Matrix<double, 6, Eigen::Dynamic> J_temp;
@@ -572,6 +620,18 @@ namespace pfield {
     else {
       return Eigen::VectorXd::Zero(jointAngles.size());
     }
+
+    // Enforce Maximum Force based on maximum linear acceleration allowed
+    const double maxForce = this->maxLinearAcceleration * eeMass;
+    const double forceNorm = attractionForceVector.norm();
+    if (forceNorm > maxForce && forceNorm > NEAR_ZERO_THRESHOLD) {
+      attractionForceVector = (attractionForceVector / forceNorm) * maxForce;
+    }
+
+    // Pack wrench into 6D vector
+    Eigen::VectorXd taskForce(6);
+    taskForce << attractionForceVector, attractionMomentVector;
+
     // Convert task-space force to joint torques: tau = J^T * F
     return J_ee.transpose() * taskForce;
   }
@@ -752,12 +812,12 @@ namespace pfield {
     const double stepDt = (dt > 0.0) ? dt : 0.1;
     std::vector<double> currentJointAngles = startJointAngles;
     double timeStamp = 0.0;
+    // Set up stagnation and position tolerance counters/limits
     size_t stagnationCounter = 0;
     const double stagnationLimitSeconds = 0.5; // Stop if stuck for 0.5 seconds
     const size_t stagnationLimitIterations = static_cast<size_t>(std::ceil(stagnationLimitSeconds / stepDt));
     const size_t stagnationLimit = std::max(static_cast<size_t>(1), stagnationLimitIterations);
-    const double stagnationThreshold = 5e-3; // rad/s (Increased to catch small oscillations)
-
+    const double stagnationThreshold = 5e-3; // rad/s (Catch small oscillations)
     size_t positionToleranceCounter = 0;
     const double positionToleranceLimitSeconds = 2.0; // Stop if position is met for 2 seconds
     const size_t positionToleranceLimit = static_cast<size_t>(std::ceil(positionToleranceLimitSeconds / stepDt));
@@ -770,15 +830,20 @@ namespace pfield {
     }
 
     SpatialVector currentEEPose = this->pfKinematics->computeEndEffectorPose(currentJointAngles, this->eeLinkName);
+    std::vector<double> prevJointVelocities(currentJointAngles.size(), 0.0);
 
     for (size_t iter = 0; iter < maxIters; ++iter) {
       // --- 1. Update robot obstacles from current joint configuration ---
       this->updateObstaclesFromKinematics(currentJointAngles);
 
       // --- 2. Compute whole-body joint velocities considering end-effector attraction and obstacle repulsion ---
-      Eigen::VectorXd jointVelocities = this->evaluateWholeBodyJointVelocitiesAtConfiguration(currentJointAngles, currentEEPose);
+      Eigen::VectorXd jointVelocities = this->evaluateWholeBodyJointVelocitiesAtConfiguration(
+        currentJointAngles, prevJointVelocities, currentEEPose, stepDt
+      );
+      // Update prevJointVelocities for next iteration
+      prevJointVelocities.assign(jointVelocities.data(), jointVelocities.data() + jointVelocities.size());
 
-      // --- 3. Integrate joint velocities to get next joint configuration ---
+      // --- 3. Integrate joint velocities to get next joint configuration (Euler) ---
       std::vector<double> nextJointAngles(currentJointAngles.size());
       for (size_t i = 0; i < currentJointAngles.size(); ++i) {
         nextJointAngles[i] = currentJointAngles[i] + jointVelocities[i] * stepDt;

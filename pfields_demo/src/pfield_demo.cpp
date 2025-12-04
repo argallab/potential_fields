@@ -41,7 +41,7 @@ PFDemo::PFDemo() : Node("pfield_demo") {
   this->tfBuffer = std::make_shared<tf2_ros::Buffer>(this->get_clock());
   this->tfListener = std::make_shared<tf2_ros::TransformListener>(*this->tfBuffer, this);
 
-  this->createAndPublishObstacles();
+  // this->createAndPublishObstacles();
 
   // Initialize demo service
   this->runPlanPathDemoService = this->create_service<std_srvs::srv::Empty>(
@@ -62,29 +62,43 @@ void PFDemo::handleRunPlanPathDemo(
   startPose.header.stamp = this->now();
   startPose.header.frame_id = this->fixedFrame;
   // startPose.pose = this->getEndEffectorPose();
-  startPose.pose.position.x = 0.6;
-  startPose.pose.position.y = 0.0;
-  startPose.pose.position.z = 0.3;
-  // Z axis pointing down, X axis forward
-  startPose.pose.orientation.x = 1.0;
-  startPose.pose.orientation.y = 0.0;
-  startPose.pose.orientation.z = 0.0;
-  startPose.pose.orientation.w = 0.0;
+  startPose.pose.position.x = 0.39;
+  startPose.pose.position.y = -0.01;
+  startPose.pose.position.z = 0.2935;
+  // Use Eigen to build quaternion from Euler angles (roll, pitch, yaw)
+  double roll = 0.0;
+  double pitch = M_PI_2;
+  double yaw = 0.0;
+
+  Eigen::AngleAxisd roll_ang(roll, Eigen::Vector3d::UnitX());
+  Eigen::AngleAxisd pitch_ang(pitch, Eigen::Vector3d::UnitY());
+  Eigen::AngleAxisd yaw_ang(yaw, Eigen::Vector3d::UnitZ());
+
+  // Compose as R = Rz(yaw) * Ry(pitch) * Rx(roll)
+  Eigen::Quaterniond q = yaw_ang * pitch_ang * roll_ang;
+  // Eigen::Quaterniond q = Eigen::Quaterniond::Identity();
+
+  startPose.pose.orientation.w = q.w();
+  startPose.pose.orientation.x = q.x();
+  startPose.pose.orientation.y = q.y();
+  startPose.pose.orientation.z = q.z();
 
   geometry_msgs::msg::PoseStamped goalPose;
   goalPose.header.stamp = this->now();
   goalPose.header.frame_id = this->fixedFrame;
   goalPose.pose = startPose.pose;
-  goalPose.pose.position.x = 0.5;
-  goalPose.pose.position.y = 0.2;
-  goalPose.pose.position.z = 0.3;
+  goalPose.pose.position.x += 0.2;
+  // goalPose.pose.position.y = 0.2;
+  // goalPose.pose.position.z = 0.3;
 
   pathPlanRequest->start = startPose;
-  pathPlanRequest->starting_joint_angles = std::vector<float>(7, 0.0); // 7-DOF at zero position
+  // Use a non-singular start configuration (slightly bent) instead of all zeros
+  // xArm7: [J1, J2, J3, J4, J5, J6, J7]
+  // pathPlanRequest->starting_joint_angles = {0.0, -0.5, 0.0, 0.5, 0.0, 0.5, 0.0};
   pathPlanRequest->goal = goalPose;
-  pathPlanRequest->delta_time = 0.02; // 2 ms between waypoints
+  pathPlanRequest->delta_time = 0.002; // 2 ms between waypoints
   pathPlanRequest->goal_tolerance = 0.001; // 1 mm tolerance
-  pathPlanRequest->max_iterations = 30000; // Max iterations for planning
+  pathPlanRequest->max_iterations = 20000; // Max iterations for planning
   pathPlanRequest->planning_method = "whole_body"; // "task_space" or "whole_body"
   const double dt = pathPlanRequest->delta_time;
 
@@ -111,16 +125,20 @@ void PFDemo::handlePlanPathResponse(rclcpp::Client<PlanPath>::SharedFuture futur
   size_t ee_path_len = pathPlanResponse->end_effector_path.poses.size();
   size_t jt_points = pathPlanResponse->joint_trajectory.points.size();
   size_t ee_vels = pathPlanResponse->end_effector_velocity_trajectory.size();
-  RCLCPP_INFO(this->get_logger(), "(async) Received plan_path response: success=%s, end_effector_path.len=%zu, joint_trajectory.points=%zu, ee_velocity_traj=%zu",
+  RCLCPP_INFO(this->get_logger(), "Received plan_path response: success=%s, end_effector_path.len=%zu, joint_trajectory.points=%zu, ee_velocity_traj=%zu",
     pathPlanResponse->success ? "true" : "false", ee_path_len, jt_points, ee_vels);
 
   if (ee_path_len > 0) {
-    const auto& p = pathPlanResponse->end_effector_path.poses.front().pose.position;
-    RCLCPP_INFO(this->get_logger(), "(async) First EE pose: (%.4f, %.4f, %.4f)", p.x, p.y, p.z);
+    const auto& firstEEPose = pathPlanResponse->end_effector_path.poses.front().pose.position;
+    const auto& lastEEPose = pathPlanResponse->end_effector_path.poses.back().pose.position;
+    RCLCPP_INFO(this->get_logger(), "First EE pose: (%.4f, %.4f, %.4f)", firstEEPose.x, firstEEPose.y, firstEEPose.z);
+    RCLCPP_INFO(this->get_logger(), "Last EE pose: (%.4f, %.4f, %.4f)", lastEEPose.x, lastEEPose.y, lastEEPose.z);
   }
   if (ee_vels > 0) {
-    const auto& v = pathPlanResponse->end_effector_velocity_trajectory.front().twist.linear;
-    RCLCPP_INFO(this->get_logger(), "(async) First EE linear velocity: (%.6f, %.6f, %.6f)", v.x, v.y, v.z);
+    const auto& firstEEVel = pathPlanResponse->end_effector_velocity_trajectory.front().twist.linear;
+    const auto& lastEEVel = pathPlanResponse->end_effector_velocity_trajectory.back().twist.linear;
+    RCLCPP_INFO(this->get_logger(), "First EE linear velocity: (%.6f, %.6f, %.6f)", firstEEVel.x, firstEEVel.y, firstEEVel.z);
+    RCLCPP_INFO(this->get_logger(), "Last EE linear velocity: (%.6f, %.6f, %.6f)", lastEEVel.x, lastEEVel.y, lastEEVel.z);
   }
 
   // Begin streaming EE velocity commands to follow the path

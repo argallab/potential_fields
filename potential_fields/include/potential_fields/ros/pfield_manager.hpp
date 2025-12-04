@@ -94,6 +94,12 @@ private:
   pfield::TaskSpaceTwist prevTwist; // Previous twist for acceleration limiting
   std::vector<double> currentJointAngles; // Current joint angles for robot obstacle visualization
 
+  // Visualization Constants
+  const double TASK_SPACE_POSE_SPHERE_DIAMETER = 0.05; // Scale for goal marker [m]
+  const double TASK_SPACE_AXIS_LENGTH = 0.2; // Length of axis indicators [m]
+  const double TASK_SPACE_AXIS_SHAFT_DIAMETER = 0.01; // Diameter of axis shafts [m]
+  const double TASK_SPACE_AXIS_HEAD_DIAMETER = 0.025; // Diameter of axis heads [m]
+
   rclcpp::TimerBase::SharedPtr timer; // Timer to periodically update the potential field
   rclcpp::Publisher<MarkerArray>::SharedPtr pFieldMarkerPub; // Publisher for PF Markers
   rclcpp::Publisher<JointState>::SharedPtr planningJointStatePub; // Publisher for planning joint states

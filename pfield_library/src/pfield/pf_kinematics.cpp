@@ -490,4 +490,82 @@ namespace pfield {
     return {}; // Failed to converge
   }
 
+  double PFKinematics::getEndEffectorMass(const std::string& eeLinkName, const double fallBackMass) const {
+    if (!this->robotModel) { return fallBackMass; }
+    if (this->robotModel->links_.count(eeLinkName) > 0) {
+      const auto& eeLink = this->robotModel->links_.at(eeLinkName);
+      if (eeLink && eeLink->inertial) {
+        // End Effector Mass has to be at least 1 gram, smaller than that we consider it negligible and use fallback
+        return eeLink->inertial->mass > 1e-3 ? eeLink->inertial->mass : fallBackMass;
+      }
+    }
+    return fallBackMass;
+  }
+
+  Eigen::VectorXd PFKinematics::jointValuesToVector(const std::vector<double>& jointValues) {
+    Eigen::VectorXd q = Eigen::VectorXd::Zero(this->model.nq);
+    for (size_t i = 0; i < jointValues.size() && i < this->jointQIndices.size(); ++i) {
+      int qi = this->jointQIndices[i];
+      if (qi >= 0 && qi < this->model.nq) {
+        q[qi] = jointValues[i];
+      }
+    }
+    return q;
+  }
+
+  Eigen::MatrixXd PFKinematics::getMassMatrix(const std::vector<double>& jointAngles, const double lambda) {
+    Eigen::VectorXd q = this->jointValuesToVector(jointAngles);
+
+    // Compute the mass matrix using CRBA and store the transpose to fill the lower triangle
+    pinocchio::crba(this->model, this->data, q);
+    this->data.M.triangularView<Eigen::StrictlyLower>() = this->data.M.transpose();
+
+    // Extract only the rows/columns corresponding to the active joints
+    const size_t numJoints = jointAngles.size();
+    Eigen::MatrixXd M = Eigen::MatrixXd::Zero(numJoints, numJoints);
+    for (size_t i = 0; i < numJoints; ++i) {
+      for (size_t j = 0; j < numJoints; ++j) {
+        M(i, j) = this->data.M(this->jointQIndices[i], this->jointQIndices[j]);
+      }
+    }
+
+    // Regularize Mass Matrix
+    // Near singularities, the mass matrix is not very usable and inverting it
+    // creates large velocity spikes, so we can add a small damper to the diagonal
+    M.diagonal().array() += lambda;
+
+    return M;
+  }
+
+  Eigen::VectorXd PFKinematics::getCoriolisVector(const std::vector<double>& jointAngles, const std::vector<double>& jointVelocities) {
+    Eigen::VectorXd q = this->jointValuesToVector(jointAngles);
+    Eigen::VectorXd v = this->jointValuesToVector(jointVelocities);
+
+    // Compute the Coriolis term: C(q, q_dot) * q_dot
+    Eigen::VectorXd nle = pinocchio::nonLinearEffects(this->model, this->data, q, v);
+    Eigen::VectorXd g = pinocchio::computeGeneralizedGravity(this->model, this->data, q);
+    Eigen::VectorXd coriolisFull = nle - g;
+
+    // Extract only the entries corresponding to the active joints
+    const size_t numJoints = jointAngles.size();
+    Eigen::VectorXd C = Eigen::VectorXd::Zero(numJoints);
+    for (size_t i = 0; i < numJoints; ++i) {
+      C(i) = coriolisFull(this->jointQIndices[i]);
+    }
+    return C;
+  }
+
+  Eigen::VectorXd PFKinematics::getGravityVector(const std::vector<double>& jointAngles) {
+    Eigen::VectorXd q = this->jointValuesToVector(jointAngles);
+    Eigen::VectorXd gravityVector = pinocchio::computeGeneralizedGravity(this->model, this->data, q);
+
+    // Extract only the entries corresponding to the active joints
+    const size_t numJoints = jointAngles.size();
+    Eigen::VectorXd G = Eigen::VectorXd::Zero(numJoints);
+    for (size_t i = 0; i < numJoints; ++i) {
+      G(i) = gravityVector(this->jointQIndices[i]);
+    }
+    return G;
+  }
+
 } // namespace pfield
