@@ -107,13 +107,15 @@ RUN apt-get update \
     && apt-get clean -y \
     && rm -rf /var/lib/apt/lists/*
 
-# Install Pinocchio
+# Install robotpkg
 RUN mkdir -p /etc/apt/keyrings && \
     curl -fsSL http://robotpkg.openrobots.org/packages/debian/robotpkg.asc | tee /etc/apt/keyrings/robotpkg.asc && \
     echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/robotpkg.asc] http://robotpkg.openrobots.org/packages/debian/pub $(lsb_release -cs) robotpkg" \
     | tee /etc/apt/sources.list.d/robotpkg.list && \
-    apt-get update && \
-    apt-get install -y robotpkg-pinocchio && \
+    apt-get update
+
+# Install Pinocchio
+RUN apt-get install -y robotpkg-pinocchio && \
     apt-get clean -y && \
     rm -rf /var/lib/apt/lists/*
 
@@ -125,20 +127,22 @@ ENV PATH=/opt/openrobots/bin:$PATH \
     CMAKE_PREFIX_PATH=/opt/openrobots/lib/cmake:$CMAKE_PREFIX_PATH
 
 # install xArm python sdk
-RUN cd /home/workspace/src && \
-    git clone https://github.com/xArm-Developer/xArm-Python-SDK.git && \
+RUN git clone https://github.com/xArm-Developer/xArm-Python-SDK.git && \
     cd xArm-Python-SDK && \
     pip install . --break-system-packages
 
+# # Install EigenPy
+# RUN apt-get update && \
+#     apt install robotpkg-py35-eigenpy
+
 # install example robot data for urdf models
-RUN cd /home/workspace/src && \
-    git clone --recursive https://github.com/Gepetto/example-robot-data.git && \
-    cd example-robot-data && \
-    mkdir -p build && \
-    cd build && \
-    cmake .. && \
-    make && \
-    make install
+# RUN git clone --recursive https://github.com/Gepetto/example-robot-data.git && \
+#     cd example-robot-data && \
+#     mkdir -p build && \
+#     cd build && \
+#     cmake .. && \
+#     make && \
+#     make install
 
 # install box 2d
 RUN pip3 install Box2D --break-system-packages

@@ -228,7 +228,7 @@ docker build -t pfields .
 # After the image is built, the container can be created and started by running:
 sudo docker run -it --privileged \
 -v /dev:/dev \
--v /home/$USER/workspaces/pfield_ws/src:/home/workspace/src \
+-v /home/$USER/workspaces/pfield_ws:/home/workspace/src \
 -e DISPLAY \
 -e QT_X11_NO_MITSHM=1 \
 --name argallab_pfields \
@@ -236,14 +236,13 @@ sudo docker run -it --privileged \
 pfields:latest
 ```
 
-Once the docker container is started, run `colcon build` and `source install/setup.bash` to initialize the ROS workspace,
-and then launch the appropriate nodes:
+Once the docker container is started, run `colcon build` and `source install/setup.bash` to initialize the ROS workspace, and then launch the appropriate nodes:
 
 ```bash
 # Robot Launch
 ros2 launch xarm_moveit_config xarm7_moveit_realmove.launch.py robot_ip:=192.168.1.199 add_gripper:=true
 # Launch PF Node that hosts Path Planning service (and demo service)
-ros2 launch pfields_demo pf_demo.launch.xml use_rviz:=false
+ros2 launch pfields_demo pf_demo.launch.xml use_rviz:=false motion_plugin_type:="xarm" end_effector_frame:="link_tcp" urdf_file_path:="
 ```
 
 ### Demo Obstacles
