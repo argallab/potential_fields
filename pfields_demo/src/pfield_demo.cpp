@@ -41,7 +41,7 @@ PFDemo::PFDemo() : Node("pfield_demo") {
   this->tfBuffer = std::make_shared<tf2_ros::Buffer>(this->get_clock());
   this->tfListener = std::make_shared<tf2_ros::TransformListener>(*this->tfBuffer, this);
 
-  this->createAndPublishObstacles();
+  // this->createAndPublishObstacles();
 
   // Initialize demo service
   this->runPlanPathDemoService = this->create_service<std_srvs::srv::Empty>(
@@ -62,31 +62,43 @@ void PFDemo::handleRunPlanPathDemo(
   startPose.header.stamp = this->now();
   startPose.header.frame_id = this->fixedFrame;
   // startPose.pose = this->getEndEffectorPose();
-  startPose.pose.position.x = 0.6;
-  startPose.pose.position.y = 0.0;
-  startPose.pose.position.z = 0.3;
-  // Z axis pointing down, X axis forward
-  startPose.pose.orientation.x = 1.0;
-  startPose.pose.orientation.y = 0.0;
-  startPose.pose.orientation.z = 0.0;
-  startPose.pose.orientation.w = 0.0;
+  startPose.pose.position.x = 0.39;
+  startPose.pose.position.y = -0.01;
+  startPose.pose.position.z = 0.2935;
+  // Use Eigen to build quaternion from Euler angles (roll, pitch, yaw)
+  double roll = 0.0;
+  double pitch = M_PI_2;
+  double yaw = 0.0;
+
+  Eigen::AngleAxisd roll_ang(roll, Eigen::Vector3d::UnitX());
+  Eigen::AngleAxisd pitch_ang(pitch, Eigen::Vector3d::UnitY());
+  Eigen::AngleAxisd yaw_ang(yaw, Eigen::Vector3d::UnitZ());
+
+  // Compose as R = Rz(yaw) * Ry(pitch) * Rx(roll)
+  Eigen::Quaterniond q = yaw_ang * pitch_ang * roll_ang;
+  // Eigen::Quaterniond q = Eigen::Quaterniond::Identity();
+
+  startPose.pose.orientation.w = q.w();
+  startPose.pose.orientation.x = q.x();
+  startPose.pose.orientation.y = q.y();
+  startPose.pose.orientation.z = q.z();
 
   geometry_msgs::msg::PoseStamped goalPose;
   goalPose.header.stamp = this->now();
   goalPose.header.frame_id = this->fixedFrame;
   goalPose.pose = startPose.pose;
-  goalPose.pose.position.x = 0.5;
-  goalPose.pose.position.y = 0.2;
-  goalPose.pose.position.z = 0.3;
+  goalPose.pose.position.x += 0.2;
+  // goalPose.pose.position.y = 0.2;
+  // goalPose.pose.position.z = 0.3;
 
   pathPlanRequest->start = startPose;
   // Use a non-singular start configuration (slightly bent) instead of all zeros
   // xArm7: [J1, J2, J3, J4, J5, J6, J7]
-  pathPlanRequest->starting_joint_angles = {0.0, -0.5, 0.0, 0.5, 0.0, 0.5, 0.0}; 
+  // pathPlanRequest->starting_joint_angles = {0.0, -0.5, 0.0, 0.5, 0.0, 0.5, 0.0};
   pathPlanRequest->goal = goalPose;
   pathPlanRequest->delta_time = 0.02; // 2 ms between waypoints
   pathPlanRequest->goal_tolerance = 0.001; // 1 mm tolerance
-  pathPlanRequest->max_iterations = 30000; // Max iterations for planning
+  pathPlanRequest->max_iterations = 10000; // Max iterations for planning
   pathPlanRequest->planning_method = "whole_body"; // "task_space" or "whole_body"
   const double dt = pathPlanRequest->delta_time;
 
