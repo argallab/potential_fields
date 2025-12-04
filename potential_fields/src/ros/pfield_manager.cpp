@@ -377,6 +377,18 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
   std::vector<double> startJointAnglesDouble(
     request->starting_joint_angles.cbegin(), request->starting_joint_angles.cend()
   );
+  if (startJointAnglesDouble.empty()) {
+    RCLCPP_WARN(this->get_logger(), "No starting joint angles provided in PlanPath request. Using IK");
+    startJointAnglesDouble = this->pField->computeInverseKinematics(startSV, this->currentJointAngles);
+    std::string jointAnglesStr;
+    for (size_t i = 0; i < startJointAnglesDouble.size(); ++i) {
+      jointAnglesStr += std::to_string(startJointAnglesDouble[i]);
+      if (i < startJointAnglesDouble.size() - 1) {
+        jointAnglesStr += ", ";
+      }
+    }
+    RCLCPP_INFO(this->get_logger(), "IK Found StartJointAngles: [%s]", jointAnglesStr.c_str());
+  }
   pfield::PlannedPath planningResult;
   try {
     // Plan a path using the request parameters and store the result
