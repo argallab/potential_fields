@@ -81,17 +81,21 @@ void PFDemo::handleRunPlanPathDemo(
   geometry_msgs::msg::PoseStamped goalPose;
   goalPose.header.stamp = this->now();
   goalPose.header.frame_id = this->fixedFrame;
-  goalPose.pose = startPose.pose;
-  goalPose.pose.position.x += 0.1;
-  goalPose.pose.position.y += 0.1;
-  goalPose.pose.position.z += 0.05;
+  // goalPose.pose = startPose.pose;
+  goalPose.pose.position.x = 0.42331;
+  goalPose.pose.position.y = 0.13272; 
+  goalPose.pose.position.z = 0.52843;
+  goalPose.pose.orientation.x = 0.70709; 
+  goalPose.pose.orientation.y = 9.8864e-05; 
+  goalPose.pose.orientation.z = 0.70712; 
+  goalPose.pose.orientation.w = -2.1146e-05;
 
   // pathPlanRequest->start = startPose;
   pathPlanRequest->starting_joint_angles = {0.0, 0.0, 0.0, 0.0, 0.0, -M_PI_2, 0.0};
   pathPlanRequest->goal = goalPose;
   pathPlanRequest->delta_time = 0.002; // 2 ms between waypoints
   pathPlanRequest->goal_tolerance = 0.01; // 10 mm tolerance
-  pathPlanRequest->max_iterations = 20000; // Max iterations for planning
+  pathPlanRequest->max_iterations = 25000; // Max iterations for planning
   pathPlanRequest->planning_method = "whole_body"; // "task_space" or "whole_body"
   const double dt = pathPlanRequest->delta_time;
 
