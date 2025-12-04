@@ -512,7 +512,7 @@ namespace pfield {
     return q;
   }
 
-  Eigen::MatrixXd PFKinematics::getMassMatrix(const std::vector<double>& jointAngles) {
+  Eigen::MatrixXd PFKinematics::getMassMatrix(const std::vector<double>& jointAngles, const double lambda) {
     Eigen::VectorXd q = this->jointValuesToVector(jointAngles);
 
     // Compute the mass matrix using CRBA and store the transpose to fill the lower triangle
@@ -531,7 +531,6 @@ namespace pfield {
     // Regularize Mass Matrix
     // Near singularities, the mass matrix is not very usable and inverting it
     // creates large velocity spikes, so we can add a small damper to the diagonal
-    const double lambda = 1e-3;
     M.diagonal().array() += lambda;
 
     return M;

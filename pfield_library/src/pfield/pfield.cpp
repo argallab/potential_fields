@@ -230,7 +230,6 @@ namespace pfield {
     Eigen::VectorXd C = this->pfKinematics->getCoriolisVector(jointAngles, currentJointVelocities);
     Eigen::VectorXd G = this->pfKinematics->getGravityVector(jointAngles);
 
-
     // Add joint damping to stabilize the motion (M*q_ddot = Tau - D*q_dot)
     // A simple constant damping prevents oscillation from the conservative potential field
     const double dampingGain = 20.0;
@@ -604,23 +603,14 @@ namespace pfield {
     Eigen::Vector3d attractionForceVector = this->computeAttractiveForceLinear(eePose);
     Eigen::Vector3d attractionMomentVector = this->computeAttractiveMoment(eePose);
 
-    // Enforce Maximum Force based on maximum linear acceleration allowed
-    const double maxForce = this->maxLinearAcceleration * this->pfKinematics->getEndEffectorMass(this->eeLinkName);
-    const double forceNorm = attractionForceVector.norm();
-    if (forceNorm > maxForce && forceNorm > NEAR_ZERO_THRESHOLD) {
-      attractionForceVector = (attractionForceVector / forceNorm) * maxForce;
-    }
-
-    // Pack wrench into 6D vector
-    Eigen::VectorXd taskForce(6);
-    taskForce << attractionForceVector, attractionMomentVector;
-
     // Get end-effector Jacobian (6xN)
     Eigen::MatrixXd J_ee;
+    double eeMass = 5.0; // Fallback to 5kg
     if (this->pfKinematics) {
       J_ee = this->pfKinematics->getSpatialJacobianAtPoint(
         this->eeLinkName, eePose.getPosition(), jointAngles
       );
+      eeMass = this->pfKinematics->getEndEffectorMass(this->eeLinkName);
     }
     else if (this->ikSolver) {
       Eigen::Matrix<double, 6, Eigen::Dynamic> J_temp;
@@ -630,6 +620,18 @@ namespace pfield {
     else {
       return Eigen::VectorXd::Zero(jointAngles.size());
     }
+
+    // Enforce Maximum Force based on maximum linear acceleration allowed
+    const double maxForce = this->maxLinearAcceleration * eeMass;
+    const double forceNorm = attractionForceVector.norm();
+    if (forceNorm > maxForce && forceNorm > NEAR_ZERO_THRESHOLD) {
+      attractionForceVector = (attractionForceVector / forceNorm) * maxForce;
+    }
+
+    // Pack wrench into 6D vector
+    Eigen::VectorXd taskForce(6);
+    taskForce << attractionForceVector, attractionMomentVector;
+
     // Convert task-space force to joint torques: tau = J^T * F
     return J_ee.transpose() * taskForce;
   }

@@ -142,11 +142,49 @@ namespace pfield {
       int maxIterations = 100,
       double tolerance = 1e-4);
 
+    /**
+     * @brief Try to get the mass of the end-effector link from the URDF model
+     *
+     * @param eeLinkName The name of the end-effector link
+     * @return double The mass of the end-effector link in kg, or 1.0 if not found
+     */
     double getEndEffectorMass(const std::string& eeLinkName) const;
 
+    /**
+     * @brief Convert a vector of joint values to an Eigen vector
+     *
+     * @param jointValues The joint values as std::vector<double>, either the joint positions or velocities
+     * @return Eigen::VectorXd The joint values as an Eigen vector
+     */
     Eigen::VectorXd jointValuesToVector(const std::vector<double>& jointValues);
-    Eigen::MatrixXd getMassMatrix(const std::vector<double>& jointAngles);
+
+    /**
+     * @brief Compute the Mass-Inertia Matrix at the given joint configuration
+     *
+     * @note A lambda of 1e-3 was chosen empirically to balance numerical stability without distorting dynamics
+     *       too much. If necessary, this value can be tuned based on how accurate the mass matrix needs to be
+     *
+     * @param jointAngles The joint configuration [rad]
+     * @param lambda Regularization parameter to ensure positive definiteness, default is 1e-3
+     * @return Eigen::MatrixXd The mass matrix
+     */
+    Eigen::MatrixXd getMassMatrix(const std::vector<double>& jointAngles, const double lambda = 1e-3);
+
+    /**
+     * @brief Compute the Coriolis vector at the given joint configuration and velocities
+     *
+     * @param jointAngles The joint configuration [rad]
+     * @param jointVelocities The joint velocities [rad/s]
+     * @return Eigen::VectorXd The Coriolis vector
+     */
     Eigen::VectorXd getCoriolisVector(const std::vector<double>& jointAngles, const std::vector<double>& jointVelocities);
+
+    /**
+     * @brief Compute the Gravity vector at the given joint configuration
+     *
+     * @param jointAngles The joint configuration [rad]
+     * @return Eigen::VectorXd The Gravity vector
+     */
     Eigen::VectorXd getGravityVector(const std::vector<double>& jointAngles);
 
 
