@@ -490,15 +490,16 @@ namespace pfield {
     return {}; // Failed to converge
   }
 
-  double PFKinematics::getEndEffectorMass(const std::string& eeLinkName) const {
-    if (!this->robotModel) { return 1.0; }
+  double PFKinematics::getEndEffectorMass(const std::string& eeLinkName, const double fallBackMass) const {
+    if (!this->robotModel) { return fallBackMass; }
     if (this->robotModel->links_.count(eeLinkName) > 0) {
       const auto& eeLink = this->robotModel->links_.at(eeLinkName);
       if (eeLink && eeLink->inertial) {
-        return eeLink->inertial->mass;
+        // End Effector Mass has to be at least 1 gram, smaller than that we consider it negligible and use fallback
+        return eeLink->inertial->mass > 1e-3 ? eeLink->inertial->mass : fallBackMass;
       }
     }
-    return 1.0;
+    return fallBackMass;
   }
 
   Eigen::VectorXd PFKinematics::jointValuesToVector(const std::vector<double>& jointValues) {

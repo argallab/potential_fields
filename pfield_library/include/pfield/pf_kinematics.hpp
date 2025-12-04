@@ -146,9 +146,10 @@ namespace pfield {
      * @brief Try to get the mass of the end-effector link from the URDF model
      *
      * @param eeLinkName The name of the end-effector link
-     * @return double The mass of the end-effector link in kg, or 1.0 if not found
+     * @param fallBackMass The mass to return if the link or inertial is not found or negligible (< 1 gram)
+     * @return double The mass of the end-effector link in kg, or the fallback mass if not found
      */
-    double getEndEffectorMass(const std::string& eeLinkName) const;
+    double getEndEffectorMass(const std::string& eeLinkName, const double fallBackMass = 1.0) const;
 
     /**
      * @brief Convert a vector of joint values to an Eigen vector
