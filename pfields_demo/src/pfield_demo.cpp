@@ -63,9 +63,18 @@ void PFDemo::handleRunPlanPathDemo(
   startPose.header.stamp = this->now();
   startPose.header.frame_id = this->fixedFrame;
   startPose.pose = this->getEndEffectorPose();
-  // startPose.pose.position.x = 0.39;
-  // startPose.pose.position.y = -0.01;
-  // startPose.pose.position.z = 0.2935;
+  if (startPose.pose.position.x == 0.0 &&
+    startPose.pose.position.y == 0.0 &&
+    startPose.pose.position.z == 0.0) {
+    RCLCPP_ERROR(this->get_logger(), "Failed to get current end-effector pose. Using default");
+    startPose.pose.position.x = 0.227;
+    startPose.pose.position.y = 0.00;
+    startPose.pose.position.z = 0.2935;
+    startPose.pose.orientation.x = 0.70709;
+    startPose.pose.orientation.y = 9.8864e-05;
+    startPose.pose.orientation.z = 0.70712;
+    startPose.pose.orientation.w = -2.1146e-05;
+  }
   // Use Eigen to build quaternion from Euler angles (roll, pitch, yaw)
   // Eigen::AngleAxisd roll_ang(0.0, Eigen::Vector3d::UnitX());
   // Eigen::AngleAxisd pitch_ang(M_PI_2, Eigen::Vector3d::UnitY());
@@ -83,34 +92,32 @@ void PFDemo::handleRunPlanPathDemo(
   goalPose.header.frame_id = this->fixedFrame;
   // goalPose.pose = startPose.pose;
   goalPose.pose.position.x = 0.42331;
-  goalPose.pose.position.y = 0.13272; 
+  goalPose.pose.position.y = 0.13272;
   goalPose.pose.position.z = 0.52843;
-  goalPose.pose.orientation.x = 0.70709; 
-  goalPose.pose.orientation.y = 9.8864e-05; 
-  goalPose.pose.orientation.z = 0.70712; 
+  goalPose.pose.orientation.x = 0.70709;
+  goalPose.pose.orientation.y = 9.8864e-05;
+  goalPose.pose.orientation.z = 0.70712;
   goalPose.pose.orientation.w = -2.1146e-05;
 
-  // pathPlanRequest->start = startPose;
+  pathPlanRequest->start = startPose;
   pathPlanRequest->starting_joint_angles = {0.0, 0.0, 0.0, 0.0, 0.0, -M_PI_2, 0.0};
   pathPlanRequest->goal = goalPose;
   pathPlanRequest->delta_time = 0.002; // 2 ms between waypoints
   pathPlanRequest->goal_tolerance = 0.01; // 10 mm tolerance
   pathPlanRequest->max_iterations = 25000; // Max iterations for planning
-  pathPlanRequest->planning_method = "whole_body"; // "task_space" or "whole_body"
+  pathPlanRequest->planning_method = PlanPath::Request::PLANNING_METHOD_TASK_SPACE; // "task_space" or "whole_body"
   const double dt = pathPlanRequest->delta_time;
 
   // Publish the goal pose
   this->queryPosePub->publish(startPose.pose);
-  this->goalPosePub->publish(goalPose);
+  // this->goalPosePub->publish(goalPose);
 
   RCLCPP_INFO(this->get_logger(), "Sending plan_path request (async)...");
 
   // Send request asynchronously and attach a callback to process the result
   this->planPathClient->async_send_request(
     pathPlanRequest,
-    [this, dt](ServiceResponseFuture<PlanPath> future) { 
-      this->handlePlanPathResponse(future, dt); 
-    }
+    [this, dt](ServiceResponseFuture<PlanPath> future) { this->handlePlanPathResponse(future, dt); }
   );
 }
 

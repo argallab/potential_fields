@@ -701,7 +701,7 @@ MarkerArray PotentialFieldManager::createThresholdMarkers(std::shared_ptr<pfield
   thresholdMarker.pose.orientation.w = goalPose.getOrientation().w();
   const double dStarThreshold = pf->isUsingDynamicQuadraticThreshold() ?
     pf->computeDynamicQuadraticThreshold(this->queryPose) :
-    pf->getDefaultQuadraticThreshold();
+    pf->getQuadraticThreshold();
   thresholdMarker.scale.x = dStarThreshold * 2.0; // Diameter
   thresholdMarker.scale.y = dStarThreshold * 2.0;
   thresholdMarker.scale.z = dStarThreshold * 2.0;
