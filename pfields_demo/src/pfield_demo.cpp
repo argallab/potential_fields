@@ -128,14 +128,22 @@ void PFDemo::handlePlanPathResponse(rclcpp::Client<PlanPath>::SharedFuture futur
   size_t ee_path_len = pathPlanResponse->end_effector_path.poses.size();
   size_t jt_points = pathPlanResponse->joint_trajectory.points.size();
   size_t ee_vels = pathPlanResponse->end_effector_velocity_trajectory.size();
-  RCLCPP_INFO(this->get_logger(), "Received plan_path response: success=%s, end_effector_path.len=%zu, joint_trajectory.points=%zu, ee_velocity_traj=%zu",
-    pathPlanResponse->success ? "true" : "false", ee_path_len, jt_points, ee_vels);
+  RCLCPP_INFO(this->get_logger(),
+    "Received plan_path response: success=%s, end_effector_path.len=%zu, joint_trajectory.points=%zu, ee_velocity_traj=%zu",
+    pathPlanResponse->success ? "true" : "false", ee_path_len, jt_points, ee_vels
+  );
 
   if (ee_path_len > 0) {
-    const auto& firstEEPose = pathPlanResponse->end_effector_path.poses.front().pose.position;
-    const auto& lastEEPose = pathPlanResponse->end_effector_path.poses.back().pose.position;
-    RCLCPP_INFO(this->get_logger(), "First EE pose: (%.4f, %.4f, %.4f)", firstEEPose.x, firstEEPose.y, firstEEPose.z);
-    RCLCPP_INFO(this->get_logger(), "Last EE pose: (%.4f, %.4f, %.4f)", lastEEPose.x, lastEEPose.y, lastEEPose.z);
+    const auto& firstEEPose = pathPlanResponse->end_effector_path.poses.front().pose;
+    const auto& lastEEPose = pathPlanResponse->end_effector_path.poses.back().pose;
+    RCLCPP_INFO(this->get_logger(), "First EE pose: (%.4f, %.4f, %.4f) [m] (%.4f, %.4f, %.4f, %.4f)",
+      firstEEPose.position.x, firstEEPose.position.y, firstEEPose.position.z,
+      firstEEPose.orientation.x, firstEEPose.orientation.y, firstEEPose.orientation.z, firstEEPose.orientation.w
+    );
+    RCLCPP_INFO(this->get_logger(), "Last EE pose: (%.4f, %.4f, %.4f) [m] (%.4f, %.4f, %.4f, %.4f)",
+      lastEEPose.position.x, lastEEPose.position.y, lastEEPose.position.z,
+      lastEEPose.orientation.x, lastEEPose.orientation.y, lastEEPose.orientation.z, lastEEPose.orientation.w
+    );
   }
   if (ee_vels > 0) {
     const auto& firstEEVel = pathPlanResponse->end_effector_velocity_trajectory.front().twist.linear;
