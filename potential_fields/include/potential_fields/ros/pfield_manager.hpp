@@ -43,7 +43,6 @@
 using Marker = visualization_msgs::msg::Marker;
 using MarkerArray = visualization_msgs::msg::MarkerArray;
 using Pose = geometry_msgs::msg::Pose;
-using PoseStamped = geometry_msgs::msg::PoseStamped;
 using Point = geometry_msgs::msg::Point;
 using Quaternion = geometry_msgs::msg::Quaternion;
 using Path = nav_msgs::msg::Path;
@@ -104,9 +103,9 @@ private:
   rclcpp::Publisher<MarkerArray>::SharedPtr pFieldMarkerPub; // Publisher for PF Markers
   rclcpp::Publisher<JointState>::SharedPtr planningJointStatePub; // Publisher for planning joint states
   rclcpp::Publisher<Path>::SharedPtr plannedEndEffectorPathPub; // Publisher for planned end-effector path
-  rclcpp::Subscription<PoseStamped>::SharedPtr goalPoseSub; // Subscriber for the goal pose
+  rclcpp::Subscription<Pose>::SharedPtr goalPoseSub; // Subscriber for the goal pose
+  rclcpp::Subscription<Pose>::SharedPtr queryPoseSub; // Subscriber for query poses
   rclcpp::Subscription<ObstacleArray>::SharedPtr obstacleSub; // Subscriber for obstacles
-  rclcpp::Subscription<geometry_msgs::msg::Pose>::SharedPtr queryPoseSub; // Subscriber for query poses
   rclcpp::Service<PlanPath>::SharedPtr pathPlanningService; // Now hosted here
   rclcpp::Service<ComputeAutonomyVector>::SharedPtr autonomyVectorService; // Service to compute velocity vector at a given pose
 

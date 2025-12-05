@@ -794,7 +794,7 @@ public:
 };
 
 TEST(PotentialFieldTest, EvaluateWholeBodyJointVelocitiesBasic) {
-  // Test that evaluateWholeBodyJointVelocitiesAtConfiguration returns joint velocities
+  // Test that evaluateWholeBodyJointTorquesAtConfiguration returns joint velocities
   // with correct dimensions and reasonable values
 
   // Create a pfield::PotentialField with a goal away from origin
@@ -825,10 +825,10 @@ TEST(PotentialFieldTest, EvaluateWholeBodyJointVelocitiesBasic) {
   const std::vector<double> prevJointVels = std::vector<double>(jointAngles.size(), 0.0); // assume starting from rest
   const double dt = 0.1; // time step for integration
   try {
-    jointVels = pf.evaluateWholeBodyJointVelocitiesAtConfiguration(jointAngles, prevJointVels, eePose, dt);
+    jointVels = pf.evaluateWholeBodyJointTorquesAtConfiguration(jointAngles, prevJointVels, eePose, dt);
   }
   catch (const std::exception& e) {
-    FAIL() << "Exception thrown during pfield::evaluateWholeBodyJointVelocitiesAtConfiguration: " << e.what();
+    FAIL() << "Exception thrown during pfield::evaluateWholeBodyJointTorquesAtConfiguration: " << e.what();
   }
 
   // Verify the output has the correct size
@@ -845,7 +845,7 @@ TEST(PotentialFieldTest, EvaluateWholeBodyJointVelocitiesBasic) {
   pfield::PotentialField pfAtGoal(goal, 1.0, 0.0, 0.0);  // no repulsive gain
   pfAtGoal.setIKSolver(std::make_shared<MockIKSolver>());
 
-  Eigen::VectorXd zeroVels = pfAtGoal.evaluateWholeBodyJointVelocitiesAtConfiguration(
+  Eigen::VectorXd zeroVels = pfAtGoal.evaluateWholeBodyJointTorquesAtConfiguration(
     zeroJointAngles, prevJointVels, atGoalPose, dt
   );
   EXPECT_EQ(zeroVels.size(), 3);
@@ -868,5 +868,5 @@ TEST(PotentialFieldTest, EvaluateWholeBodyJointVelocities_NoKinematics_ShouldNot
   // Note: Based on the read_file output, step 1 calls `computeEndEffectorAttractionJointTorques`
   // and step 4 checks `if (!this->pfKinematics)`. This suggests a potential crash if step 1 uses kinematics.
 
-  EXPECT_NO_THROW(pf.evaluateWholeBodyJointVelocitiesAtConfiguration(q, dq, eePose, 0.1));
+  EXPECT_NO_THROW(pf.evaluateWholeBodyJointTorquesAtConfiguration(q, dq, eePose, 0.1));
 }

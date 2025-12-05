@@ -30,9 +30,9 @@
 ///   pfield/compute_autonomy_vector (potential_fields_interfaces::srv::ComputeAutonomyVector): Computes velocity at a pose
 ///
 /// SUBSCRIBERS:
-///   pfield/planning_goal_pose (geometry_msgs::msg::PoseStamped): Updates the PF goal pose
-///   pfield/obstacles (potential_fields_interfaces::msg::ObstacleArray): Adds/updates external PF obstacles
+///   pfield/planning_goal_pose (geometry_msgs::msg::Pose): Updates the PF goal pose
 ///   pfield/query_pose (geometry_msgs::msg::Pose): Sets the live query pose used for visualization
+///   pfield/obstacles (potential_fields_interfaces::msg::ObstacleArray): Adds/updates external PF obstacles
 ///
 /// PUBLISHERS:
 ///   pfield/markers (visualization_msgs::msg::MarkerArray): RViz markers (reliable + transient_local QoS)
@@ -91,7 +91,7 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
     this->influenceDistance
   );
   this->pField->enableDynamicQuadraticThreshold(false);
-  this->pField->setDefaultQuadraticThreshold(0.2);
+  this->pField->setDefaultQuadraticThreshold(0.001);
 
   // Initialize the motion plugin
   std::transform(
@@ -164,20 +164,20 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
 
   // Setup goal pose subscriber
   auto goalPoseQos = rclcpp::QoS(rclcpp::KeepLast(10)).reliable();
-  this->goalPoseSub = this->create_subscription<geometry_msgs::msg::PoseStamped>("pfield/planning_goal_pose",
+  this->goalPoseSub = this->create_subscription<geometry_msgs::msg::Pose>("pfield/planning_goal_pose",
     goalPoseQos,
-    [this](const geometry_msgs::msg::PoseStamped::SharedPtr msg) {
+    [this](const geometry_msgs::msg::Pose::SharedPtr msg) {
     const pfield::SpatialVector goalPose(
       Eigen::Vector3d(
-        msg->pose.position.x,
-        msg->pose.position.y,
-        msg->pose.position.z
+        msg->position.x,
+        msg->position.y,
+        msg->position.z
       ),
       Eigen::Quaterniond(
-        msg->pose.orientation.w,
-        msg->pose.orientation.x,
-        msg->pose.orientation.y,
-        msg->pose.orientation.z
+        msg->orientation.w,
+        msg->orientation.x,
+        msg->orientation.y,
+        msg->orientation.z
       )
     );
     this->pField->setGoalPose(goalPose);
@@ -367,36 +367,36 @@ void PotentialFieldManager::handleComputeAutonomyVector(
 void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr request, PlanPath::Response::SharedPtr response) {
   RCLCPP_INFO(this->get_logger(),
     "PlanPath request: start=(%.3f, %.3f, %.3f) goal=(%.3f, %.3f, %.3f) delta_time=%.4f goal_tolerance=%.6f max_steps=%d",
-    request->start.pose.position.x, request->start.pose.position.y, request->start.pose.position.z,
-    request->goal.pose.position.x, request->goal.pose.position.y, request->goal.pose.position.z,
+    request->start.position.x, request->start.position.y, request->start.position.z,
+    request->goal.position.x, request->goal.position.y, request->goal.position.z,
     request->delta_time, request->goal_tolerance, request->max_iterations
   );
   // Create SpatialVector for start pose
   auto startSV = pfield::SpatialVector(
     Eigen::Vector3d(
-      request->start.pose.position.x,
-      request->start.pose.position.y,
-      request->start.pose.position.z
+      request->start.position.x,
+      request->start.position.y,
+      request->start.position.z
     ),
     Eigen::Quaterniond(
-      request->start.pose.orientation.w,
-      request->start.pose.orientation.x,
-      request->start.pose.orientation.y,
-      request->start.pose.orientation.z
+      request->start.orientation.w,
+      request->start.orientation.x,
+      request->start.orientation.y,
+      request->start.orientation.z
     )
   );
   // Update the PF goal pose from the request
   auto goalSV = pfield::SpatialVector(
     Eigen::Vector3d(
-      request->goal.pose.position.x,
-      request->goal.pose.position.y,
-      request->goal.pose.position.z
+      request->goal.position.x,
+      request->goal.position.y,
+      request->goal.position.z
     ),
     Eigen::Quaterniond(
-      request->goal.pose.orientation.w,
-      request->goal.pose.orientation.x,
-      request->goal.pose.orientation.y,
-      request->goal.pose.orientation.z
+      request->goal.orientation.w,
+      request->goal.orientation.x,
+      request->goal.orientation.y,
+      request->goal.orientation.z
     )
   );
   this->pField->setGoalPose(goalSV);
