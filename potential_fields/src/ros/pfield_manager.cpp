@@ -91,7 +91,30 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
     this->influenceDistance
   );
   this->pField->enableDynamicQuadraticThreshold(false);
-  this->pField->setDefaultQuadraticThreshold(0.05);
+  this->pField->setDefaultQuadraticThreshold(5.0);
+
+  // Display PF Parameters
+  RCLCPP_INFO(this->get_logger(),
+    "PF Parameters:\n"
+    "\tAttractive Gain: %.3f [Ns/m]\n"
+    "\tRotational Attractive Gain: %.3f [Ns·m/rad]\n"
+    "\tRepulsive Gain: %.3f [Ns/m]\n"
+    "\tMax Linear Velocity: %.3f [m/s]\n"
+    "\tMax Angular Velocity: %.3f [rad/s]\n"
+    "\tMax Linear Acceleration: %.3f [m/s^2]\n"
+    "\tMax Angular Acceleration: %.3f [rad/s^2]\n"
+    "\tInfluence Distance: %.3f [m]\n"
+    "\tQuadratic Threshold: %.3f [m]\n",
+    this->attractiveGain,
+    this->rotationalAttractiveGain,
+    this->repulsiveGain,
+    this->maxLinearVelocity,
+    this->maxAngularVelocity,
+    this->maxLinearAcceleration,
+    this->maxAngularAcceleration,
+    this->influenceDistance,
+    this->pField->getQuadraticThreshold()
+  );
 
   // Initialize the motion plugin
   std::transform(
