@@ -81,6 +81,8 @@ namespace pfield {
     unsigned int numPoints; // The number of points in the planned path, should be equal across all vectors
     double duration; // Total duration of the path [s]
     double dt; // Time difference between consecutive points [s]
+    double goalTolerance; // The goal tolerance used during planning [m]
+    double rotationalTolerance; // The rotational goal tolerance used during planning [rad]
     bool success = false; // Whether the path planning was successful
     std::string planningMethod; // Either "task_space" or "whole_body_velocity"
     std::string failureReason; // A description of why planning failed, if applicable

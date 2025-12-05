@@ -23,10 +23,52 @@ def get_latest_csv_file() -> Path:
     return latest_file
 
 
-def create_plots_with_kinematics(df: pd.DataFrame) -> None:
+def parse_csv_header(file_path: Path) -> dict:
+    """
+    Parses the commented-out header of the planned path CSV file.
+    """
+    header_data = {}
+    with open(file_path, 'r') as f:
+        for line in f:
+            if not line.startswith('#'):
+                break
+
+            line = line.strip('# ').strip()
+
+            try:
+                key, value = line.split(':', 1)
+                key = key.strip()
+                value = value.strip()
+
+                # A simple parser to convert strings to lists of floats or single floats
+                if '[' in value and ']' in value:
+                    # It's a list (e.g., a vector or quaternion)
+                    parsed_value = [float(x)
+                                    for x in value.strip('[]').split(',')]
+                else:
+                    # It's a scalar
+                    parsed_value = float(value)
+
+                if key == "Goal Position":
+                    header_data['goal_pos'] = np.array(parsed_value)
+                elif key == "Goal Orientation":
+                    header_data['goal_q'] = np.array(parsed_value)
+                elif key == "Goal Tolerance":
+                    header_data['goal_tolerance_m'] = parsed_value
+                elif key == "Angular Tolerance":
+                    header_data['angular_tolerance_rad'] = parsed_value
+                elif key == "Num Joints":
+                    header_data['num_joints'] = int(parsed_value)
+
+            except (ValueError, IndexError):
+                # Ignore lines that don't fit the key: value pattern
+                continue
+
+    return header_data
+
+
+def create_plots_with_kinematics(df: pd.DataFrame, header_data: dict) -> None:
     # Build result dict expected by plot_kinematics
-    # new headers:
-    # time_s,pos_x_m,pos_y_m,pos_z_m,q_x,q_y,q_z,q_w,vel_x_m_s,vel_y_m_s,vel_z_m_s,ang_vel_x_rad_s,ang_vel_y_rad_s,ang_vel_z_rad_s,min_obstacle_clearance_m,num_joints,joint_1_rad,joint_2_rad,joint_3_rad,joint_4_rad,joint_5_rad,joint_6_rad,joint_7_rad,joint_vel_1_rad_s,joint_vel_2_rad_s,joint_vel_3_rad_s,joint_vel_4_rad_s,joint_vel_5_rad_s,joint_vel_6_rad_s,joint_vel_7_rad_s
     res = {
         "t": np.asarray(df['time_s'], dtype=float),
         "x": np.asarray(df['pos_x_m'], dtype=float),
@@ -35,49 +77,40 @@ def create_plots_with_kinematics(df: pd.DataFrame) -> None:
         "vx": np.asarray(df['vel_x_m_s'], dtype=float),
         "vy": np.asarray(df['vel_y_m_s'], dtype=float),
         "vz": np.asarray(df['vel_z_m_s'], dtype=float),
+        "ee_qx": np.asarray(df['q_x'], dtype=float),
+        "ee_qy": np.asarray(df['q_y'], dtype=float),
+        "ee_qz": np.asarray(df['q_z'], dtype=float),
+        "ee_qw": np.asarray(df['q_w'], dtype=float),
+        "wx": np.asarray(df['ang_vel_x_rad_s'], dtype=float),
+        "wy": np.asarray(df['ang_vel_y_rad_s'], dtype=float),
+        "wz": np.asarray(df['ang_vel_z_rad_s'], dtype=float),
+        "min_clearance_m": np.asarray(df['min_obstacle_clearance_m'], dtype=float),
+        # Static data from header
+        "goal_pos": header_data.get('goal_pos'),
+        "goal_q": header_data.get('goal_q'),
+        "goal_tolerance_m": header_data.get('goal_tolerance_m'),
+        "angular_tolerance_rad": header_data.get('angular_tolerance_rad'),
     }
-    # Include orientation quaternions if available for angle_to_goal computation
-    if {'q_x', 'q_y', 'q_z', 'q_w'}.issubset(df.columns):
-        res["ee_qx"] = np.asarray(df['q_x'], dtype=float)
-        res["ee_qy"] = np.asarray(df['q_y'], dtype=float)
-        res["ee_qz"] = np.asarray(df['q_z'], dtype=float)
-        res["ee_qw"] = np.asarray(df['q_w'], dtype=float)
-    # Optional angular velocities and clearance
-    if {'ang_vel_x_rad_s', 'ang_vel_y_rad_s', 'ang_vel_z_rad_s'}.issubset(df.columns):
-        res["wx"] = np.asarray(df['ang_vel_x_rad_s'], dtype=float)
-        res["wy"] = np.asarray(df['ang_vel_y_rad_s'], dtype=float)
-        res["wz"] = np.asarray(df['ang_vel_z_rad_s'], dtype=float)
-    if 'min_obstacle_clearance_m' in df.columns:
-        res["min_clearance_m"] = np.asarray(
-            df['min_obstacle_clearance_m'], dtype=float)
-
     # Extract joint data if available
-    if 'num_joints' in df.columns:
+    if 'num_joints' in header_data:
         try:
-            n_joints = int(df['num_joints'].iloc[0])
+            n_joints = header_data['num_joints']
             # Construct column names
             j_pos_keys = [f'joint_{i+1}_rad' for i in range(n_joints)]
             j_vel_keys = [f'joint_vel_{i+1}_rad_s' for i in range(n_joints)]
 
-            if all(k in df.columns for k in j_pos_keys):
+            # The header row might have an empty column name, which pandas reads as Unnamed: X
+            # We filter those out.
+            valid_columns = [
+                col for col in df.columns if 'unnamed' not in col.lower()]
+
+            if all(k in valid_columns for k in j_pos_keys):
                 res["joint_positions"] = df[j_pos_keys].to_numpy(dtype=float)
 
-            if all(k in df.columns for k in j_vel_keys):
+            if all(k in valid_columns for k in j_vel_keys):
                 res["joint_velocities"] = df[j_vel_keys].to_numpy(dtype=float)
         except Exception as e:
             print(f"Warning: Could not extract joint data: {e}")
-
-    # Infer goal as the final EE position (assumption for planned path CSV)
-    goal = (float(df['pos_x_m'].iloc[-1]),
-            float(df['pos_y_m'].iloc[-1]),
-            float(df['pos_z_m'].iloc[-1]))
-    goal_orientation = (float(df['q_x'].iloc[-1]),
-                        float(df['q_y'].iloc[-1]),
-                        float(df['q_z'].iloc[-1]),
-                        float(df['q_w'].iloc[-1]))
-    # Convert quaternion to Euler angles (roll, pitch, yaw) for goal_orientation
-    quat = scipy.spatial.transform.Rotation.from_quat(goal_orientation)
-    goal_euler = quat.as_euler('xyz', degrees=False)
 
     # Save outputs under data/ with a consistent base name
     save_base = DATA_DIR / 'planned_path'
@@ -86,9 +119,7 @@ def create_plots_with_kinematics(df: pd.DataFrame) -> None:
         res=res,
         show=False,
         save_path=str(save_base),
-        description='Xarm 7-DoF Demo',
-        goal=goal,
-        goal_orientation=goal_euler
+        description='Xarm 7-DoF Demo'
     )
 
 
@@ -96,5 +127,11 @@ if __name__ == "__main__":
     DATA_DIR.mkdir(parents=True, exist_ok=True)
     csv_file = get_latest_csv_file()
     print(f"Reading data from {csv_file}")
-    df = pd.read_csv(csv_file)
-    create_plots_with_kinematics(df)
+
+    # Parse static data from the header
+    header_data = parse_csv_header(csv_file)
+
+    # Read the time-series data, skipping the header comments
+    df = pd.read_csv(csv_file, comment='#')
+
+    create_plots_with_kinematics(df, header_data)

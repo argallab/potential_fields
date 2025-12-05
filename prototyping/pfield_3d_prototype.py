@@ -5,6 +5,7 @@ from dataclasses import dataclass
 import matplotlib.pyplot as plt
 from typing import List, Tuple, Dict, Any
 from matplotlib import animation
+import scipy
 
 
 def _is_positive_finite(v: float) -> bool:
@@ -720,13 +721,7 @@ def plot_kinematics(title: str,
                     res: Dict[str, Any],
                     show: bool = True,
                     save_path: str | None = None,
-                    description: str = "",
-                    goal: Tuple[float, float,
-                                float] | np.ndarray | None = None,
-                    goal_orientation: Tuple[float, float,
-                                            float] | np.ndarray | None = None,
-                    goal_tolerance: float = 0.05,
-                    goal_orientation_tolerance: float = 0.1):
+                    description: str = ""):
     """
     Args:
         title: plot title
@@ -734,11 +729,6 @@ def plot_kinematics(title: str,
         show: whether to display the plot interactively
         save_path: optional path to save the plot image (e.g., PNG)
         description: optional text description to include below the title
-        goal: optional goal position (x,y,z) to plot distance-to-goal
-        goal_orientation: optional goal orientation (roll,pitch,yaw) in radians
-        goal_tolerance: position tolerance for goal reached [m]
-        goal_orientation_tolerance: orientation tolerance for goal reached [rad]
-
 
     Plot a 4x2 grid of time-series:
       (row 1, col 1) position components (x,y,z) + dashed |p|
@@ -829,78 +819,89 @@ def plot_kinematics(title: str,
 
     # Row 1, Col 2: Distance to goal (if provided) else |p|
     ax12 = axes[0, 1]
-    if goal is not None:
-        g = np.asarray(goal, dtype=float).reshape(3,)
+    goal_pos = res.get('goal_pos')
+    if goal_pos is not None and goal_pos.size > 0:
+        g = np.asarray(goal_pos, dtype=float).reshape(3,)
         d_goal = np.sqrt((x - g[0])**2 + (y - g[1])**2 + (z - g[2])**2)
-        line_d, = ax12.plot(t, d_goal, color='C3', label='‖p - goal‖')
+        line_d, = ax12.plot(t, d_goal, color='C3', label='Dist→Goal')
         ax12.set_ylabel('Dist→Goal [m]')
-        # Add vertical dashed line when distance first satisfies tolerance
-        try:
-            mask_pos = d_goal <= float(goal_tolerance)
-            if np.any(mask_pos):
-                idx_pos = int(np.argmax(mask_pos))  # first True index
-                t_pos = float(t[idx_pos])
-                ax12.axvline(t_pos, color='C3', linestyle='--', alpha=0.6,
-                             label=f'pos tol ≤ {goal_tolerance:g}')
-        except Exception:
-            pass
-        # Optional angle_to_goal overlay if goal_orientation and quaternions are available
-        if goal_orientation is not None and has_quat_series:
-            # Convert goal_orientation to quaternion if needed (expects XYZ roll,pitch,yaw)
-            go = np.asarray(goal_orientation, dtype=float).reshape(-1)
-            if go.size == 3:
-                cr, sr = math.cos(go[0]*0.5), math.sin(go[0]*0.5)
-                cp, sp = math.cos(go[1]*0.5), math.sin(go[1]*0.5)
-                cy, sy = math.cos(go[2]*0.5), math.sin(go[2]*0.5)
-                # XYZ intrinsic rotations
-                qw_g = cr*cp*cy - sr*sp*sy
-                qx_g = sr*cp*cy + cr*sp*sy
-                qy_g = cr*sp*cy - sr*cp*sy
-                qz_g = cr*cp*sy + sr*sp*cy
-            elif go.size == 4:
-                qx_g, qy_g, qz_g, qw_g = float(go[0]), float(
-                    go[1]), float(go[2]), float(go[3])
-            else:
-                qx_g = qy_g = qz_g = 0.0
-                qw_g = 1.0
-            # Normalize goal quaternion
-            norm_g = math.sqrt(qx_g*qx_g + qy_g*qy_g + qz_g*qz_g + qw_g*qw_g)
-            if norm_g > 0:
-                qx_g, qy_g, qz_g, qw_g = qx_g/norm_g, qy_g/norm_g, qz_g/norm_g, qw_g/norm_g
 
-            # Angle between q_curr and q_goal: theta = 2*atan2(||vec(qe)||, |w(qe)|), qe = q_goal*^{-1} ⊗ q_curr
-            # q_goal^{-1} = conjugate for unit quaternion
-            # Quaternion multiply (a,b)⊗(c,d): (w1,x1,y1,z1)*(w2,x2,y2,z2)
-            # qe_w =  qw_g*qw + (-qx_g)*qx + (-qy_g)*qy + (-qz_g)*qz
-            # qe_x =  qw_g*qx - qx_g*qw - qy_g*qz + qz_g*qy
-            # qe_y =  qw_g*qy + qx_g*qz - qy_g*qw - qz_g*qx
-            # qe_z =  qw_g*qz - qx_g*qy + qy_g*qx - qz_g*qw
-            qe_w = qw_g*qw + (-qx_g)*qx + (-qy_g)*qy + (-qz_g)*qz
-            qe_x = qw_g*qx - qx_g*qw - qy_g*qz + qz_g*qy
-            qe_y = qw_g*qy + qx_g*qz - qy_g*qw - qz_g*qx
-            qe_z = qw_g*qz - qx_g*qy + qy_g*qx - qz_g*qw
-            vec_norm = np.sqrt(qe_x*qe_x + qe_y*qe_y + qe_z*qe_z)
-            angle_to_goal = 2.0*np.arctan2(vec_norm, np.abs(qe_w))
-            ax12b = ax12.twinx()
-            line_a, = ax12b.plot(t, angle_to_goal, color='C4',
-                                 label='angle_to_goal [rad]')
-            ax12b.set_ylabel('Angle→Goal [rad]')
-            # Add vertical dashed line when angular distance first satisfies tolerance
-            try:
-                mask_ang = angle_to_goal <= float(goal_orientation_tolerance)
-                if np.any(mask_ang):
-                    idx_ang = int(np.argmax(mask_ang))
-                    t_ang = float(t[idx_ang])
-                    ax12b.axvline(t_ang, color='C4', linestyle='--', alpha=0.6,
-                                  label=f'ang tol ≤ {goal_orientation_tolerance:g}')
-            except Exception:
-                pass
-            # Merge legends
-            h1, l1 = ax12.get_legend_handles_labels()
-            h2, l2 = ax12b.get_legend_handles_labels()
-            ax12.legend(h1+h2, l1+l2, loc='best', fontsize=9)
-        else:
+        pos_tol = res.get('goal_tolerance_m')
+        if pos_tol is not None:
+            ax12.axhline(y=pos_tol, color=line_d.get_color(),
+                         linestyle='--', linewidth=1.2, label='Pos. Tolerance')
+
+        # Initialize angular distance array
+        angle_to_goal = np.zeros_like(d_goal)
+        goal_q = res.get("goal_q")
+        if has_quat_series and goal_q is not None and goal_q.size > 0:
+            # Create Rotation objects from the time series of quaternions
+            path_quats = scipy.spatial.transform.Rotation.from_quat(
+                np.vstack([qx, qy, qz, qw]).T
+            )
+            goal_quat_rot = scipy.spatial.transform.Rotation.from_quat(goal_q)
+            # Compute angular distance for each point in the path
+            # The magnitude of the rotation vector of the relative rotation is the angle
+            angle_to_goal = (path_quats.inv() * goal_quat_rot).as_rotvec()
+            angle_to_goal = np.linalg.norm(angle_to_goal, axis=1)
+
+            # Plot angular distance on a secondary y-axis
+            ax12_twin = ax12.twinx()
+            line_a, = ax12_twin.plot(
+                t, angle_to_goal, color='C4', linestyle='-', label='Angle→Goal')
+            ax12_twin.set_ylabel('Angle→Goal [rad]', color='C4')
+            ax12_twin.tick_params(axis='y', labelcolor='C4')
+
+            ang_tol = res.get('angular_tolerance_rad')
+            if ang_tol is not None:
+                ax12_twin.axhline(y=ang_tol, color=line_a.get_color(
+                ), linestyle=':', linewidth=1.2, label='Ang. Tolerance')
+
+            # Combine legends from both y-axes
+            lines = [line_d, line_a]
+            # Add the tolerance lines to the legend
+            lines.extend([l for l in ax12.get_lines()
+                         if l.get_linestyle() == '--'])
+            lines.extend([l for l in ax12_twin.get_lines()
+                         if l.get_linestyle() == ':'])
+            ax12.legend(lines, [l.get_label()
+                        for l in lines], loc='upper right', fontsize=9)
+
+        # Find the first index where BOTH translational and rotational tolerances are met
+        pos_tol = res.get("goal_tolerance_m")
+        ang_tol = res.get("angular_tolerance_rad")
+
+        if pos_tol is not None and ang_tol is not None:
+            pos_ok = d_goal <= pos_tol
+            rot_ok = angle_to_goal <= ang_tol
+            both_ok = np.logical_and(pos_ok, rot_ok)
+
+            if np.any(both_ok):
+                first_converged_idx = np.where(both_ok)[0][0]
+                ax12.axvline(t[first_converged_idx], color='C2', linestyle='--',
+                             linewidth=1.5, label=f"Converged at t={t[first_converged_idx]:.2f}s")
+                # Update the main legend to include the convergence line
+                lines.append(ax12.get_lines()[-1])  # Add the axvline
+                ax12.legend(lines, [l.get_label()
+                            for l in lines], loc='upper right', fontsize=9)
+            else:
+                # If convergence was never met, add text to the plot
+                messages = []
+                if not np.any(pos_ok):
+                    messages.append("Position Tolerance not met")
+                if not np.any(rot_ok):
+                    messages.append("Angular Tolerance not met")
+
+                if messages:
+                    message_text = "\n".join(messages)
+                    ax12.text(0.95, 0.05, message_text,
+                              transform=ax12.transAxes,
+                              fontsize=9, color='red',
+                              ha='right', va='bottom',
+                              bbox=dict(boxstyle='round,pad=0.3', fc='white', ec='red', alpha=0.8))
+        elif 'ax12_twin' not in locals():
             ax12.legend(loc='best', fontsize=9)
+
     else:
         ax12.plot(t, pos_mag, color='C7', label='|p|')
         ax12.set_ylabel('|p| [m]')

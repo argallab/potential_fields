@@ -755,6 +755,8 @@ namespace pfield {
     // Create path and initialize loop variables
     PlannedPath path;
     path.planningMethod = "task_space";
+    path.goalTolerance = goalTolerance;
+    path.rotationalTolerance = this->rotationalThreshold;
     const double stepDt = (dt > 0.0) ? dt : 0.1;
     SpatialVector current = startPose;
     std::vector<double> jointAngles = startJointAngles;
@@ -814,6 +816,8 @@ namespace pfield {
     // Create path and initialize loop variables
     PlannedPath path;
     path.planningMethod = "whole_body_velocity";
+    path.goalTolerance = goalTolerance;
+    path.rotationalTolerance = this->rotationalThreshold;
     const double stepDt = (dt > 0.0) ? dt : 0.1;
     double timeStamp = 0.0;
     // Set up stagnation and position tolerance counters/limits
@@ -979,6 +983,12 @@ namespace pfield {
   }
 
   bool PotentialField::createPlannedPathCSV(const PlannedPath& path, const std::string& filePath) const {
+    // Open file for writing first to ensure it's accessible
+    std::ofstream csvFile(filePath);
+    if (!csvFile.is_open()) {
+      return false;
+    }
+
     // Creates a CSV file from the given PlannedPath with the following
     const unsigned int numJoints = (path.numPoints > 0) ? static_cast<unsigned int>(path.jointAngles[0].size()) : 0;
     auto jointPositionHeaders = [numJoints]() -> std::string {
@@ -1015,27 +1025,28 @@ namespace pfield {
       "vel_x_m_s,vel_y_m_s,vel_z_m_s,"
       "ang_vel_x_rad_s,ang_vel_y_rad_s,ang_vel_z_rad_s,"
       "min_obstacle_clearance_m,"
-      "num_joints"
       + jointPositionHeaders() + jointVelocityHeaders();
 
-    // Open file for writing
-    std::ofstream csvFile(filePath);
-    if (!csvFile.is_open()) {
-      return false;
-    }
+    // Write metadata as commented header lines
+    const Eigen::Vector3d goalPosition = this->goalPose.getPosition();
+    const Eigen::Quaterniond goalOrientation = this->goalPose.getOrientation();
+    csvFile << "# Goal Position: [" << goalPosition.x() << ", " << goalPosition.y() << ", " << goalPosition.z() << "]\n";
+    csvFile << "# Goal Orientation: [" << goalOrientation.x() << ", " << goalOrientation.y() << ", " << goalOrientation.z() << ", " << goalOrientation.w() << "]\n";
+    csvFile << "# Goal Tolerance: " << path.goalTolerance << "\n";
+    csvFile << "# Angular Tolerance: " << path.rotationalTolerance << "\n";
+    csvFile << "# Num Joints: " << numJoints << "\n";
 
     // Write header
     csvFile << header << "\n";
 
     // Write data rows
     for (unsigned int i = 0; i < path.numPoints; ++i) {
+      // Compute everything we need for writing before writing the next row
       const SpatialVector& pose = path.poses[i];
       const TaskSpaceTwist& twist = path.twists[i];
       const double timeStamp = path.timeStamps[i];
       const Eigen::Vector3d position = pose.getPosition();
       const Eigen::Quaterniond orientation = pose.getOrientation();
-
-      // Compute minimum obstacle clearance at this point
       const double minClearance = this->minObstacleClearanceAt(position);
 
       // Write: time
@@ -1058,9 +1069,6 @@ namespace pfield {
 
       // Write: minimum obstacle clearance
       csvFile << minClearance << ",";
-
-      // Write: number of joints
-      csvFile << numJoints << ",";
 
       // Write: joint angles
       if (i < path.jointAngles.size()) {

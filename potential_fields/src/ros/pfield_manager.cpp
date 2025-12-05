@@ -91,7 +91,7 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
     this->influenceDistance
   );
   this->pField->enableDynamicQuadraticThreshold(false);
-  this->pField->setDefaultQuadraticThreshold(0.001);
+  this->pField->setDefaultQuadraticThreshold(0.05);
 
   // Initialize the motion plugin
   std::transform(
