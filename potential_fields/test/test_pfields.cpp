@@ -735,7 +735,7 @@ TEST(PotentialFieldDynamicThresholdTest, NoObstaclesBaselinePlusStopping) {
   // With no obstacles, d* = baseline + 0.5 * stoppingDistance, clamped to [dMin, influenceDistance]
   pfield::PotentialField pf; // defaults: vmax=5, amax=1, baseline ~ 1.0, influence=1.0
   pf.setInfluenceDistance(10.0); // widen clamp upper bound so stopping distance affects result
-  pf.setDynamicQuadraticThreshold(true);
+  pf.enableDynamicQuadraticThreshold(true);
   // We must set a goal, otherwise computeDynamicQuadraticThreshold returns baseline immediately
   pf.setGoalPose(pfield::SpatialVector(Eigen::Vector3d(10.0, 0.0, 0.0), Eigen::Quaterniond::Identity()));
 
@@ -754,7 +754,7 @@ TEST(PotentialFieldDynamicThresholdTest, ClampedByInfluenceInClutter) {
   pfield::SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
   pfield::PotentialField pf(goal, 1.0, 0.0, 0.0);
   pf.setInfluenceDistance(3.0); // small influence to exercise clamping
-  pf.setDynamicQuadraticThreshold(true);
+  pf.enableDynamicQuadraticThreshold(true);
   // Obstacle centered at goal
   pf.addObstacle(pfield::PotentialFieldObstacle(
     "clutter",
