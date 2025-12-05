@@ -77,6 +77,7 @@ namespace pfield {
     std::vector<TaskSpaceTwist> twists; // End-effector velocity
     std::vector<std::vector<double>> jointAngles; // Joint angles for each point in the path [rad]
     std::vector<std::vector<double>> jointVelocities; // Joint velocities for each point in the path [rad/s]
+    std::vector<std::vector<double>> jointTorques; // Joint torques for each point in the path [Nm]
     unsigned int numPoints; // The number of points in the planned path, should be equal across all vectors
     double duration; // Total duration of the path [s]
     double dt; // Time difference between consecutive points [s]
@@ -94,36 +95,46 @@ namespace pfield {
      * @param twist The EE twist at the path point
      * @param jointAngles The joint angles at the path point [rad]
      */
-    void recordPathPoint(double timeStamp, const SpatialVector& pose, const TaskSpaceTwist& twist,
-      std::vector<double> jointAngles) {
+    void recordPathPoint(
+      double timeStamp, const SpatialVector& pose, const TaskSpaceTwist& twist,
+      std::vector<double> jointAngles, std::vector<double> jointVelocities = {}, std::vector<double> jointTorques = {}) {
       this->poses.push_back(pose);
       this->twists.push_back(twist);
       this->jointAngles.push_back(jointAngles);
       this->timeStamps.push_back(timeStamp);
       this->numPoints = static_cast<unsigned int>(this->poses.size());
-      if (numPoints == 1) {
-        this->dt = 0.0;
-        this->duration = 0.0;
-        this->jointVelocities.clear();
-        // Joint Velocity at first point is zero
-        this->jointVelocities.resize(jointAngles.size(), std::vector<double>(jointAngles.size(), 0.0));
-        this->jointVelocities.push_back(std::vector<double>(jointAngles.size(), 0.0));
+      if (!jointTorques.empty()) {
+        this->jointTorques.push_back(jointTorques);
       }
-      else if (this->numPoints > 1) {
-        this->dt = this->timeStamps.back() - this->timeStamps[this->numPoints - 2];
-        this->duration = this->timeStamps.back() - this->timeStamps.front();
-        // Add an estimation of joint velocities
-        const double dtSec = this->dt > 0.0 ? this->dt : 1.0;
-        const size_t numJoints = this->jointAngles.back().size();
-        std::vector<double> velocities(numJoints, 0.0);
-        for (size_t j = 0; j < numJoints; ++j) {
-          velocities[j] = (this->jointAngles.back()[j] - this->jointAngles[this->numPoints - 2][j]) / dtSec;
-        }
-        this->jointVelocities.push_back(velocities);
+      if (!jointVelocities.empty()) {
+        this->jointVelocities.push_back(jointVelocities);
       }
       else {
-        this->dt = 0.0;
-        this->duration = 0.0;
+        // Estimate joint velocities if not provided from previous point
+        if (numPoints == 1) {
+          this->dt = 0.0;
+          this->duration = 0.0;
+          this->jointVelocities.clear();
+          // Joint Velocity at first point is zero
+          this->jointVelocities.resize(jointAngles.size(), std::vector<double>(jointAngles.size(), 0.0));
+          this->jointVelocities.push_back(std::vector<double>(jointAngles.size(), 0.0));
+        }
+        else if (this->numPoints > 1) {
+          this->dt = this->timeStamps.back() - this->timeStamps[this->numPoints - 2];
+          this->duration = this->timeStamps.back() - this->timeStamps.front();
+          // Add an estimation of joint velocities
+          const double dtSec = this->dt > 0.0 ? this->dt : 1.0;
+          const size_t numJoints = this->jointAngles.back().size();
+          std::vector<double> velocities(numJoints, 0.0);
+          for (size_t j = 0; j < numJoints; ++j) {
+            velocities[j] = (this->jointAngles.back()[j] - this->jointAngles[this->numPoints - 2][j]) / dtSec;
+          }
+          this->jointVelocities.push_back(velocities);
+        }
+        else {
+          this->dt = 0.0;
+          this->duration = 0.0;
+        }
       }
     }
   };
@@ -430,7 +441,7 @@ namespace pfield {
      * @param dt The time step over which to integrate acceleration [s]
      * @return Eigen::VectorXd The resulting whole-body joint velocities [rad/s]
      */
-    Eigen::VectorXd evaluateWholeBodyJointVelocitiesAtConfiguration(
+    Eigen::VectorXd evaluateWholeBodyJointTorquesAtConfiguration(
       const std::vector<double>& jointAngles, const std::vector<double>& prevJointVelocities,
       const SpatialVector& eePose, const double dt);
 
@@ -570,7 +581,7 @@ namespace pfield {
 
     Eigen::VectorXd convertJointTorquesToJointVelocities(
       const Eigen::VectorXd& jointTorques, const std::vector<double>& jointAngles,
-      const std::vector<double>& currentJointVelocities, const double dt) const;
+      const std::vector<double>& prevJointVelocities, const double dt) const;
 
 
     /**
