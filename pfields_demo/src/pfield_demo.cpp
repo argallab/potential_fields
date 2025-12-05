@@ -22,7 +22,7 @@ PFDemo::PFDemo() : Node("pfield_demo") {
   this->fixedFrame = this->get_parameter("fixed_frame").as_string();
   this->eeLinkName = this->get_parameter("ee_link_name").as_string();
 
-  this->goalPosePub = this->create_publisher<geometry_msgs::msg::PoseStamped>("pfield/planning_goal_pose", 10);
+  this->goalPosePub = this->create_publisher<geometry_msgs::msg::Pose>("pfield/planning_goal_pose", 10);
   this->queryPosePub = this->create_publisher<geometry_msgs::msg::Pose>("pfield/query_pose", 10);
 
   // Wait for the service to be available
@@ -59,21 +59,19 @@ void PFDemo::handleRunPlanPathDemo(
   // Create a request for the plan_path service
   auto pathPlanRequest = std::make_shared<PlanPath::Request>();
   // Define start and goal poses
-  geometry_msgs::msg::PoseStamped startPose;
-  startPose.header.stamp = this->now();
-  startPose.header.frame_id = this->fixedFrame;
-  startPose.pose = this->getEndEffectorPose();
-  if (startPose.pose.position.x == 0.0 &&
-    startPose.pose.position.y == 0.0 &&
-    startPose.pose.position.z == 0.0) {
+  geometry_msgs::msg::Pose startPose;
+  startPose = this->getEndEffectorPose();
+  if (startPose.position.x == 0.0 &&
+    startPose.position.y == 0.0 &&
+    startPose.position.z == 0.0) {
     RCLCPP_ERROR(this->get_logger(), "Failed to get current end-effector pose. Using default");
-    startPose.pose.position.x = 0.227;
-    startPose.pose.position.y = 0.00;
-    startPose.pose.position.z = 0.2935;
-    startPose.pose.orientation.x = 0.70709;
-    startPose.pose.orientation.y = 9.8864e-05;
-    startPose.pose.orientation.z = 0.70712;
-    startPose.pose.orientation.w = -2.1146e-05;
+    startPose.position.x = 0.227;
+    startPose.position.y = 0.00;
+    startPose.position.z = 0.2935;
+    startPose.orientation.x = 0.70709;
+    startPose.orientation.y = 9.8864e-05;
+    startPose.orientation.z = 0.70712;
+    startPose.orientation.w = -2.1146e-05;
   }
   // Use Eigen to build quaternion from Euler angles (roll, pitch, yaw)
   // Eigen::AngleAxisd roll_ang(0.0, Eigen::Vector3d::UnitX());
@@ -82,22 +80,20 @@ void PFDemo::handleRunPlanPathDemo(
   // Compose as R = Rz(yaw) * Ry(pitch) * Rx(roll)
   // Eigen::Quaterniond q = roll_ang * pitch_ang * yaw_ang;
   // Eigen::Quaterniond q = Eigen::Quaterniond::Identity();
-  // startPose.pose.orientation.w = q.w();
-  // startPose.pose.orientation.x = q.x();
-  // startPose.pose.orientation.y = q.y();
-  // startPose.pose.orientation.z = q.z();
+  // startPose.orientation.w = q.w();
+  // startPose.orientation.x = q.x();
+  // startPose.orientation.y = q.y();
+  // startPose.orientation.z = q.z();
 
-  geometry_msgs::msg::PoseStamped goalPose;
-  goalPose.header.stamp = this->now();
-  goalPose.header.frame_id = this->fixedFrame;
-  // goalPose.pose = startPose.pose;
-  goalPose.pose.position.x = 0.42331;
-  goalPose.pose.position.y = 0.13272;
-  goalPose.pose.position.z = 0.52843;
-  goalPose.pose.orientation.x = 0.70709;
-  goalPose.pose.orientation.y = 9.8864e-05;
-  goalPose.pose.orientation.z = 0.70712;
-  goalPose.pose.orientation.w = -2.1146e-05;
+  geometry_msgs::msg::Pose goalPose;
+  // goalPose = startPose;
+  goalPose.position.x = 0.42331;
+  goalPose.position.y = 0.13272;
+  goalPose.position.z = 0.52843;
+  goalPose.orientation.x = 0.70709;
+  goalPose.orientation.y = 9.8864e-05;
+  goalPose.orientation.z = 0.70712;
+  goalPose.orientation.w = -2.1146e-05;
 
   pathPlanRequest->start = startPose;
   pathPlanRequest->starting_joint_angles = {0.0, 0.0, 0.0, 0.0, 0.0, -M_PI_2, 0.0};
@@ -105,11 +101,11 @@ void PFDemo::handleRunPlanPathDemo(
   pathPlanRequest->delta_time = 0.002; // 2 ms between waypoints
   pathPlanRequest->goal_tolerance = 0.01; // 10 mm tolerance
   pathPlanRequest->max_iterations = 25000; // Max iterations for planning
-  pathPlanRequest->planning_method = PlanPath::Request::PLANNING_METHOD_TASK_SPACE; // "task_space" or "whole_body"
+  pathPlanRequest->planning_method = PlanPath::Request::PLANNING_METHOD_WHOLE_BODY; // "task_space" or "whole_body"
   const double dt = pathPlanRequest->delta_time;
 
   // Publish the goal pose
-  this->queryPosePub->publish(startPose.pose);
+  this->queryPosePub->publish(startPose);
   // this->goalPosePub->publish(goalPose);
 
   RCLCPP_INFO(this->get_logger(), "Sending plan_path request (async)...");
@@ -146,6 +142,13 @@ void PFDemo::handlePlanPathResponse(rclcpp::Client<PlanPath>::SharedFuture futur
     const auto& lastEEVel = pathPlanResponse->end_effector_velocity_trajectory.back().twist.linear;
     RCLCPP_INFO(this->get_logger(), "First EE linear velocity: (%.6f, %.6f, %.6f)", firstEEVel.x, firstEEVel.y, firstEEVel.z);
     RCLCPP_INFO(this->get_logger(), "Last EE linear velocity: (%.6f, %.6f, %.6f)", lastEEVel.x, lastEEVel.y, lastEEVel.z);
+  }
+
+  if (pathPlanResponse->success) {
+    RCLCPP_INFO(this->get_logger(), "Planning succeeded");
+  }
+  else {
+    RCLCPP_ERROR(this->get_logger(), "Planning failed: %s", pathPlanResponse->error_message.c_str());
   }
 
   // Begin streaming EE velocity commands to follow the path
@@ -193,7 +196,7 @@ geometry_msgs::msg::Pose PFDemo::getEndEffectorPose() {
     return eePose;
   }
   catch (const tf2::TransformException& ex) {
-    RCLCPP_ERROR(this->get_logger(),
+    RCLCPP_WARN(this->get_logger(),
       "Failed to find TF (%s -> %s): %s", this->fixedFrame.c_str(), this->eeLinkName.c_str(), ex.what()
     );
     return geometry_msgs::msg::Pose();
