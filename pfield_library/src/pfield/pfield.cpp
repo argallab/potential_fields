@@ -258,7 +258,7 @@ namespace pfield {
     // --- Apply Joint Velocity/Acceleration Limits ---
     if (this->pfKinematics) {
       const auto& model = this->pfKinematics->getModel();
-      for (size_t i = 0; i < jointVelocities.size() && i < (size_t)model.velocityLimit.size(); ++i) {
+      for (int i = 0; i < jointVelocities.size() && i < model.velocityLimit.size(); ++i) {
         double limit = model.velocityLimit[i];
         // Pinocchio sometimes sets limits to infinity or very large values if undefined
         if (limit > 1e-3 && limit < 1e10) {
@@ -459,7 +459,7 @@ namespace pfield {
     const double magnitude = direction.norm();
     // The Choset attractive potential defines a threshold for switching to quadratic behavior from conical
     const double dStarThreshold = this->dynamicQuadraticThresholdEnabled ? this->computeDynamicQuadraticThreshold(queryPose)
-      : this->defaultDStarThreshold;
+      : this->dStarThreshold;
     if (magnitude <= dStarThreshold) {
       // Quadratic Attraction Region
       return -this->attractiveGain * direction;
@@ -502,7 +502,7 @@ namespace pfield {
 
   double PotentialField::computeDynamicQuadraticThreshold(const SpatialVector& queryPose) const {
     // Baseline from existing parameter
-    double baseline = this->defaultDStarThreshold;
+    double baseline = this->dStarThreshold;
     if (!this->isUsingDynamicQuadraticThreshold() || !this->goalSet) { return baseline; }
 
     // Clearance near goal and along straight-line path to goal
@@ -754,6 +754,7 @@ namespace pfield {
     const size_t maxIters) {
     // Create path and initialize loop variables
     PlannedPath path;
+    path.planningMethod = "task_space";
     const double stepDt = (dt > 0.0) ? dt : 0.1;
     SpatialVector current = startPose;
     std::vector<double> jointAngles = startJointAngles;
@@ -790,6 +791,10 @@ namespace pfield {
       timeStamp += stepDt;
     }
 
+    if (!path.success) {
+      path.failureReason = "Max iterations reached without converging to goal.";
+    }
+
     path.dt = stepDt;
     path.numPoints = static_cast<unsigned int>(path.poses.size());
     if (!path.timeStamps.empty()) {
@@ -802,13 +807,13 @@ namespace pfield {
   }
 
   PlannedPath PotentialField::planPathFromWholeBodyJointVelocities(
-    const SpatialVector& startPose,
     const std::vector<double>& startJointAngles,
     const double dt,
     const double goalTolerance,
     const size_t maxIters) {
     // Create path and initialize loop variables
     PlannedPath path;
+    path.planningMethod = "whole_body_velocity";
     const double stepDt = (dt > 0.0) ? dt : 0.1;
     double timeStamp = 0.0;
     // Set up stagnation and position tolerance counters/limits
@@ -820,13 +825,13 @@ namespace pfield {
     size_t positionToleranceCounter = 0;
     const double positionToleranceLimitSeconds = 2.0; // Stop if position is met for 2 seconds
     const size_t positionToleranceLimit = static_cast<size_t>(std::ceil(positionToleranceLimitSeconds / stepDt));
-    
+
     if (!this->pfKinematics) {
       // Cannot proceed without kinematics
       path.success = false;
+      path.failureReason = "Kinematics module not initialized.";
       return path;
     }
-    // TODO(Sharwin24): User should provide start pose and startJointAngles should be derived from kinematics
     // Compute initial end-effector pose from joint angles using forward kinematics
     std::vector<double> currentJointAngles = startJointAngles;
     SpatialVector currentEEPose = this->pfKinematics->computeEndEffectorPose(currentJointAngles, this->eeLinkName);
@@ -893,9 +898,10 @@ namespace pfield {
       }
 
       // --- 8. Check for collisions ---
-      if (this->isRobotInCollisionWithEnvironment(0.0)) {
+      if (this->isRobotInCollisionWithEnvironment(0.05)) {
         // Robot is in collision - path planning failed
         path.success = false;
+        path.failureReason = "Robot collided with environment.";
         break;
       }
 
@@ -911,6 +917,8 @@ namespace pfield {
         // Check if we are close enough to be considered successful?
         // For now, we rely on the strict check in step 7. If we are here, we haven't met the strict tolerance.
         // But we should stop planning to avoid waiting for maxIters.
+        path.failureReason = "Stagnation detected (local minimum or stuck).";
+        path.success = false;
         break;
       }
 
@@ -918,6 +926,10 @@ namespace pfield {
       currentJointAngles = nextJointAngles;
       currentEEPose = nextEEPose;
       timeStamp += stepDt;
+    }
+
+    if (!path.success && path.failureReason.empty()) {
+      path.failureReason = "Max iterations reached without converging to goal.";
     }
 
     // Finalize path metadata

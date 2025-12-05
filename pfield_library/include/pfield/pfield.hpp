@@ -81,6 +81,8 @@ namespace pfield {
     double duration; // Total duration of the path [s]
     double dt; // Time difference between consecutive points [s]
     bool success = false; // Whether the path planning was successful
+    std::string planningMethod; // Either "task_space" or "whole_body_velocity"
+    std::string failureReason; // A description of why planning failed, if applicable
 
     PlannedPath() : numPoints(0), duration(0.0), dt(0.0) {}
 
@@ -311,7 +313,8 @@ namespace pfield {
     void setGoalPose(SpatialVector newGoalPose) { this->goalPose = newGoalPose; this->goalSet = true; }
     void clearGoalPose() { this->goalSet = false; }
     void setIKSolver(std::shared_ptr<IKSolver> ikSolver) { this->ikSolver = ikSolver; }
-    void setDynamicQuadraticThreshold(bool enabled) { this->dynamicQuadraticThresholdEnabled = enabled; }
+    void setDefaultQuadraticThreshold(double threshold) { this->dStarThreshold = threshold; }
+    void enableDynamicQuadraticThreshold(bool enabled) { this->dynamicQuadraticThresholdEnabled = enabled; }
     double getAttractiveGain() const { return this->attractiveGain; }
     double getRepulsiveGain() const { return this->repulsiveGain; }
     double getRotationalAttractiveGain() const { return this->rotationalAttractiveGain; }
@@ -320,6 +323,8 @@ namespace pfield {
     double getMaxLinearAcceleration() const { return this->maxLinearAcceleration; }
     double getMaxAngularAcceleration() const { return this->maxAngularAcceleration; }
     double getInfluenceDistance() const { return this->influenceDistance; }
+    double getRotationalThreshold() const { return this->rotationalThreshold; }
+    double getQuadraticThreshold() const { return this->dStarThreshold; }
     size_t getNumJoints() const { return this->pfKinematics ? this->pfKinematics->getNumJoints() : 0; }
     size_t getNumLinks() const { return this->pfKinematics ? this->pfKinematics->getNumLinks() : 0; }
     bool isUsingDynamicQuadraticThreshold() const { return this->dynamicQuadraticThresholdEnabled; }
@@ -650,7 +655,7 @@ namespace pfield {
     /**
      * @brief Compute a per-step switch distance d* that blends goal/path clearance and stopping distance.
      *
-     * @note When dynamic thresholding is disabled, the fixed defaultDStarThreshold is used.
+     * @note When dynamic thresholding is disabled, the fixed dStarThreshold is used.
      *
      * @param queryPose The current pose to compute the dynamic threshold for
      * @return double The computed dynamic quadratic threshold distance d* [m]
@@ -713,7 +718,7 @@ namespace pfield {
     );
 
     /**
-     * @brief Plans a path from the start pose to the goal pose using whole-body joint velocities.
+     * @brief Plans a path from the starting configuration to the internal goal pose using whole-body joint velocities.
      *
      * @note This method computes joint velocities by considering both end-effector attraction
      *       to the goal and whole-body obstacle repulsion. Unlike planPathFromTaskSpaceWrench,
@@ -721,7 +726,6 @@ namespace pfield {
      *       providing better whole-body collision avoidance. Forward kinematics is used to
      *       compute the end-effector pose at each step from the integrated joint configuration.
      *
-     * @param startPose The starting end-effector pose as a SpatialVector (used for validation).
      * @param startJointAngles The starting joint angles for the robot [rad].
      * @param dt The time step for each iteration of the path planning [s].
      * @param goalTolerance The tolerance for reaching the goal pose [m].
@@ -729,7 +733,6 @@ namespace pfield {
      * @return PlannedPath The planned path containing poses, twists, joint angles, and timestamps.
      */
     PlannedPath planPathFromWholeBodyJointVelocities(
-      const SpatialVector& startPose,
       const std::vector<double>& startJointAngles,
       const double dt,
       const double goalTolerance,
@@ -791,11 +794,12 @@ namespace pfield {
     std::string eeLinkName; // End-effector link name for kinematic model, IK, and planning
     std::unique_ptr<PFKinematics> pfKinematics; // Kinematics helper for obstacle updates via joint angles
     std::shared_ptr<IKSolver> ikSolver; // Inverse kinematics solver for joint angle computation
+    // Constant Parameters that can be adjusted if neccessary
     const double translationalTolerance = 1e-3; // Threshold for distances to the goal and obstacles [m]
     const double rotationalThreshold = 0.05; // Threshold for rotational geodesic distance [rad]
-    const double defaultDStarThreshold = 1.0; // [m] distance for switching to quadratic attractive potential from conical
     const double softSatBeta = 1.0; // Soft-saturation parameter, higher = more aggressive curve
     const double torqueToVelocityGain = 1.0; // [rad/s] per [Nm] for admittance control conversion
+    double dStarThreshold = 1.0; // [m] distance for switching to quadratic attractive potential from conical
     bool dynamicQuadraticThresholdEnabled = false; // if true, use dynamic d* based on obstacles/kinematics
   };
 
