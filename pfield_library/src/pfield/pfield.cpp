@@ -460,14 +460,18 @@ namespace pfield {
     // The Choset attractive potential defines a threshold for switching to quadratic behavior from conical
     const double dStar = this->dynamicQuadraticThresholdEnabled ? this->computeDynamicQuadraticThreshold(queryPose)
       : this->dStarThreshold;
-    if (magnitude <= dStar) {
-      // Quadratic Attraction Region
-      return -this->attractiveGain * direction;
-    }
-    else {
-      // Conical Attraction Region
-      return  (dStar * (-this->attractiveGain * direction)) / magnitude;
-    }
+    // TODO(Sharwin24): Figure out what to do here, conical has problems with oscillations
+    // Maybe we just disable it
+    // return  (dStar * (-this->attractiveGain * direction)) / magnitude;
+    return -this->attractiveGain * direction;
+    // if (magnitude <= dStar) {
+    //   // Quadratic Attraction Region
+    //   return -this->attractiveGain * direction;
+    // }
+    // else {
+    //   // Conical Attraction Region
+    //   return  (dStar * (-this->attractiveGain * direction)) / magnitude;
+    // }
   }
 
   double PotentialField::minObstacleClearanceAt(const Eigen::Vector3d& point) const {
@@ -858,7 +862,7 @@ namespace pfield {
       // --- 3. Integrate joint velocities to get next joint configuration (Euler) ---
       std::vector<double> nextJointAngles(currentJointAngles.size());
       for (size_t i = 0; i < currentJointAngles.size(); ++i) {
-        nextJointAngles[i] = currentJointAngles[i] + jointVelocities[i] * stepDt;
+        nextJointAngles[i] = currentJointAngles[i] + (jointVelocities[i] * stepDt);
       }
 
       // --- 4. Compute end-effector pose for the new joint configuration ---
@@ -899,6 +903,7 @@ namespace pfield {
           // We have held position for a while, likely unable to reach orientation
           // Terminate with success (or partial success)
           path.success = true;
+          path.failureReason = "Position met, but not orientation";
           break;
         }
       }
