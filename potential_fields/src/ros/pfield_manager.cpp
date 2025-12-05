@@ -90,7 +90,8 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
     this->maxLinearAcceleration, this->maxAngularAcceleration,
     this->influenceDistance
   );
-  this->pField->setDynamicQuadraticThreshold(true);
+  this->pField->enableDynamicQuadraticThreshold(false);
+  this->pField->setDefaultQuadraticThreshold(0.2);
 
   // Initialize the motion plugin
   std::transform(
@@ -316,7 +317,7 @@ void PotentialFieldManager::handleComputeAutonomyVector(
   );
 
   pfield::TaskSpaceTwist autonomyVector;
-  if (request->planning_method == "whole_body") {
+  if (request->planning_method == PlanPath::Request::PLANNING_METHOD_WHOLE_BODY) {
     // Update obstacles first if joint angles are provided
     std::vector<double> jointAngles;
     if (!request->joint_angles.empty()) {
@@ -370,7 +371,7 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
     request->goal.pose.position.x, request->goal.pose.position.y, request->goal.pose.position.z,
     request->delta_time, request->goal_tolerance, request->max_iterations
   );
-
+  // Create SpatialVector for start pose
   auto startSV = pfield::SpatialVector(
     Eigen::Vector3d(
       request->start.pose.position.x,
@@ -384,6 +385,21 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
       request->start.pose.orientation.z
     )
   );
+  // Update the PF goal pose from the request
+  auto goalSV = pfield::SpatialVector(
+    Eigen::Vector3d(
+      request->goal.pose.position.x,
+      request->goal.pose.position.y,
+      request->goal.pose.position.z
+    ),
+    Eigen::Quaterniond(
+      request->goal.pose.orientation.w,
+      request->goal.pose.orientation.x,
+      request->goal.pose.orientation.y,
+      request->goal.pose.orientation.z
+    )
+  );
+  this->pField->setGoalPose(goalSV);
   // Convert starting_joint_angles (std::vector<float>) to std::vector<double> expected by planPathFromTaskSpaceWrench
   std::vector<double> startJointAnglesDouble(
     request->starting_joint_angles.cbegin(), request->starting_joint_angles.cend()
@@ -403,7 +419,7 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
   pfield::PlannedPath planningResult;
   try {
     // Plan a path using the request parameters and store the result
-    if (request->planning_method == "task_space") {
+    if (request->planning_method == PlanPath::Request::PLANNING_METHOD_TASK_SPACE) {
       RCLCPP_INFO(this->get_logger(), "Using Task-Space Wrench Planning");
       planningResult = this->pField->planPathFromTaskSpaceWrench(
         /*startPose=*/startSV,
@@ -413,10 +429,9 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
         /*maxIterations=*/request->max_iterations
       );
     }
-    else if (request->planning_method == "whole_body") {
+    else if (request->planning_method == PlanPath::Request::PLANNING_METHOD_WHOLE_BODY) {
       RCLCPP_INFO(this->get_logger(), "Using Whole-Body Joint Velocity Planning");
       planningResult = this->pField->planPathFromWholeBodyJointVelocities(
-        /*startPose=*/startSV,
         /*startJointAngles=*/startJointAnglesDouble,
         /*dt=*/request->delta_time,
         /*goalTolerance=*/request->goal_tolerance,
@@ -425,7 +440,7 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
     }
     else {
       // Default to Task Space Wrench
-      if (!request->planning_method.empty() && request->planning_method != "task_space") {
+      if (!request->planning_method.empty() && request->planning_method != PlanPath::Request::PLANNING_METHOD_TASK_SPACE) {
         RCLCPP_WARN(this->get_logger(), "Unknown planning method '%s'", request->planning_method.c_str());
       }
       RCLCPP_INFO(this->get_logger(), "Using Task-Space Wrench Planning");
@@ -441,6 +456,7 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
   catch (const std::exception& e) {
     RCLCPP_ERROR(this->get_logger(), "Exception during path planning: %s", e.what());
     response->success = false;
+    response->error_message = e.what();
     return;
   }
 
@@ -521,17 +537,21 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
     // If planning failed, log final pose and distance to goal
     if (planningResult.poses.empty()) {
       RCLCPP_WARN(this->get_logger(), "Planning failed with no poses generated.");
+      response->error_message = "Planning failed with no poses generated.";
       return;
     }
     const auto& finalPose = planningResult.poses.back();
     const auto& goal = this->pField->getGoalPose();
     const double distanceToGoal = (finalPose.getPosition() - goal.getPosition()).norm();
     const double angleToGoal = (finalPose.angularDistance(goal));
-    RCLCPP_WARN(this->get_logger(),
-      "Planning failed to reach goal. Final pose: pos=(%.3f, %.3f, %.3f), distance to goal=%.4f/%.4f m, angle to goal=%.3f/%.3f rad",
+    RCLCPP_WARN(
+      this->get_logger(),
+      "Planning failed to reach goal. Final pose: pos=(%.3f, %.3f, %.3f), "
+      "distance to goal = %.4f / %.4f m, angle to goal = %.3f / %.3f rad",
       finalPose.getPosition().x(), finalPose.getPosition().y(), finalPose.getPosition().z(),
-      distanceToGoal, request->goal_tolerance, angleToGoal, 0.05
+      distanceToGoal, request->goal_tolerance, angleToGoal, this->pField->getRotationalThreshold()
     );
+    response->error_message = "Planning failed to reach goal within tolerance.";
   }
   // Create a CSV file of the planned path for analysis
   const std::string csvFilePath = "data/planned_path.csv";
@@ -679,7 +699,9 @@ MarkerArray PotentialFieldManager::createThresholdMarkers(std::shared_ptr<pfield
   thresholdMarker.pose.orientation.y = goalPose.getOrientation().y();
   thresholdMarker.pose.orientation.z = goalPose.getOrientation().z();
   thresholdMarker.pose.orientation.w = goalPose.getOrientation().w();
-  const double dStarThreshold = pf->computeDynamicQuadraticThreshold(this->queryPose);
+  const double dStarThreshold = pf->isUsingDynamicQuadraticThreshold() ?
+    pf->computeDynamicQuadraticThreshold(this->queryPose) :
+    pf->getDefaultQuadraticThreshold();
   thresholdMarker.scale.x = dStarThreshold * 2.0; // Diameter
   thresholdMarker.scale.y = dStarThreshold * 2.0;
   thresholdMarker.scale.z = dStarThreshold * 2.0;
