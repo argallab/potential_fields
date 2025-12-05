@@ -70,6 +70,29 @@ namespace pfield {
     return T;
   }
 
+  /**
+   * @brief Given a Jacobian Matrix J and a 6D twist V, compute the damped least squares solution
+   *        for the joint velocities.
+   *
+   * @param J The Jacobian matrix, size (6 x n)
+   * @param V The 6D twist vector
+   * @param lambda The damping factor for the least squares solution
+   * @return Eigen::VectorXd The computed joint velocities
+   */
+  static inline Eigen::VectorXd dampedLeastSquares(
+    const Eigen::MatrixXd& J,
+    const Eigen::VectorXd& V,
+    const double lambda = 1e-3) {
+    // q_dot = J.T * (J * J.T + lambda^2 * I)^-1 * V
+    const int m = static_cast<int>(J.rows());
+    Eigen::MatrixXd JJt = J * J.transpose();
+    JJt += lambda * lambda * Eigen::MatrixXd::Identity(m, m);
+
+    Eigen::VectorXd y = JJt.ldlt().solve(V);
+    return J.transpose() * y;
+  }
+
+
   constexpr double DEFAULT_ATTRACTIVE_GAIN = 1.0; // Gain for attractive force [Ns/m]
   constexpr double DEFAULT_ROTATIONAL_ATTRACTIVE_GAIN = 0.7; // Gain for rotational attractive force [Ns/m]
   constexpr double DEFAULT_MAX_LINEAR_VELOCITY = 5.0; // [m/s]

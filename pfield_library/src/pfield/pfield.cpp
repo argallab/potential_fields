@@ -644,39 +644,39 @@ namespace pfield {
 
     // Initialize joint torques to zero (size will be set on first Jacobian computation)
     Eigen::VectorXd jointTorques;
-    bool initialized = false;
+    bool initializedJointTorqueSize = false;
 
     // Setup distance computation request
-    coal::DistanceRequest distReq;
-    distReq.enable_nearest_points = true;
-    coal::DistanceResult distRes;
+    coal::DistanceRequest distRequest;
+    distRequest.enable_nearest_points = true;
+    coal::DistanceResult distResult;
 
     // Iterate over all robot link-obstacle pairs
     for (const auto& link : robotLinks) {
       for (const auto& obs : envObstacles) {
-        distRes.clear();
+        distResult.clear();
         coal::distance(
           link.getCoalCollisionObject().get(),
           obs.getCoalCollisionObject().get(),
-          distReq, distRes
+          distRequest, distResult
         );
 
         // Only consider obstacles within influence distance
-        if (distRes.min_distance < this->influenceDistance) {
+        if (distResult.min_distance < this->influenceDistance) {
           // Extract nearest points (in world frame)
-          Eigen::Vector3d p_robot(
-            distRes.nearest_points[0][0],
-            distRes.nearest_points[0][1],
-            distRes.nearest_points[0][2]
+          Eigen::Vector3d robotPoint(
+            distResult.nearest_points[0][0],
+            distResult.nearest_points[0][1],
+            distResult.nearest_points[0][2]
           );
-          Eigen::Vector3d p_obs(
-            distRes.nearest_points[1][0],
-            distRes.nearest_points[1][1],
-            distRes.nearest_points[1][2]
+          Eigen::Vector3d obstaclePoint(
+            distResult.nearest_points[1][0],
+            distResult.nearest_points[1][1],
+            distResult.nearest_points[1][2]
           );
 
           // Compute repulsive force direction (from obstacle to robot)
-          Eigen::Vector3d direction = p_robot - p_obs;
+          Eigen::Vector3d direction = robotPoint - obstaclePoint;
           if (direction.norm() < NEAR_ZERO_THRESHOLD) {
             direction = Eigen::Vector3d::UnitZ(); // Degenerate case fallback
           }
@@ -685,10 +685,10 @@ namespace pfield {
           }
 
           // Compute repulsive force magnitude using Khatib potential
-          const double d = std::max(distRes.min_distance, NEAR_ZERO_THRESHOLD);
+          const double d = std::max(distResult.min_distance, NEAR_ZERO_THRESHOLD);
           const double Q = this->influenceDistance;
           const double magnitude = this->repulsiveGain * (1.0 / d - 1.0 / Q) * (1.0 / (d * d));
-          Eigen::Vector3d F_rep = direction * magnitude;
+          Eigen::Vector3d repulsiveForce = direction * magnitude;
 
           // Extract the actual link name from the obstacle ID (format: "linkName::collisionName")
           std::string obstacleID = link.getFrameID();
@@ -700,24 +700,24 @@ namespace pfield {
 
           // Get Jacobian at the nearest point on this link
           Eigen::MatrixXd J_link = this->pfKinematics->getJacobianAtPoint(
-            linkName, p_robot, jointAngles
+            linkName, robotPoint, jointAngles
           );
 
           // Initialize joint torques vector on first iteration
-          if (!initialized) {
+          if (!initializedJointTorqueSize) {
             jointTorques = Eigen::VectorXd::Zero(J_link.cols());
-            initialized = true;
+            initializedJointTorqueSize = true;
           }
 
           // Map repulsive force to joint torques and accumulate
           // J_link is 3xN (linear Jacobian only for point forces)
-          jointTorques += J_link.transpose() * F_rep;
+          jointTorques += J_link.transpose() * repulsiveForce;
         }
       }
     }
 
     // If no repulsive forces were computed, return zero vector
-    if (!initialized) {
+    if (!initializedJointTorqueSize) {
       const size_t numJoints = jointAngles.size();
       jointTorques = Eigen::VectorXd::Zero(numJoints);
     }
