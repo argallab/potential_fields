@@ -59,7 +59,8 @@ def parse_csv_header(file_path: Path) -> dict:
                     header_data['angular_tolerance_rad'] = parsed_value
                 elif key == "Num Joints":
                     header_data['num_joints'] = int(parsed_value)
-
+                elif key == "Planning Method":
+                    header_data['planning_method'] = str(parsed_value)
             except (ValueError, IndexError):
                 # Ignore lines that don't fit the key: value pattern
                 continue
@@ -90,6 +91,7 @@ def create_plots_with_kinematics(df: pd.DataFrame, header_data: dict) -> None:
         "goal_q": header_data.get('goal_q'),
         "goal_tolerance_m": header_data.get('goal_tolerance_m'),
         "angular_tolerance_rad": header_data.get('angular_tolerance_rad'),
+        "planning_method": header_data.get('planning_method', 'Unknown'),
     }
     # Extract joint data if available
     if 'num_joints' in header_data:
