@@ -1,6 +1,6 @@
 # The start and goal pose for the plan
-geometry_msgs/PoseStamped start
-geometry_msgs/PoseStamped goal
+geometry_msgs/Pose start
+geometry_msgs/Pose goal
 
 # The starting joint angles that correspond to the start pose [rad]
 float32[] starting_joint_angles
