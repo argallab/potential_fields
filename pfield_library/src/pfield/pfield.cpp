@@ -458,15 +458,15 @@ namespace pfield {
     const Eigen::Vector3d direction = queryPose.getPosition() - this->goalPose.getPosition();
     const double magnitude = direction.norm();
     // The Choset attractive potential defines a threshold for switching to quadratic behavior from conical
-    const double dStarThreshold = this->dynamicQuadraticThresholdEnabled ? this->computeDynamicQuadraticThreshold(queryPose)
+    const double dStar = this->dynamicQuadraticThresholdEnabled ? this->computeDynamicQuadraticThreshold(queryPose)
       : this->dStarThreshold;
-    if (magnitude <= dStarThreshold) {
+    if (magnitude <= dStar) {
       // Quadratic Attraction Region
       return -this->attractiveGain * direction;
     }
     else {
       // Conical Attraction Region
-      return  (dStarThreshold * (-this->attractiveGain * direction)) / magnitude;
+      return  (dStar * (-this->attractiveGain * direction)) / magnitude;
     }
   }
 
@@ -1035,6 +1035,7 @@ namespace pfield {
     csvFile << "# Goal Tolerance: " << path.goalTolerance << "\n";
     csvFile << "# Angular Tolerance: " << path.rotationalTolerance << "\n";
     csvFile << "# Num Joints: " << numJoints << "\n";
+    csvFile << "# Planning Method: " << path.planningMethod << "\n";
 
     // Write header
     csvFile << header << "\n";
