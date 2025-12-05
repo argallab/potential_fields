@@ -91,7 +91,7 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
     this->influenceDistance
   );
   this->pField->enableDynamicQuadraticThreshold(false);
-  this->pField->setDefaultQuadraticThreshold(5.0);
+  this->pField->setDefaultQuadraticThreshold(1.0);
 
   // Display PF Parameters
   RCLCPP_INFO(this->get_logger(),
