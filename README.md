@@ -3,7 +3,7 @@
 ---
 
 # Potential Fields Motion Planning ROS2 Package
-**Sharwin Patil, MSR 2025**
+Author: [Sharwin Patil](https://www.sharwinpatil.info/), MSR 2025
 
 [Project Journal](https://docs.google.com/document/d/1IJ0fK89f-ZZ52c72lqh1HTT0OAE9BSruDTp8FuKGbpw/edit?usp=sharing)
 
