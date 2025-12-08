@@ -11,23 +11,51 @@ For information about the mathematical formulation of potential fields used in t
 This package is split into two parts:
 
 1. Core C++ libraries (ROS-agnostic)
-2. ROS integration (one node)
+2. ROS integration (Single ROS 2 node and associated msg/srv definitions)
 
-```txt
+```bash
+# Core C++ potential field library (ROS-agnostic)
+pfield_library
+├── cmake
+├── include
+│   ├── pfield
+│   └── solvers
+└── src
+    ├── pfield
+    └── solvers
+
+ # ROS 2 package integrating the core library
 potential_fields
 ├── config # ROS config files (ROS Parameters, RViz config)
 ├── include
-│   └── potential_fields
-│       ├── pfield # Core C++ PF library
-│       ├── robot_plugins # Core C++ robot plugins and IK
-│       └── ros # ROS node headers
+│   └── potential_fields
+│       ├── robot_plugins # Headers for custom robot plugins and IK Solvers
+│       └── ros # ROS node headers
 ├── launch
 ├── src
-│   ├── pfield
-│   ├── robot_plugins
-│   └── ros
+│   ├── robot_plugins
+│   └── ros
 └── test
     └── resources
+
+# ROS 2 message and service definitions
+potential_fields_interfaces
+├── include
+│   └── potential_fields_interfaces
+├── msg
+├── src
+└── srv
+
+# Example ROS 2 Package demonstrating potential_fields usage
+pfields_demo
+├── config
+├── include
+│   └── pfields_demo
+├── launch
+├── meshes
+├── pfields_demo
+├── src
+└── urdf
 ```
 
 ## Core C++ libraries (ROS-agnostic)
