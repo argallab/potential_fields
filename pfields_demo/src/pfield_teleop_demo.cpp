@@ -17,9 +17,11 @@ PFTeleopDemo::PFTeleopDemo() : Node("pfield_teleop_demo") {
 
   this->fixedFrame = this->declare_parameter("fixed_frame", "world"); // RViz fixed frame
   this->eeLinkName = this->declare_parameter("ee_link_name", "link_tcp"); // End-effector link name
+  this->fuseAlpha = this->declare_parameter("fuse_alpha", 0.5); // Fusion Alpha, 0 is teleop twist, 1 is PFTwist
   // Get parameters from yaml file
   this->fixedFrame = this->get_parameter("fixed_frame").as_string();
   this->eeLinkName = this->get_parameter("ee_link_name").as_string();
+  this->fuseAlpha = this->get_parameter("fuse_alpha").as_double();
 
   this->goalPosePub = this->create_publisher<geometry_msgs::msg::Pose>("pfield/planning_goal_pose", 10);
   this->queryPosePub = this->create_publisher<geometry_msgs::msg::Pose>("pfield/query_pose", 10);
@@ -40,7 +42,7 @@ PFTeleopDemo::PFTeleopDemo() : Node("pfield_teleop_demo") {
   this->obstaclePub = this->create_publisher<potential_fields_interfaces::msg::ObstacleArray>("/pfield/obstacles", 10);
 
   this->teleopTwistSub = this->create_subscription<geometry_msgs::msg::TwistStamped>("/pfield_demo/teleop_twist",
-    10, [this](const geometry_msgs::msg::TwistStamped::SharedPtr msg) { this->latestTeleopTwist = msg; }
+    10, [this](const geometry_msgs::msg::TwistStamped::SharedPtr msg) { this->latestTeleopTwist = *msg; }
   );
 
   this->tfBuffer = std::make_shared<tf2_ros::Buffer>(this->get_clock());
@@ -48,7 +50,7 @@ PFTeleopDemo::PFTeleopDemo() : Node("pfield_teleop_demo") {
 
   this->createAndPublishObstacles();
 
-  const double teleopFreq = 10.0; // [Hz]
+  const double teleopFreq = 50.0; // [Hz]
   this->timer = this->create_wall_timer(
     std::chrono::duration<double>(1.0 / teleopFreq),
     std::bind(&PFTeleopDemo::timerCallback, this)
@@ -59,23 +61,37 @@ void PFTeleopDemo::timerCallback() {
   // Call ComputePfTwist service
   // Create a request for the ComputeAutonomyVector service
   auto computePFTwistRequest = std::make_shared<ComputePFTwist::Request>();
-  this->queryPose = this->getEndEffectorPose();
+  geometry_msgs::msg::PoseStamped queryPoseStamped;
+  queryPoseStamped.header.frame_id = this->fixedFrame;
+  queryPoseStamped.header.stamp = this->now();
+  queryPoseStamped.pose = this->getEndEffectorPose();
+  computePFTwistRequest->query_pose = queryPoseStamped;
+  // computePFTwistRequest->joint_angles = std::vector<double>(7, 0.0); // Optional
+  // computePFTwistRequest->delta_time = 1.0 / 50.0; // Optional
+  // computePFTwistRequest->prev_joint_velocities = std::vector<double>(7, 0.0); // Optional
+  // computePFTwistRequest->planning_method = ComputePFTwist::Request::PLANNING_METHOD_WHOLE_BODY; // Optional
 
   // Send request asynchronously and attach a callback to process the result
-  this->pfTwistClient->async_send_request(
-    computePFTwistRequest,
+  this->pfTwistClient->async_send_request(computePFTwistRequest,
     [this](ServiceResponseFuture<ComputePFTwist> future) { this->handleComputeAutonomyVectorResponse(future); }
   );
-
-  // Get Twist from Joystick
-  (void)this->latestTeleopTwist;
-  // Blend
+  // Handle callback will internally update this->latestPFTwist
+  // Joystick Twist will automatically update latestTeleopTwist from subscriber
+  // Fuse both twists together using specified alpha
+  geometry_msgs::msg::Twist fusedTwist = this->fuseTwists(
+    this->latestTeleopTwist.twist, this->latestPFTwist.twist, this->fuseAlpha
+  );
+  geometry_msgs::msg::TwistStamped eeTwist;
+  eeTwist.header.frame_id = this->fixedFrame;
+  eeTwist.header.stamp = this->now();
+  eeTwist.twist = fusedTwist;
   // Publish to Robot Action
+  this->eeVelocityPub->publish(eeTwist);
 }
 
 geometry_msgs::msg::Twist PFTeleopDemo::fuseTwists(
-  const geometry_msgs::msg::Twist::SharedPtr twist1,
-  const geometry_msgs::msg::Twist::SharedPtr twist2,
+  const geometry_msgs::msg::Twist twist1,
+  const geometry_msgs::msg::Twist twist2,
   const double alpha) {
   geometry_msgs::msg::Twist fusedTwist;
 
@@ -85,12 +101,12 @@ geometry_msgs::msg::Twist PFTeleopDemo::fuseTwists(
   };
 
   // Simple linear fusion based on alpha parameter. Missing inputs are treated as zeros.
-  fusedTwist.linear.x = fuseValue(twist1->linear.x, twist2->linear.x, alpha);
-  fusedTwist.linear.y = fuseValue(twist1->linear.y, twist2->linear.y, alpha);
-  fusedTwist.linear.z = fuseValue(twist1->linear.z, twist2->linear.z, alpha);
-  fusedTwist.angular.x = fuseValue(twist1->angular.x, twist2->angular.x, alpha);
-  fusedTwist.angular.y = fuseValue(twist1->angular.y, twist2->angular.y, alpha);
-  fusedTwist.angular.z = fuseValue(twist1->angular.z, twist2->angular.z, alpha);
+  fusedTwist.linear.x = fuseValue(twist1.linear.x, twist2.linear.x, alpha);
+  fusedTwist.linear.y = fuseValue(twist1.linear.y, twist2.linear.y, alpha);
+  fusedTwist.linear.z = fuseValue(twist1.linear.z, twist2.linear.z, alpha);
+  fusedTwist.angular.x = fuseValue(twist1.angular.x, twist2.angular.x, alpha);
+  fusedTwist.angular.y = fuseValue(twist1.angular.y, twist2.angular.y, alpha);
+  fusedTwist.angular.z = fuseValue(twist1.angular.z, twist2.angular.z, alpha);
 
   return fusedTwist;
 }
@@ -102,7 +118,7 @@ void PFTeleopDemo::handleComputeAutonomyVectorResponse(rclcpp::Client<ComputePFT
     RCLCPP_ERROR(this->get_logger(), "plan_path service returned an empty response (async)");
     return;
   }
-
+  this->latestPFTwist = computePFTwistResponse->autonomy_vector;
 }
 
 void PFTeleopDemo::createAndPublishObstacles() {

@@ -26,6 +26,7 @@ public:
 private:
   std::string fixedFrame; // RViz fixed frame for visualization
   std::string eeLinkName; // End-effector link name
+  double fuseAlpha; // Alpha for fusing Teleop and PF Twists
 
   // Create a service client for planning paths
   rclcpp::Client<ComputePFTwist>::SharedPtr pfTwistClient;
@@ -45,8 +46,8 @@ private:
 
   void timerCallback();
   geometry_msgs::msg::Twist fuseTwists(
-    const geometry_msgs::msg::Twist::SharedPtr twist1,
-    const geometry_msgs::msg::Twist::SharedPtr twist2,
+    const geometry_msgs::msg::Twist twist1,
+    const geometry_msgs::msg::Twist twist2,
     const double alpha);
 
   void createAndPublishObstacles();
