@@ -92,7 +92,6 @@ namespace pfield {
     return J.transpose() * y;
   }
 
-
   constexpr double DEFAULT_ATTRACTIVE_GAIN = 1.0; // Gain for attractive force [Ns/m]
   constexpr double DEFAULT_ROTATIONAL_ATTRACTIVE_GAIN = 0.7; // Gain for rotational attractive force [Ns/m]
   constexpr double DEFAULT_MAX_LINEAR_VELOCITY = 5.0; // [m/s]
