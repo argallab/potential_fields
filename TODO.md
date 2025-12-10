@@ -15,11 +15,15 @@
   - Principles of Robot Motion, Choset et al.
   - Modern Robotics, Lynch and Park
 - Allow editing pfield parameters dynamically during runtime via ROS2 parameters
-- Plot Net force vs time as well, maybe force on each joint
+- Plot Net force vs time as well, maybe force on each joint. Would help debug Attractive and Repulsive forces.
+- Use RK4 to integrate joint velocities into joint positions and for integrating joint positions into end-effector poses and test if this improves accuracy/stability of the planner.
 
 # Future TODOs and Refactors
 - Create U-shaped obstacle test case for classic local minima problem
 - Improve Extent Estimator ("Extentimator") to be more accurate and be realistic for robot arms
   - Add unit tests for Extent Estimator
-- Define IKSolver and MotionPlugin more concretely. IKSolver should be an ABC for a user to implement an IK implementation. MotionPlugin should be an ABC for a user to implement how to talk to real robot and should be capable of both ROS-agnostic and ROS-aware implementations.
+- Define IKSolver and MotionPlugin more concretely. IKSolver should be an ABC for a user to implement an IK implementation.
+  MotionPlugin should be an ABC for a user to implement how to talk to real robot and should be capable of both ROS-agnostic and ROS-aware implementations.
   - Refactor where solvers and robot_plugins are stored across the pfield_library and potential_fields ROS package.
+- Document process for creating plots and how to save data during runtime for plotting later
+- Review papers for improvements to potential field algorithms. Demiana is helping with researching relevant papers.

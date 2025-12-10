@@ -320,6 +320,10 @@ Start Focusing on release-specific tasks:
   - README + Code Documentation
   - Prep for ROS Index + Release
 
+## Potential (pun intended) Infrastructure Edits
+- If we're using an example that already has a ROS environment, we shouldn't need to pass in a raw URDF file, we should be able to just point to a robot description topic and propogate that throughout the ROS library and C++ library for use. If we're not using ROS, we will need to provide one.
+- PFM can listen for the TF of the given eeLinkName and if found, use it as the "current" position for visualization of the query pose
+
 # December 09 2025 Notes
 Sending Joint Velocity trajectory from the demo node produces decent path.
 However, looks like joint velocity trajectory is asympytotic near the end and has very small joint vels for a while near the goal
@@ -328,7 +332,7 @@ Using `ros2 topic hz` confirmed robot control at required frequency (50 Hz)
 
 When trying TASK_SPACE, IKSolver seems to fail. This might be because of repulsive forces.
 Planning with repulsive forces around the goal results in some pretty spiky behavior,
-pushing the planning frame far away, the attraction bringing it back. 
+pushing the planning frame far away, the attraction bringing it back.
 
 Bug in the repulsive force code??
 
