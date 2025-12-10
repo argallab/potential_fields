@@ -44,9 +44,9 @@ private:
   geometry_msgs::msg::TwistStamped latestPFTwist;
 
   void timerCallback();
-  geometry_msgs::msg::Twist PFTeleopDemo::fuseTwists(
-    const geometry_msgs::msg::Twist::SharedPtr twist1, 
-    const geometry_msgs::msg::Twist::SharedPtr twist2, 
+  geometry_msgs::msg::Twist fuseTwists(
+    const geometry_msgs::msg::Twist::SharedPtr twist1,
+    const geometry_msgs::msg::Twist::SharedPtr twist2,
     const double alpha);
 
   void createAndPublishObstacles();
@@ -54,7 +54,7 @@ private:
 
   void handleComputeAutonomyVectorResponse(rclcpp::Client<ComputePFTwist>::SharedFuture future);
 
-   // Timer-based streaming of end-effector velocity commands
+  // Timer-based streaming of end-effector velocity commands
   void startEEVelocityStreaming(const std::vector<geometry_msgs::msg::TwistStamped>& eeVels, double dt);
   void stopEEVelocityStreaming();
   void eeVelocityTimerCallback();

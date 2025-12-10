@@ -150,4 +150,4 @@ Use `pf_demo.launch.xml` to launch the demo node that also launches the potentia
 ros2 launch pfields_demo pf_demo.launch.xml
 ```
 
-Launching the project without any arguments is good enough to launch the basic robot and visualization. Of course, arguments are necessary to customize the PF package with your robot, RViz config, gain parameters, etc.
+Launching the project without any arguments is good enough to launch a basic potential field and visualization. Of course, arguments are necessary to customize the PF package with your robot, RViz config, gain parameters, etc.

@@ -25,7 +25,7 @@ PFTeleopDemo::PFTeleopDemo() : Node("pfield_teleop_demo") {
   this->queryPosePub = this->create_publisher<geometry_msgs::msg::Pose>("pfield/query_pose", 10);
 
   // Wait for the service to be available
-  this->pfTwistClient = this->create_client<PlanPath>("pfield/plan_path");
+  this->pfTwistClient = this->create_client<ComputePFTwist>("pfield/plan_path");
   while (!this->pfTwistClient->wait_for_service(std::chrono::seconds(1))) {
     if (!rclcpp::ok()) {
       RCLCPP_ERROR(this->get_logger(), "Interrupted while waiting for the service. Exiting.");
@@ -56,21 +56,21 @@ PFTeleopDemo::PFTeleopDemo() : Node("pfield_teleop_demo") {
 }
 
 void PFTeleopDemo::timerCallback() {
-    // Call ComputePfTwist service
-    // Create a request for the ComputeAutonomyVector service
-    auto computePFTwistRequest = std::make_shared<ComputePFTwist::Request>();
-    this->queryPose = this->getEndEffectorPose();
-  
-    // Send request asynchronously and attach a callback to process the result
-    this->pfTwistClient->async_send_request(
-        computePFTwistRequest,
-        [this](ServiceResponseFuture<PlanPath> future) { this->handleComputeAutonomyVectorResponse(future); }
-    );
+  // Call ComputePfTwist service
+  // Create a request for the ComputeAutonomyVector service
+  auto computePFTwistRequest = std::make_shared<ComputePFTwist::Request>();
+  this->queryPose = this->getEndEffectorPose();
 
-    // Get Twist from Joystick
-    (void)this->latestTeleopTwist;
-    // Blend
-    // Publish to Robot Action
+  // Send request asynchronously and attach a callback to process the result
+  this->pfTwistClient->async_send_request(
+    computePFTwistRequest,
+    [this](ServiceResponseFuture<ComputePFTwist> future) { this->handleComputeAutonomyVectorResponse(future); }
+  );
+
+  // Get Twist from Joystick
+  (void)this->latestTeleopTwist;
+  // Blend
+  // Publish to Robot Action
 }
 
 geometry_msgs::msg::Twist PFTeleopDemo::fuseTwists(
@@ -96,7 +96,7 @@ geometry_msgs::msg::Twist PFTeleopDemo::fuseTwists(
 }
 
 
-void PFTeleopDemo::handleComputeAutonomyVectorResponse(rclcpp::Client<PlanPath>::SharedFuture future) {
+void PFTeleopDemo::handleComputeAutonomyVectorResponse(rclcpp::Client<ComputePFTwist>::SharedFuture future) {
   auto computePFTwistResponse = future.get();
   if (!computePFTwistResponse) {
     RCLCPP_ERROR(this->get_logger(), "plan_path service returned an empty response (async)");
@@ -140,7 +140,7 @@ void PFTeleopDemo::createAndPublishObstacles() {
   cyl.pose.orientation.z = 0.0;
   cyl.pose.orientation.w = 1.0;
   allObstacles.obstacles.push_back(cyl);
-  
+
   this->obstaclePub->publish(allObstacles);
 }
 

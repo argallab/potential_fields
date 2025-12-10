@@ -48,7 +48,7 @@ You can also build the library using standard CMake commands:
 mkdir build && cd build
 cmake ..
 make
-sudo make install # Optional
+make install # Might have to try with sudo to install to /usr/local
 ```
 
 ## Usage
@@ -90,6 +90,6 @@ int main() {
 
 ## Important Remarks
 
-*   **Coordinate Frames:** Ensure all poses (start, goal, obstacles) are defined in the same reference frame (typically "world" or "base_link") before passing them to the library.
+*   **Coordinate Frames:** Ensure all poses (start, goal, obstacles) are defined in the same reference frame (typically "world" or "base_link") before passing them to the library. In the ROS example, a fixed frame parameter is used to signify this frame.
 *   **Parameter Tuning:** The behavior of the potential field is highly dependent on gains (`attractiveGain`, `repulsiveGain`) and the influence distance (`influenceDistance`). These may need tuning for specific robot configurations and environments.
 *   **Local Minima:** Like all potential field methods, this approach is susceptible to local minima. The library includes a "planning-only" opposing force removal technique to help mitigate this, but it is not a global planner.
