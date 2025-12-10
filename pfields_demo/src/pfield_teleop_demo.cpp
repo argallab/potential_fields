@@ -1,7 +1,6 @@
-#include "pfield_demo.hpp"
+#include "pfield_teleop_demo.hpp"
 #include "rclcpp/rclcpp.hpp"
 // #include "tf2_ros/static_transform_broadcaster.h"
-#include "potential_fields_interfaces/srv/plan_path.hpp"
 #include "tf2_eigen/tf2_eigen.hpp"
 
 #include <fstream>
@@ -13,8 +12,8 @@
 template<typename T>
 using ServiceResponseFuture = rclcpp::Client<T>::SharedFuture;
 
-PFDemo::PFDemo() : Node("pfield_demo") {
-  RCLCPP_INFO(this->get_logger(), "PFDemo Initialized");
+PFTeleopDemo::PFTeleopDemo() : Node("pfield_teleop_demo") {
+  RCLCPP_INFO(this->get_logger(), "PFTeleopDemo Initialized");
 
   this->fixedFrame = this->declare_parameter("fixed_frame", "world"); // RViz fixed frame
   this->eeLinkName = this->declare_parameter("ee_link_name", "link_tcp"); // End-effector link name
@@ -26,146 +25,87 @@ PFDemo::PFDemo() : Node("pfield_demo") {
   this->queryPosePub = this->create_publisher<geometry_msgs::msg::Pose>("pfield/query_pose", 10);
 
   // Wait for the service to be available
-  this->planPathClient = this->create_client<PlanPath>("pfield/plan_path");
-  while (!this->planPathClient->wait_for_service(std::chrono::seconds(1))) {
+  this->pfTwistClient = this->create_client<PlanPath>("pfield/plan_path");
+  while (!this->pfTwistClient->wait_for_service(std::chrono::seconds(1))) {
     if (!rclcpp::ok()) {
       RCLCPP_ERROR(this->get_logger(), "Interrupted while waiting for the service. Exiting.");
       return;
     }
-    RCLCPP_INFO(this->get_logger(), "Waiting for the plan_path service to be available...");
+    RCLCPP_INFO(this->get_logger(), "Waiting for the ComputeAutonomyVector service to be available...");
   }
-  RCLCPP_INFO(this->get_logger(), "Plan path service is available.");
+  RCLCPP_INFO(this->get_logger(), "ComputeAutonomyVector service is available.");
 
   this->eeVelocityPub = this->create_publisher<geometry_msgs::msg::TwistStamped>("/robot_action", 10);
   this->jointVelocityPub = this->create_publisher<trajectory_msgs::msg::JointTrajectoryPoint>("/joint_vel_control", 10);
   this->obstaclePub = this->create_publisher<potential_fields_interfaces::msg::ObstacleArray>("/pfield/obstacles", 10);
+
+  this->teleopTwistSub = this->create_subscription<geometry_msgs::msg::TwistStamped>("/pfield_demo/teleop_twist",
+    10, [this](const geometry_msgs::msg::TwistStamped::SharedPtr msg) { this->latestTeleopTwist = msg; }
+  );
 
   this->tfBuffer = std::make_shared<tf2_ros::Buffer>(this->get_clock());
   this->tfListener = std::make_shared<tf2_ros::TransformListener>(*this->tfBuffer, this);
 
   this->createAndPublishObstacles();
 
-  // Initialize demo service
-  this->runPlanPathDemoService = this->create_service<std_srvs::srv::Empty>(
-    "/pfield_demo/run_plan_path_demo",
-    std::bind(&PFDemo::handleRunPlanPathDemo, this, std::placeholders::_1, std::placeholders::_2)
+  const double teleopFreq = 10.0; // [Hz]
+  this->timer = this->create_wall_timer(
+    std::chrono::duration<double>(1.0 / teleopFreq),
+    std::bind(&PFTeleopDemo::timerCallback, this)
   );
 }
 
-void PFDemo::handleRunPlanPathDemo(
-  [[maybe_unused]] const std_srvs::srv::Empty::Request::SharedPtr request,
-  [[maybe_unused]] std_srvs::srv::Empty::Response::SharedPtr response) {
-  RCLCPP_INFO(this->get_logger(), "Running plan path demo...");
+void PFTeleopDemo::timerCallback() {
+    // Call ComputePfTwist service
+    // Create a request for the ComputeAutonomyVector service
+    auto computePFTwistRequest = std::make_shared<ComputePFTwist::Request>();
+    this->queryPose = this->getEndEffectorPose();
+  
+    // Send request asynchronously and attach a callback to process the result
+    this->pfTwistClient->async_send_request(
+        computePFTwistRequest,
+        [this](ServiceResponseFuture<PlanPath> future) { this->handleComputeAutonomyVectorResponse(future); }
+    );
 
-  // Create a request for the plan_path service
-  auto pathPlanRequest = std::make_shared<PlanPath::Request>();
-  // Define start and goal poses
-  geometry_msgs::msg::Pose startPose;
-  startPose = this->getEndEffectorPose();
-  if (startPose.position.x == 0.0 &&
-    startPose.position.y == 0.0 &&
-    startPose.position.z == 0.0) {
-    RCLCPP_ERROR(this->get_logger(), "Failed to get current end-effector pose. Using default");
-    startPose.position.x = 0.227;
-    startPose.position.y = 0.00;
-    startPose.position.z = 0.2935;
-    startPose.orientation.x = 0.70709;
-    startPose.orientation.y = 9.8864e-05;
-    startPose.orientation.z = 0.70712;
-    startPose.orientation.w = -2.1146e-05;
-  }
-  // Use Eigen to build quaternion from Euler angles (roll, pitch, yaw)
-  // Eigen::AngleAxisd roll_ang(0.0, Eigen::Vector3d::UnitX());
-  // Eigen::AngleAxisd pitch_ang(M_PI_2, Eigen::Vector3d::UnitY());
-  // Eigen::AngleAxisd yaw_ang(M_PI, Eigen::Vector3d::UnitZ());
-  // Compose as R = Rz(yaw) * Ry(pitch) * Rx(roll)
-  // Eigen::Quaterniond q = roll_ang * pitch_ang * yaw_ang;
-  // Eigen::Quaterniond q = Eigen::Quaterniond::Identity();
-  // startPose.orientation.w = q.w();
-  // startPose.orientation.x = q.x();
-  // startPose.orientation.y = q.y();
-  // startPose.orientation.z = q.z();
-
-  geometry_msgs::msg::Pose goalPose;
-  // goalPose = startPose;
-  goalPose.position.x = 0.6;
-  goalPose.position.y = 0.1;
-  goalPose.position.z = 0.45;
-  goalPose.orientation.x = 0.70709;
-  goalPose.orientation.y = 9.8864e-05;
-  goalPose.orientation.z = 0.70712;
-  goalPose.orientation.w = -2.1146e-05;
-
-  pathPlanRequest->start = startPose;
-  pathPlanRequest->starting_joint_angles = {0.0, 0.0, 0.0, 0.0, 0.0, -M_PI_2, 0.0};
-  pathPlanRequest->goal = goalPose;
-  pathPlanRequest->delta_time = 0.02; // 20 ms between waypoints
-  pathPlanRequest->goal_tolerance = 0.01; // 10 mm tolerance
-  pathPlanRequest->max_iterations = 25000; // Max iterations for planning
-  pathPlanRequest->planning_method = PlanPath::Request::PLANNING_METHOD_TASK_SPACE; // "task_space" or "whole_body"
-  const double dt = pathPlanRequest->delta_time;
-
-  // Publish the goal pose
-  this->queryPosePub->publish(startPose);
-  // this->goalPosePub->publish(goalPose);
-
-  RCLCPP_INFO(this->get_logger(), "Sending plan_path request (async)...");
-
-  // Send request asynchronously and attach a callback to process the result
-  this->planPathClient->async_send_request(
-    pathPlanRequest,
-    [this, dt](ServiceResponseFuture<PlanPath> future) { this->handlePlanPathResponse(future, dt); }
-  );
+    // Get Twist from Joystick
+    (void)this->latestTeleopTwist;
+    // Blend
+    // Publish to Robot Action
 }
 
-void PFDemo::handlePlanPathResponse(rclcpp::Client<PlanPath>::SharedFuture future, double dt) {
-  auto pathPlanResponse = future.get();
-  if (!pathPlanResponse) {
+geometry_msgs::msg::Twist PFTeleopDemo::fuseTwists(
+  const geometry_msgs::msg::Twist::SharedPtr twist1,
+  const geometry_msgs::msg::Twist::SharedPtr twist2,
+  const double alpha) {
+  geometry_msgs::msg::Twist fusedTwist;
+
+  // Alpha = 0 -> A, Alpha = 1 -> B
+  auto fuseValue = [](double A, double B, double alpha) {
+    return alpha * B + (1.0 - alpha) * A;
+  };
+
+  // Simple linear fusion based on alpha parameter. Missing inputs are treated as zeros.
+  fusedTwist.linear.x = fuseValue(twist1->linear.x, twist2->linear.x, alpha);
+  fusedTwist.linear.y = fuseValue(twist1->linear.y, twist2->linear.y, alpha);
+  fusedTwist.linear.z = fuseValue(twist1->linear.z, twist2->linear.z, alpha);
+  fusedTwist.angular.x = fuseValue(twist1->angular.x, twist2->angular.x, alpha);
+  fusedTwist.angular.y = fuseValue(twist1->angular.y, twist2->angular.y, alpha);
+  fusedTwist.angular.z = fuseValue(twist1->angular.z, twist2->angular.z, alpha);
+
+  return fusedTwist;
+}
+
+
+void PFTeleopDemo::handleComputeAutonomyVectorResponse(rclcpp::Client<PlanPath>::SharedFuture future) {
+  auto computePFTwistResponse = future.get();
+  if (!computePFTwistResponse) {
     RCLCPP_ERROR(this->get_logger(), "plan_path service returned an empty response (async)");
     return;
   }
 
-  // Log a small summary of the returned trajectories to help debug crashes
-  size_t ee_path_len = pathPlanResponse->end_effector_path.poses.size();
-  size_t jt_points = pathPlanResponse->joint_trajectory.points.size();
-  size_t ee_vels = pathPlanResponse->end_effector_velocity_trajectory.size();
-  RCLCPP_INFO(this->get_logger(),
-    "Received plan_path response: success=%s, end_effector_path.len=%zu, joint_trajectory.points=%zu, ee_velocity_traj=%zu",
-    pathPlanResponse->success ? "true" : "false", ee_path_len, jt_points, ee_vels
-  );
-
-  if (ee_path_len > 0) {
-    const auto& firstEEPose = pathPlanResponse->end_effector_path.poses.front().pose;
-    const auto& lastEEPose = pathPlanResponse->end_effector_path.poses.back().pose;
-    RCLCPP_INFO(this->get_logger(), "First EE pose: (%.4f, %.4f, %.4f) [m] (%.4f, %.4f, %.4f, %.4f)",
-      firstEEPose.position.x, firstEEPose.position.y, firstEEPose.position.z,
-      firstEEPose.orientation.x, firstEEPose.orientation.y, firstEEPose.orientation.z, firstEEPose.orientation.w
-    );
-    RCLCPP_INFO(this->get_logger(), "Last EE pose: (%.4f, %.4f, %.4f) [m] (%.4f, %.4f, %.4f, %.4f)",
-      lastEEPose.position.x, lastEEPose.position.y, lastEEPose.position.z,
-      lastEEPose.orientation.x, lastEEPose.orientation.y, lastEEPose.orientation.z, lastEEPose.orientation.w
-    );
-  }
-  if (ee_vels > 0) {
-    const auto& firstEEVel = pathPlanResponse->end_effector_velocity_trajectory.front().twist.linear;
-    const auto& lastEEVel = pathPlanResponse->end_effector_velocity_trajectory.back().twist.linear;
-    RCLCPP_INFO(this->get_logger(), "First EE linear velocity: (%.6f, %.6f, %.6f)", firstEEVel.x, firstEEVel.y, firstEEVel.z);
-    RCLCPP_INFO(this->get_logger(), "Last EE linear velocity: (%.6f, %.6f, %.6f)", lastEEVel.x, lastEEVel.y, lastEEVel.z);
-  }
-
-  if (pathPlanResponse->success) {
-    RCLCPP_INFO(this->get_logger(), "Planning succeeded");
-  }
-  else {
-    RCLCPP_ERROR(this->get_logger(), "Planning failed: %s", pathPlanResponse->error_message.c_str());
-  }
-
-  // Begin streaming EE velocity commands to follow the path
-  // this->startEEVelocityStreaming(pathPlanResponse->end_effector_velocity_trajectory, dt);
-  this->startJointVelocityStreaming(pathPlanResponse->joint_trajectory, dt);
 }
 
-void PFDemo::createAndPublishObstacles() {
+void PFTeleopDemo::createAndPublishObstacles() {
   potential_fields_interfaces::msg::ObstacleArray allObstacles;
 
   // // Real Box in the way
@@ -204,7 +144,7 @@ void PFDemo::createAndPublishObstacles() {
   this->obstaclePub->publish(allObstacles);
 }
 
-geometry_msgs::msg::Pose PFDemo::getEndEffectorPose() {
+geometry_msgs::msg::Pose PFTeleopDemo::getEndEffectorPose() {
   while (!this->tfBuffer->canTransform(this->fixedFrame, this->fixedFrame, tf2::TimePointZero, tf2::durationFromSec(0.1))) {}
   // Use the TF Listener to get the Pose of the `link_tcp` frame from the `world` frame
   try {
@@ -231,7 +171,7 @@ geometry_msgs::msg::Pose PFDemo::getEndEffectorPose() {
   }
 }
 
-void PFDemo::startEEVelocityStreaming(const std::vector<geometry_msgs::msg::TwistStamped>& eeVels, double dt) {
+void PFTeleopDemo::startEEVelocityStreaming(const std::vector<geometry_msgs::msg::TwistStamped>& eeVels, double dt) {
   // If an existing stream is in progress, stop it first
   this->stopEEVelocityStreaming();
   if (eeVels.empty() || dt <= 0.0) {
@@ -256,13 +196,13 @@ void PFDemo::startEEVelocityStreaming(const std::vector<geometry_msgs::msg::Twis
   // Create and start a timer to publish at the requested period
   this->eeVelocityTimer = this->create_wall_timer(
     std::chrono::duration<double>(this->eeVelocityDt),
-    std::bind(&PFDemo::eeVelocityTimerCallback, this)
+    std::bind(&PFTeleopDemo::eeVelocityTimerCallback, this)
   );
 
   RCLCPP_INFO(this->get_logger(), "Started EE velocity streaming: %zu points @ %.3f Hz", eeVelocityBuffer.size(), 1.0 / eeVelocityDt);
 }
 
-void PFDemo::stopEEVelocityStreaming() {
+void PFTeleopDemo::stopEEVelocityStreaming() {
   if (this->eeVelocityTimer) {
     this->eeVelocityTimer->cancel();
     this->eeVelocityTimer.reset();
@@ -275,7 +215,7 @@ void PFDemo::stopEEVelocityStreaming() {
   this->eeVelocityIndex = 0;
 }
 
-void PFDemo::eeVelocityTimerCallback() {
+void PFTeleopDemo::eeVelocityTimerCallback() {
   if (!this->isStreamingEEVel) {
     // Nothing to stream, defensive cancel
     if (this->eeVelocityTimer) {
@@ -297,7 +237,7 @@ void PFDemo::eeVelocityTimerCallback() {
   this->eeVelocityPub->publish(cmd);
 }
 
-void PFDemo::startJointVelocityStreaming(const trajectory_msgs::msg::JointTrajectory& jointVels, double dt) {
+void PFTeleopDemo::startJointVelocityStreaming(const trajectory_msgs::msg::JointTrajectory& jointVels, double dt) {
   // If an existing stream is in progress, stop it first
   this->stopJointVelocityStreaming();
   if (jointVels.points.empty() || dt <= 0.0) {
@@ -319,13 +259,13 @@ void PFDemo::startJointVelocityStreaming(const trajectory_msgs::msg::JointTrajec
   // Create and start a timer to publish at the requested period
   this->jointVelocityTimer = this->create_wall_timer(
     std::chrono::duration<double>(this->jointVelocityDt),
-    std::bind(&PFDemo::jointVelocityTimerCallback, this)
+    std::bind(&PFTeleopDemo::jointVelocityTimerCallback, this)
   );
 
   RCLCPP_INFO(this->get_logger(), "Started Joint velocity streaming: %zu points @ %.3f Hz", jointVelocityBuffer.points.size(), 1.0 / jointVelocityDt);
 }
 
-void PFDemo::stopJointVelocityStreaming() {
+void PFTeleopDemo::stopJointVelocityStreaming() {
   if (this->jointVelocityTimer) {
     this->jointVelocityTimer->cancel();
     this->jointVelocityTimer.reset();
@@ -338,7 +278,7 @@ void PFDemo::stopJointVelocityStreaming() {
   this->jointVelocityIndex = 0;
 }
 
-void PFDemo::jointVelocityTimerCallback() {
+void PFTeleopDemo::jointVelocityTimerCallback() {
   if (!this->isStreamingJointVel) {
     // Nothing to stream, defensive cancel
     if (this->jointVelocityTimer) {
@@ -356,11 +296,4 @@ void PFDemo::jointVelocityTimerCallback() {
 
   auto cmd = this->jointVelocityBuffer.points[this->jointVelocityIndex++];
   this->jointVelocityPub->publish(cmd);
-}
-
-int main(int argc, char* argv[]) {
-  rclcpp::init(argc, argv);
-  rclcpp::spin(std::make_shared<PFDemo>());
-  rclcpp::shutdown();
-  return 0;
 }

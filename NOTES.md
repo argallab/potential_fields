@@ -319,3 +319,31 @@ Start Focusing on release-specific tasks:
   - Documentation
   - README + Code Documentation
   - Prep for ROS Index + Release
+
+# December 09 2025 Notes
+Sending Joint Velocity trajectory from the demo node produces decent path.
+However, looks like joint velocity trajectory is asympytotic near the end and has very small joint vels for a while near the goal
+Despite capping joint velocity trajectory with a zero command
+Using `ros2 topic hz` confirmed robot control at required frequency (50 Hz)
+
+When trying TASK_SPACE, IKSolver seems to fail. This might be because of repulsive forces.
+Planning with repulsive forces around the goal results in some pretty spiky behavior,
+pushing the planning frame far away, the attraction bringing it back. 
+
+Bug in the repulsive force code??
+
+## Demos
+Screen Capture of RViz (Disable Robot Obstacles, Only Goal Pose)
+GoPro Video
+Save the CSV file/Plots and name them
+
+### Demo 1: No Obstacles, WBV Planning to goal
+
+### Demo 2: WBV Planning to a goal near a obstacle's influence zone
+
+### Demo 3: WBV Planning with several obstacles between start EE pose and goal EE Pose
+We should see snaking or some smooth path between
+
+### Demo 4: Teleop Demo combined with Task-Space Query
+
+### Demo 5 (Reach Goal): Simple Translation and Rotation to achieve goal pose

@@ -732,18 +732,20 @@ namespace pfield {
   std::vector<double> PotentialField::computeInverseKinematics(
     const SpatialVector& targetPose, const std::vector<double>& seedJointAngles) const {
     std::vector<double> jointAngles;
+    bool success = false;
     if (this->ikSolver) {
       Eigen::Isometry3d targetPoseIsometry = Eigen::Isometry3d::Identity();
       targetPoseIsometry.translate(targetPose.getPosition());
       targetPoseIsometry.rotate(targetPose.getOrientation());
       std::string errorMsg;
       Eigen::Matrix<double, 6, Eigen::Dynamic> J;
-      bool success = this->ikSolver->solve(targetPoseIsometry, seedJointAngles, jointAngles, J, errorMsg);
+      success = this->ikSolver->solve(targetPoseIsometry, seedJointAngles, jointAngles, J, errorMsg);
       if (!success) {
-        jointAngles = std::vector<double>{}; // Return empty on failure
+        // TODO(Sharwin24): Need to log or handle this error case properly. Propogate error message up
+        std::cout << "[PFKinematics ERROR]: IKSolver failed solve()" << std::endl;
       }
     }
-    else if (this->pfKinematics) {
+    if (this->pfKinematics && this->ikSolver && !success) {
       // Fallback to internal numerical IK if no external solver is provided
       jointAngles = this->pfKinematics->computeInverseKinematics(targetPose, seedJointAngles, this->eeLinkName);
     }
