@@ -27,7 +27,7 @@ PFTeleopDemo::PFTeleopDemo() : Node("pfield_teleop_demo") {
   this->queryPosePub = this->create_publisher<geometry_msgs::msg::Pose>("pfield/query_pose", 10);
 
   // Wait for the service to be available
-  this->pfTwistClient = this->create_client<ComputePFTwist>("pfield/plan_path");
+  this->pfTwistClient = this->create_client<ComputePFTwist>("pfield/compute_autonomy_vector");
   while (!this->pfTwistClient->wait_for_service(std::chrono::seconds(1))) {
     if (!rclcpp::ok()) {
       RCLCPP_ERROR(this->get_logger(), "Interrupted while waiting for the service. Exiting.");
@@ -58,6 +58,11 @@ PFTeleopDemo::PFTeleopDemo() : Node("pfield_teleop_demo") {
 }
 
 void PFTeleopDemo::timerCallback() {
+  // TODO(Sharwin24): Hack Alert, this is just to test dynamic fusion alphas via ros2 param set
+  this->fuseAlpha = this->get_parameter("fuse_alpha").as_double();
+  RCLCPP_INFO_THROTTLE(this->get_logger(), *this->get_clock(), 30000.0,
+    "Teleop Fusion Running with Fixed Frame = %s, EE Link = %s, Alpha=%.2f ", this->fixedFrame.c_str(), this->eeLinkName.c_str(), this->fuseAlpha
+  );
   // Call ComputePfTwist service
   // Create a request for the ComputeAutonomyVector service
   auto computePFTwistRequest = std::make_shared<ComputePFTwist::Request>();
@@ -148,7 +153,7 @@ void PFTeleopDemo::createAndPublishObstacles() {
   cyl.group = "Static";
   cyl.radius = 0.18 / 2.0;
   cyl.height = 0.3;
-  cyl.pose.position.x = 0.62;
+  cyl.pose.position.x = 0.7;
   cyl.pose.position.y = 0.00;
   cyl.pose.position.z = (cyl.height / 2.0);
   cyl.pose.orientation.x = 0.0;
@@ -173,14 +178,14 @@ geometry_msgs::msg::Pose PFTeleopDemo::getEndEffectorPose() {
     eePose.orientation.y = tf.transform.rotation.y;
     eePose.orientation.z = tf.transform.rotation.z;
     eePose.orientation.w = tf.transform.rotation.w;
-    RCLCPP_INFO(this->get_logger(),
+    RCLCPP_DEBUG(this->get_logger(),
       "Found TF (%s -> %s): (%.2f, %.2f, %.2f) [m]", this->fixedFrame.c_str(), this->eeLinkName.c_str(),
       eePose.position.x, eePose.position.y, eePose.position.z
     );
     return eePose;
   }
   catch (const tf2::TransformException& ex) {
-    RCLCPP_WARN(this->get_logger(),
+    RCLCPP_WARN_THROTTLE(this->get_logger(), *this->get_clock(), 1000.0,
       "Failed to find TF (%s -> %s): %s", this->fixedFrame.c_str(), this->eeLinkName.c_str(), ex.what()
     );
     return geometry_msgs::msg::Pose();
@@ -312,4 +317,11 @@ void PFTeleopDemo::jointVelocityTimerCallback() {
 
   auto cmd = this->jointVelocityBuffer.points[this->jointVelocityIndex++];
   this->jointVelocityPub->publish(cmd);
+}
+
+int main(int argc, char* argv[]) {
+  rclcpp::init(argc, argv);
+  rclcpp::spin(std::make_shared<PFTeleopDemo>());
+  rclcpp::shutdown();
+  return 0;
 }
