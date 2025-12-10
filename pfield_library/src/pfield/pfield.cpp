@@ -870,16 +870,14 @@ namespace pfield {
       // --- 4. Compute end-effector pose for the new joint configuration ---
       SpatialVector nextEEPose = this->pfKinematics->computeEndEffectorPose(nextJointAngles, this->eeLinkName);
 
-      // --- 5. Compute end-effector twist (velocity) from pose change ---
-      Eigen::Vector3d linearVelocity = (nextEEPose.getPosition() - currentEEPose.getPosition()) / stepDt;
-      // For angular velocity, compute from quaternion difference
-      Eigen::Quaterniond q_current = currentEEPose.getOrientation();
-      Eigen::Quaterniond q_next = nextEEPose.getOrientation();
-      Eigen::Quaterniond q_delta = q_next * q_current.conjugate();
-      // Convert to axis-angle for angular velocity
-      Eigen::AngleAxisd angleAxis(q_delta);
-      Eigen::Vector3d angularVelocity = (angleAxis.angle() / stepDt) * angleAxis.axis();
-      TaskSpaceTwist eeTwist(linearVelocity, angularVelocity);
+      // --- 5. Compute end-effector twist (velocity) using Jacobian ---
+      // Instead of finite differencing, we use the analytical Jacobian at the current configuration
+      // to get the instantaneous task-space velocity corresponding to the computed joint velocities.
+      Eigen::MatrixXd J = this->pfKinematics->getSpatialJacobianAtPoint(
+        this->eeLinkName, currentEEPose.getPosition(), currentJointAngles
+      );
+      Eigen::VectorXd twistVec = J * jointVelocities; // jointVelocities is from step 2 (k1 equivalent)
+      TaskSpaceTwist eeTwist(twistVec.head(3), twistVec.tail(3));
 
       // --- 6. Record current state in path ---
       path.recordPathPoint(
