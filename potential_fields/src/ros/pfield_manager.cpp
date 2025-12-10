@@ -30,7 +30,7 @@
 ///   pfield/compute_autonomy_vector (potential_fields_interfaces::srv::ComputeAutonomyVector): Computes velocity at a pose
 ///
 /// SUBSCRIBERS:
-///   pfield/planning_goal_pose (geometry_msgs::msg::Pose): Updates the PF goal pose
+///   pfield/planning_goal_pose DefaultQ(geometry_msgs::msg::Pose): Updates the PF goal pose
 ///   pfield/query_pose (geometry_msgs::msg::Pose): Sets the live query pose used for visualization
 ///   pfield/obstacles (potential_fields_interfaces::msg::ObstacleArray): Adds/updates external PF obstacles
 ///
@@ -91,7 +91,7 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
     this->influenceDistance
   );
   this->pField->enableDynamicQuadraticThreshold(false);
-  this->pField->setDefaultQuadraticThreshold(1.0);
+  this->pField->setQuadraticThreshold(1.0);
 
   // Display PF Parameters
   RCLCPP_INFO(this->get_logger(),

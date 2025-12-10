@@ -457,12 +457,7 @@ namespace pfield {
     // Choset Attractive Potential: F = zeta * (q - q_goal)
     const Eigen::Vector3d direction = queryPose.getPosition() - this->goalPose.getPosition();
     const double magnitude = direction.norm();
-    // The Choset attractive potential defines a threshold for switching to quadratic behavior from conical
-    const double dStar = this->dynamicQuadraticThresholdEnabled ? this->computeDynamicQuadraticThreshold(queryPose)
-      : this->dStarThreshold;
-    // TODO(Sharwin24): Figure out what to do here, conical has problems with oscillations
-    // Maybe we just disable it
-    // return  (dStar * (-this->attractiveGain * direction)) / magnitude;
+    // TODO(Sharwin24): Investigate why Conical block has problems with oscillations
     return -this->attractiveGain * direction;
     // if (magnitude <= dStar) {
     //   // Quadratic Attraction Region
@@ -470,6 +465,9 @@ namespace pfield {
     // }
     // else {
     //   // Conical Attraction Region
+    //   // The Choset attractive potential defines a threshold for switching to quadratic behavior from conical
+    //   const double dStar = this->dynamicQuadraticThresholdEnabled ? this->computeDynamicQuadraticThreshold(queryPose)
+    //   : this->dStarThreshold;
     //   return  (dStar * (-this->attractiveGain * direction)) / magnitude;
     // }
   }

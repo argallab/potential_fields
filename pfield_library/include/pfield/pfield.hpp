@@ -326,7 +326,7 @@ namespace pfield {
     void setGoalPose(SpatialVector newGoalPose) { this->goalPose = newGoalPose; this->goalSet = true; }
     void clearGoalPose() { this->goalSet = false; }
     void setIKSolver(std::shared_ptr<IKSolver> ikSolver) { this->ikSolver = ikSolver; }
-    void setDefaultQuadraticThreshold(double threshold) { this->dStarThreshold = threshold; }
+    void setQuadraticThreshold(double threshold) { this->dStarThreshold = threshold; }
     void enableDynamicQuadraticThreshold(bool enabled) { this->dynamicQuadraticThresholdEnabled = enabled; }
     double getAttractiveGain() const { return this->attractiveGain; }
     double getRepulsiveGain() const { return this->repulsiveGain; }
