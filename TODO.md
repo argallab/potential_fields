@@ -9,9 +9,12 @@
 ---
 
 # Immediate TODOs
+- Create walkthrough video about files and what they do
+- Go through ROS package release process for open sourcing on ROS index
+
 - Include installation instructions for fcl, pinnochio, libfranka and other external dependencies in README
 - Create a minimum Docker Image for PF and robot dependencies
-- Investigate Configuration Space planning with the PF
+- Investigate Configuration Space planninewewfeeg with the PF
   - Principles of Robot Motion, Choset et al.
   - Modern Robotics, Lynch and Park
 - Allow editing pfield parameters dynamically during runtime via ROS2 parameters

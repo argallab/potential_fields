@@ -2,7 +2,7 @@
 
 ---
 
-For information about the mathematical formulation of potential fields used in this package, see [MATH.md](MATH.md). This README provides an overview of the package structure, instructions for building and launching the package, and details about usage.
+For information about the mathematical formulation of potential fields used in this package, see [MATH.md](MATH.md). This README provides an overview of the package structure, instructions for building and launching the package, and details about usage. There is a [README.md](pfield_library/README.md) in the `pfield_library` folder that contains information about the independent C++ library.
 
 # ROS Package Structure and Overview
 
