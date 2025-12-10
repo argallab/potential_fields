@@ -510,9 +510,9 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
   trajectory_msgs::msg::JointTrajectory jointTrajectory;
   jointTrajectory.header.stamp = t0;
   for (size_t i = 0; i < planningResult.jointAngles.size(); ++i) {
-    const auto& joints = planningResult.jointAngles[i];
     trajectory_msgs::msg::JointTrajectoryPoint jtp;
-    jtp.positions = joints;
+    jtp.positions = planningResult.jointAngles[i];
+    jtp.velocities = planningResult.jointVelocities[i];
     jtp.time_from_start = rclcpp::Duration::from_seconds(static_cast<double>(i) * stepDt);
     jointTrajectory.points.push_back(jtp);
   }
