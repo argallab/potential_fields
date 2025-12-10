@@ -325,7 +325,6 @@ void PotentialFieldManager::integrateQueryPoseFromField() {
 
 void PotentialFieldManager::handleComputeAutonomyVector(
   const ComputeAutonomyVector::Request::SharedPtr request, ComputeAutonomyVector::Response::SharedPtr response) {
-  RCLCPP_INFO(this->get_logger(), "Received autonomy vector request");
   // Compute the autonomy vector at the given pose
   pfield::SpatialVector queryPose(
     Eigen::Vector3d(
@@ -379,7 +378,7 @@ void PotentialFieldManager::handleComputeAutonomyVector(
   const double roll = eulerAngles[0];
   const double pitch = eulerAngles[1];
   const double yaw = eulerAngles[2];
-  RCLCPP_INFO(
+  RCLCPP_DEBUG(
     this->get_logger(),
     "Autonomy vector computed at pose: pos=(%.2f, %.2f, %.2f), RPY=(%.2f, %.2f, %.2f)",
     queryPose.getPosition().x(), queryPose.getPosition().y(), queryPose.getPosition().z(),
