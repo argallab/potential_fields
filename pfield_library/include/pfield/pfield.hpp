@@ -78,7 +78,6 @@ namespace pfield {
     std::vector<std::vector<double>> jointAngles; // Joint angles for each point in the path [rad]
     std::vector<std::vector<double>> jointVelocities; // Joint velocities for each point in the path [rad/s]
     std::vector<std::vector<double>> jointTorques; // Joint torques for each point in the path [Nm]
-    std::vector<TaskSpaceWrench> wrenches;
     unsigned int numPoints; // The number of points in the planned path, should be equal across all vectors
     double duration; // Total duration of the path [s]
     double dt; // Time difference between consecutive points [s]
