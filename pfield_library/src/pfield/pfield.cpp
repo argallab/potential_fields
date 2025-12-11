@@ -740,7 +740,7 @@ namespace pfield {
       success = this->ikSolver->solve(targetPoseIsometry, seedJointAngles, jointAngles, J, errorMsg);
       if (!success) {
         // TODO(Sharwin24): Need to log or handle this error case properly. Propogate error message up
-        std::cout << "[PFKinematics ERROR]: IKSolver failed solve()" << std::endl;
+        // std::cerr << "[PFKinematics ERROR]: IKSolver failed solve()" << std::endl;
       }
     }
     if (this->pfKinematics && this->ikSolver && !success) {
@@ -876,15 +876,6 @@ namespace pfield {
       );
       Eigen::VectorXd twistVec = J * jointVelocities; // jointVelocities is from step 2 (k1 equivalent)
       TaskSpaceTwist eeTwist(twistVec.head(3), twistVec.tail(3));
-      // Eigen::Vector3d linearVelocity = (nextEEPose.getPosition() - currentEEPose.getPosition()) / stepDt;
-      // // For angular velocity, compute from quaternion difference
-      // Eigen::Quaterniond q_current = currentEEPose.getOrientation();
-      // Eigen::Quaterniond q_next = nextEEPose.getOrientation();
-      // Eigen::Quaterniond q_delta = q_next * q_current.conjugate();
-      // // Convert to axis-angle for angular velocity
-      // Eigen::AngleAxisd angleAxis(q_delta);
-      // Eigen::Vector3d angularVelocity = (angleAxis.angle() / stepDt) * angleAxis.axis();
-      // TaskSpaceTwist eeTwist(linearVelocity, angularVelocity);
 
       // --- 6. Record current state in path ---
       path.recordPathPoint(
