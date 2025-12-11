@@ -22,6 +22,7 @@
 - Use RK4 to integrate joint velocities into joint positions and for integrating joint positions into end-effector poses and test if this improves accuracy/stability of the planner.
 - Verify Unit tests for pfield_library and move them to a tests folder that can be run with colcon test or gtest
 - User node should be required to pass in mesh/urdf directory so that they can just type "object.obj" and have the path be resolved by the pfield_library
+- Put Joint Torques in PlannedPath Struct
 
 # Future TODOs and Refactors
 - Create U-shaped obstacle test case for classic local minima problem
