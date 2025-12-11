@@ -29,6 +29,7 @@ find_package(std_msgs REQUIRED)
 find_package(trajectory_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(control_msgs REQUIRED)
+find_package(ament_index_cpp REQUIRED)
 
 include_directories(
   include/pfields_demo
@@ -72,6 +73,7 @@ ament_target_dependencies(pfield_teleop_demo_node
   trajectory_msgs
   sensor_msgs
   control_msgs
+  ament_index_cpp
 )
 
 target_link_libraries(pfield_teleop_demo_node pfield_library::pfield_library)

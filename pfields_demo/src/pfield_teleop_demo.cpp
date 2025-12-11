@@ -2,6 +2,7 @@
 #include "rclcpp/rclcpp.hpp"
 // #include "tf2_ros/static_transform_broadcaster.h"
 #include "tf2_eigen/tf2_eigen.hpp"
+#include <ament_index_cpp/get_package_share_directory.hpp>
 
 #include <fstream>
 #include <iomanip>
@@ -161,6 +162,24 @@ void PFTeleopDemo::createAndPublishObstacles() {
   cyl.pose.orientation.z = 0.0;
   cyl.pose.orientation.w = 1.0;
   allObstacles.obstacles.push_back(cyl);
+
+  potential_fields_interfaces::msg::Obstacle cage;
+  cage.frame_id = "cage";
+  cage.type = "Mesh";
+  cage.group = "Static";
+  // std::string share_directory = ament_index_cpp::get_package_share_directory("pfields_demo");
+  cage.mesh_resource = "package://pfields_demo/meshes/r01_scene/icos_mesh.obj";
+  cage.pose.position.x = 0.05;
+  cage.pose.position.y = -0.4;
+  cage.pose.position.z = 0.4044;
+  cage.pose.orientation.x = 0.0;
+  cage.pose.orientation.y = 0.0;
+  cage.pose.orientation.z = 0.0;
+  cage.pose.orientation.w = 1.0;
+  cage.scale_x = 0.5;
+  cage.scale_y = 0.5;
+  cage.scale_z = 0.5;
+  allObstacles.obstacles.push_back(cage);
 
   this->obstaclePub->publish(allObstacles);
 }
