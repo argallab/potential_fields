@@ -342,12 +342,14 @@ GoPro Video
 Save the CSV file/Plots and name them
 
 ### Demo 1: No Obstacles, WBV Planning to goal
+Done
 
 ### Demo 2: WBV Planning to a goal near a obstacle's influence zone
+Has Spiky repulsive behavior
 
 ### Demo 3: WBV Planning with several obstacles between start EE pose and goal EE Pose
-We should see snaking or some smooth path between
 
 ### Demo 4: Teleop Demo combined with Task-Space Query
+Done
 
 ### Demo 5 (Reach Goal): Simple Translation and Rotation to achieve goal pose
