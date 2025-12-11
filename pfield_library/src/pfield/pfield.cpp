@@ -215,6 +215,7 @@ namespace pfield {
     const Eigen::VectorXd& jointTorques, const std::vector<double>& jointAngles,
     const std::vector<double>& prevJointVelocities, const double dt) const {
     // TODO(Sharwin24): Fix this method and figure out why it's unstable
+    // https://github.com/argallab/pfields_2025/issues/23
     const bool useRobotDynamicsEquation = false;
     if (!this->pfKinematics || !useRobotDynamicsEquation) {
       // If we don't have access to PFKinematics, use a simple proportional mapping
@@ -960,7 +961,7 @@ namespace pfield {
   bool PotentialField::isRobotInCollisionWithEnvironment(double clearanceThreshold) const {
     auto robotObstacles = this->getObstaclesByGroup(ObstacleGroup::ROBOT);
     auto envObstacles = this->getObstaclesByGroup(ObstacleGroup::STATIC);
-    //TODO(Sharwin24): Handle Dynamic Obstacles?
+    //TODO(Sharwin24): Handle Dynamic Obstacles? For now, we ignore them.
 
     // Setup collision request and result before looping over robot obstacles
     coal::CollisionRequest collisionRequest;
