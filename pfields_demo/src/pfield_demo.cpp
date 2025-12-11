@@ -102,7 +102,7 @@ void PFDemo::handleRunPlanPathDemo(
   pathPlanRequest->delta_time = 0.02; // 20 ms between waypoints
   pathPlanRequest->goal_tolerance = 0.01; // 10 mm tolerance
   pathPlanRequest->max_iterations = 25000; // Max iterations for planning
-  pathPlanRequest->planning_method = PlanPath::Request::PLANNING_METHOD_TASK_SPACE; // "task_space" or "whole_body"
+  pathPlanRequest->planning_method = PlanPath::Request::PLANNING_METHOD_WHOLE_BODY; // "task_space" or "whole_body"
   const double dt = pathPlanRequest->delta_time;
 
   // Publish the goal pose
@@ -200,7 +200,7 @@ void PFDemo::createAndPublishObstacles() {
   cyl.pose.orientation.z = 0.0;
   cyl.pose.orientation.w = 1.0;
   allObstacles.obstacles.push_back(cyl);
-  
+
   this->obstaclePub->publish(allObstacles);
 }
 
