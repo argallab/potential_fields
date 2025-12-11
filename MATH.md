@@ -46,11 +46,11 @@ Where:
 ## Rotational Attraction
 Let $q_c$ be the current unit quaternion and $q_g$ the goal orientation. The geodesic distance $\theta \in [0,\pi]$ is the shortest rotation aligning $q_c$ to $q_g$. Define the quaternion difference
 
-$$q_{diff} = q_c^{*} \otimes q_g,$$
+$$q_{diff} = q_c^{*} \otimes q_g$$
 
 and the corresponding unit rotation axis $\mathbf{u} = \frac{\vec{q_{diff}}}{\lVert\vec{q_{diff}}\rVert}$. The attractive rotational torque is proportional to the geodesic angle and acts about $\mathbf{u}$:
 
-$$\boldsymbol{\tau}_{att}(q) = -\,\omega\,\theta\,\mathbf{u},$$
+$$\boldsymbol{\tau}_{att}(q) = -\,\omega\,\theta\,\mathbf{u}$$
 
 applied only when $\theta$ exceeds a small threshold. Here $\omega$ is the rotational attractive gain.
 

@@ -342,8 +342,8 @@ namespace pfield {
     // We need to know how 'pointInWorldFrame' moves.
     // v_point = v_origin + w x r  (where r is vector from origin to point)
 
-    Eigen::Vector3d p_origin = data.oMf[frameId].translation();
-    Eigen::Vector3d r = pointInWorldFrame - p_origin; // Vector from link origin to collision point
+    Eigen::Vector3d linkOrigin = data.oMf[frameId].translation();
+    Eigen::Vector3d r = pointInWorldFrame - linkOrigin; // Vector from link origin to collision point
 
     // Linear velocity at point P is: J_linear - skew(r) * J_angular
     Eigen::MatrixXd J_point = J_frame.topRows(3) -

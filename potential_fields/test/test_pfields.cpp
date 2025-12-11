@@ -735,7 +735,7 @@ TEST(PotentialFieldDynamicThresholdTest, NoObstaclesBaselinePlusStopping) {
   // With no obstacles, d* = baseline + 0.5 * stoppingDistance, clamped to [dMin, influenceDistance]
   pfield::PotentialField pf; // defaults: vmax=5, amax=1, baseline ~ 1.0, influence=1.0
   pf.setInfluenceDistance(10.0); // widen clamp upper bound so stopping distance affects result
-  pf.setDynamicQuadraticThreshold(true);
+  pf.enableDynamicQuadraticThreshold(true);
   // We must set a goal, otherwise computeDynamicQuadraticThreshold returns baseline immediately
   pf.setGoalPose(pfield::SpatialVector(Eigen::Vector3d(10.0, 0.0, 0.0), Eigen::Quaterniond::Identity()));
 
@@ -754,7 +754,7 @@ TEST(PotentialFieldDynamicThresholdTest, ClampedByInfluenceInClutter) {
   pfield::SpatialVector goal(Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity());
   pfield::PotentialField pf(goal, 1.0, 0.0, 0.0);
   pf.setInfluenceDistance(3.0); // small influence to exercise clamping
-  pf.setDynamicQuadraticThreshold(true);
+  pf.enableDynamicQuadraticThreshold(true);
   // Obstacle centered at goal
   pf.addObstacle(pfield::PotentialFieldObstacle(
     "clutter",
@@ -794,7 +794,7 @@ public:
 };
 
 TEST(PotentialFieldTest, EvaluateWholeBodyJointVelocitiesBasic) {
-  // Test that evaluateWholeBodyJointVelocitiesAtConfiguration returns joint velocities
+  // Test that evaluateWholeBodyJointTorquesAtConfiguration returns joint velocities
   // with correct dimensions and reasonable values
 
   // Create a pfield::PotentialField with a goal away from origin
@@ -825,10 +825,10 @@ TEST(PotentialFieldTest, EvaluateWholeBodyJointVelocitiesBasic) {
   const std::vector<double> prevJointVels = std::vector<double>(jointAngles.size(), 0.0); // assume starting from rest
   const double dt = 0.1; // time step for integration
   try {
-    jointVels = pf.evaluateWholeBodyJointVelocitiesAtConfiguration(jointAngles, prevJointVels, eePose, dt);
+    jointVels = pf.evaluateWholeBodyJointTorquesAtConfiguration(jointAngles, prevJointVels, eePose, dt);
   }
   catch (const std::exception& e) {
-    FAIL() << "Exception thrown during pfield::evaluateWholeBodyJointVelocitiesAtConfiguration: " << e.what();
+    FAIL() << "Exception thrown during pfield::evaluateWholeBodyJointTorquesAtConfiguration: " << e.what();
   }
 
   // Verify the output has the correct size
@@ -845,7 +845,7 @@ TEST(PotentialFieldTest, EvaluateWholeBodyJointVelocitiesBasic) {
   pfield::PotentialField pfAtGoal(goal, 1.0, 0.0, 0.0);  // no repulsive gain
   pfAtGoal.setIKSolver(std::make_shared<MockIKSolver>());
 
-  Eigen::VectorXd zeroVels = pfAtGoal.evaluateWholeBodyJointVelocitiesAtConfiguration(
+  Eigen::VectorXd zeroVels = pfAtGoal.evaluateWholeBodyJointTorquesAtConfiguration(
     zeroJointAngles, prevJointVels, atGoalPose, dt
   );
   EXPECT_EQ(zeroVels.size(), 3);
@@ -868,5 +868,5 @@ TEST(PotentialFieldTest, EvaluateWholeBodyJointVelocities_NoKinematics_ShouldNot
   // Note: Based on the read_file output, step 1 calls `computeEndEffectorAttractionJointTorques`
   // and step 4 checks `if (!this->pfKinematics)`. This suggests a potential crash if step 1 uses kinematics.
 
-  EXPECT_NO_THROW(pf.evaluateWholeBodyJointVelocitiesAtConfiguration(q, dq, eePose, 0.1));
+  EXPECT_NO_THROW(pf.evaluateWholeBodyJointTorquesAtConfiguration(q, dq, eePose, 0.1));
 }

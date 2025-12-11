@@ -1,14 +1,14 @@
 pfield_manager:
   ros__parameters:
     visualize_pf_frequency: 10.0 # [Hz]
-    attractive_gain: 2.5 # [Nm]
-    rotational_attractive_gain: 1.5 # [Nm/rad]
-    repulsive_gain: 1.5 # [Nm]
+    attractive_gain: 3.0 # [Nm]
+    rotational_attractive_gain: 0.75 # [Nm/rad]
+    repulsive_gain: 0.875 # [Nm]
     max_linear_velocity: 0.05 # [m/s]
     max_angular_velocity: 0.4 # [rad/s]
     max_linear_acceleration: 1.0 # [m/s^2]
     max_angular_acceleration: 0.2 # [rad/s^2]
-    influence_distance: 0.075 # Influence distance for obstacle repulsion [m]
+    influence_distance: 0.15 # Influence distance for obstacle repulsion [m]
     visualize_field_vectors: false # Whether to visualize the potential field vectors (Slows down computation if true)
     visualizer_buffer_area: 0.5 # Extra area around obstacles and goal to visualize the PF [m]
     field_resolution: 1.0 # Resolution to show PF velocity arrows in RViz [m]

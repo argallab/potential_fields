@@ -228,7 +228,7 @@ docker build -t pfields .
 # After the image is built, the container can be created and started by running:
 sudo docker run -it --privileged \
 -v /dev:/dev \
--v /home/$USER/workspaces/pfield_ws/src:/home/workspace/src \
+-v /home/$USER/workspaces/pfield_ws:/home/workspace/src \
 -e DISPLAY \
 -e QT_X11_NO_MITSHM=1 \
 --name argallab_pfields \
@@ -236,14 +236,15 @@ sudo docker run -it --privileged \
 pfields:latest
 ```
 
-Once the docker container is started, run `colcon build` and `source install/setup.bash` to initialize the ROS workspace,
-and then launch the appropriate nodes:
+Once the docker container is started, run `colcon build` and `source install/setup.bash` to initialize the ROS workspace, and then launch the appropriate nodes:
 
 ```bash
 # Robot Launch
 ros2 launch xarm_moveit_config xarm7_moveit_realmove.launch.py robot_ip:=192.168.1.199 add_gripper:=true
+# Launch JParse
+ros2 launch manipulator_control xarm_main_vel.launch use_teleop_control:=true use_teleop_control_jparse:=true
 # Launch PF Node that hosts Path Planning service (and demo service)
-ros2 launch pfields_demo pf_demo.launch.xml use_rviz:=false
+ros2 launch pfields_demo pf_demo.launch.xml use_rviz:=false motion_plugin_type:="xarm" end_effector_frame:="link_tcp" urdf_file_path:="xarm7.urdf"
 ```
 
 ### Demo Obstacles
@@ -318,3 +319,37 @@ Start Focusing on release-specific tasks:
   - Documentation
   - README + Code Documentation
   - Prep for ROS Index + Release
+
+## Potential (pun intended) Infrastructure Edits
+- If we're using an example that already has a ROS environment, we shouldn't need to pass in a raw URDF file, we should be able to just point to a robot description topic and propogate that throughout the ROS library and C++ library for use. If we're not using ROS, we will need to provide one.
+- PFM can listen for the TF of the given eeLinkName and if found, use it as the "current" position for visualization of the query pose
+
+# December 09 2025 Notes
+Sending Joint Velocity trajectory from the demo node produces decent path.
+However, looks like joint velocity trajectory is asympytotic near the end and has very small joint vels for a while near the goal
+Despite capping joint velocity trajectory with a zero command
+Using `ros2 topic hz` confirmed robot control at required frequency (50 Hz)
+
+When trying TASK_SPACE, IKSolver seems to fail. This might be because of repulsive forces.
+Planning with repulsive forces around the goal results in some pretty spiky behavior,
+pushing the planning frame far away, the attraction bringing it back.
+
+Bug in the repulsive force code??
+
+## Demos
+Screen Capture of RViz (Disable Robot Obstacles, Only Goal Pose)
+GoPro Video
+Save the CSV file/Plots and name them
+
+### Demo 1: No Obstacles, WBV Planning to goal
+Done
+
+### Demo 2: WBV Planning to a goal near a obstacle's influence zone
+Has Spiky repulsive behavior
+
+### Demo 3: WBV Planning with several obstacles between start EE pose and goal EE Pose
+
+### Demo 4: Teleop Demo combined with Task-Space Query
+Done
+
+### Demo 5 (Reach Goal): Simple Translation and Rotation to achieve goal pose

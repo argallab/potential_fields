@@ -1,6 +1,6 @@
 # The start and goal pose for the plan
-geometry_msgs/PoseStamped start
-geometry_msgs/PoseStamped goal
+geometry_msgs/Pose start
+geometry_msgs/Pose goal
 
 # The starting joint angles that correspond to the start pose [rad]
 float32[] starting_joint_angles
@@ -14,8 +14,13 @@ float32 goal_tolerance
 # Max iterations for the planner (Default is 30000)
 int32 max_iterations
 
-# Planning method to use: "task_space" (default) or "whole_body"
-# TODO(Sharwin24): Initialize srv variables with these definitions as well as a default to task_space
+# Planning method definitions
+string PLANNING_METHOD_TASK_SPACE="task_space"
+string PLANNING_METHOD_WHOLE_BODY="whole_body"
+
+# Planning method to use. Defaults to PLANNING_METHOD_TASK_SPACE if empty.
+# If using whole_body velocity planning, the start pose is discarded and the starting_joint_angles
+# will be used as the initial configuration, with kinematics being used for determining the end effector pose
 string planning_method
 
 ---
@@ -24,3 +29,5 @@ nav_msgs/Path end_effector_path
 trajectory_msgs/JointTrajectory joint_trajectory
 # End-effector velocity trajectory (one TwistStamped per planning step)
 geometry_msgs/TwistStamped[] end_effector_velocity_trajectory
+# Optional error message and info if planning fails and
+string error_message

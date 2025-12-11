@@ -13,6 +13,7 @@
 #include "sensor_msgs/msg/joint_state.hpp"
 #include "std_srvs/srv/empty.hpp"
 #include "trajectory_msgs/msg/joint_trajectory.hpp"
+#include "trajectory_msgs/msg/joint_trajectory_point.hpp"
 #include "tf2_ros/transform_listener.h"
 #include "tf2_ros/buffer.h"
 
@@ -28,8 +29,10 @@ private:
 
   // Create a service client for planning paths
   rclcpp::Client<PlanPath>::SharedPtr planPathClient;
-  rclcpp::Publisher<geometry_msgs::msg::PoseStamped>::SharedPtr goalPosePub;
+  rclcpp::Publisher<geometry_msgs::msg::Pose>::SharedPtr goalPosePub;
+  rclcpp::Publisher<geometry_msgs::msg::Pose>::SharedPtr queryPosePub;
   rclcpp::Publisher<geometry_msgs::msg::TwistStamped>::SharedPtr eeVelocityPub;
+  rclcpp::Publisher<trajectory_msgs::msg::JointTrajectoryPoint>::SharedPtr jointVelocityPub;
   rclcpp::Publisher<potential_fields_interfaces::msg::ObstacleArray>::SharedPtr obstaclePub;
   rclcpp::Service<std_srvs::srv::Empty>::SharedPtr runPlanPathDemoService;
   std::shared_ptr<tf2_ros::Buffer> tfBuffer; // TF buffer for listening to Robot TFs
@@ -51,13 +54,23 @@ private:
   void startEEVelocityStreaming(const std::vector<geometry_msgs::msg::TwistStamped>& eeVels, double dt);
   void stopEEVelocityStreaming();
   void eeVelocityTimerCallback();
-
   // Streaming state
   bool isStreamingEEVel{false};
   std::vector<geometry_msgs::msg::TwistStamped> eeVelocityBuffer; // queued trajectory
   std::size_t eeVelocityIndex{0};
   double eeVelocityDt{0.1};
   rclcpp::TimerBase::SharedPtr eeVelocityTimer; // publishes at eeVelocityDt
+
+  // Timer-based streaming of joint velocity commands
+  void startJointVelocityStreaming(const trajectory_msgs::msg::JointTrajectory& jointTrajectory, double dt);
+  void stopJointVelocityStreaming();
+  void jointVelocityTimerCallback();
+  // Streaming state
+  bool isStreamingJointVel{false};
+  trajectory_msgs::msg::JointTrajectory jointVelocityBuffer; // queued trajectory
+  std::size_t jointVelocityIndex{0};
+  double jointVelocityDt{0.1};
+  rclcpp::TimerBase::SharedPtr jointVelocityTimer; // publishes at jointVelocityDt
 };
 
 #endif // PFIELD_DEMO_HPP

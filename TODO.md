@@ -9,21 +9,27 @@
 ---
 
 # Immediate TODOs
-- Test Whole Body Velocity Path Planning with PF and Xarm
+- Create walkthrough video about files and what they do
+- Go through ROS package release process for open sourcing on ROS index
+
 - Include installation instructions for fcl, pinnochio, libfranka and other external dependencies in README
-- Fix DOCKER image to include all dependencies and build colcon build out of the box
-  - Split into separate images for PF and robot dependencies
-- Use `ros-jazzy-coal` as dependency for COAL. Clean up library usage for mesh collisions. (May not need this anymore)
-- Investigate Configuration Space planning with the PF
+- Create a minimum Docker Image for PF and robot dependencies
+- Investigate Configuration Space planninewewfeeg with the PF
   - Principles of Robot Motion, Choset et al.
   - Modern Robotics, Lynch and Park
-- Let user pass either Start pose or start joint angles when planning a path instead of both
 - Allow editing pfield parameters dynamically during runtime via ROS2 parameters
-- Add failure reasons (string) to PlanPath service response for better debugging
-- Plot Net force vs time as well, maybe force on each joint
+- Plot Net force vs time as well, maybe force on each joint. Would help debug Attractive and Repulsive forces.
+- Use RK4 to integrate joint velocities into joint positions and for integrating joint positions into end-effector poses and test if this improves accuracy/stability of the planner.
+- Verify Unit tests for pfield_library and move them to a tests folder that can be run with colcon test or gtest
+- User node should be required to pass in mesh/urdf directory so that they can just type "object.obj" and have the path be resolved by the pfield_library
+- Put Joint Torques in PlannedPath Struct
 
 # Future TODOs and Refactors
 - Create U-shaped obstacle test case for classic local minima problem
 - Improve Extent Estimator ("Extentimator") to be more accurate and be realistic for robot arms
   - Add unit tests for Extent Estimator
-- Define IKSolver and MotionPlugin more concretely. IKSolver should be an ABC for a user to implement an IK implementation. MotionPlugin shoudl be an ABC for a user to implement how to talk to real robot and should be capable of both ROS-agnostic and ROS-aware implementations.
+- Define IKSolver and MotionPlugin more concretely. IKSolver should be an ABC for a user to implement an IK implementation.
+  MotionPlugin should be an ABC for a user to implement how to talk to real robot and should be capable of both ROS-agnostic and ROS-aware implementations.
+  - Refactor where solvers and robot_plugins are stored across the pfield_library and potential_fields ROS package.
+- Document process for creating plots and how to save data during runtime for plotting later
+- Review papers for improvements to potential field algorithms. Demiana is helping with researching relevant papers.

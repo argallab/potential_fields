@@ -77,10 +77,15 @@ namespace pfield {
     std::vector<TaskSpaceTwist> twists; // End-effector velocity
     std::vector<std::vector<double>> jointAngles; // Joint angles for each point in the path [rad]
     std::vector<std::vector<double>> jointVelocities; // Joint velocities for each point in the path [rad/s]
+    std::vector<std::vector<double>> jointTorques; // Joint torques for each point in the path [Nm]
     unsigned int numPoints; // The number of points in the planned path, should be equal across all vectors
     double duration; // Total duration of the path [s]
     double dt; // Time difference between consecutive points [s]
+    double goalTolerance; // The goal tolerance used during planning [m]
+    double rotationalTolerance; // The rotational goal tolerance used during planning [rad]
     bool success = false; // Whether the path planning was successful
+    std::string planningMethod; // Either "task_space" or "whole_body_velocity"
+    std::string failureReason; // A description of why planning failed, if applicable
 
     PlannedPath() : numPoints(0), duration(0.0), dt(0.0) {}
 
@@ -92,36 +97,46 @@ namespace pfield {
      * @param twist The EE twist at the path point
      * @param jointAngles The joint angles at the path point [rad]
      */
-    void recordPathPoint(double timeStamp, const SpatialVector& pose, const TaskSpaceTwist& twist,
-      std::vector<double> jointAngles) {
+    void recordPathPoint(
+      double timeStamp, const SpatialVector& pose, const TaskSpaceTwist& twist,
+      std::vector<double> jointAngles, std::vector<double> jointVelocities = {}, std::vector<double> jointTorques = {}) {
       this->poses.push_back(pose);
       this->twists.push_back(twist);
       this->jointAngles.push_back(jointAngles);
       this->timeStamps.push_back(timeStamp);
       this->numPoints = static_cast<unsigned int>(this->poses.size());
-      if (numPoints == 1) {
-        this->dt = 0.0;
-        this->duration = 0.0;
-        this->jointVelocities.clear();
-        // Joint Velocity at first point is zero
-        this->jointVelocities.resize(jointAngles.size(), std::vector<double>(jointAngles.size(), 0.0));
-        this->jointVelocities.push_back(std::vector<double>(jointAngles.size(), 0.0));
+      if (!jointTorques.empty()) {
+        this->jointTorques.push_back(jointTorques);
       }
-      else if (this->numPoints > 1) {
-        this->dt = this->timeStamps.back() - this->timeStamps[this->numPoints - 2];
-        this->duration = this->timeStamps.back() - this->timeStamps.front();
-        // Add an estimation of joint velocities
-        const double dtSec = this->dt > 0.0 ? this->dt : 1.0;
-        const size_t numJoints = this->jointAngles.back().size();
-        std::vector<double> velocities(numJoints, 0.0);
-        for (size_t j = 0; j < numJoints; ++j) {
-          velocities[j] = (this->jointAngles.back()[j] - this->jointAngles[this->numPoints - 2][j]) / dtSec;
-        }
-        this->jointVelocities.push_back(velocities);
+      if (!jointVelocities.empty()) {
+        this->jointVelocities.push_back(jointVelocities);
       }
       else {
-        this->dt = 0.0;
-        this->duration = 0.0;
+        // Estimate joint velocities if not provided from previous point
+        if (numPoints == 1) {
+          this->dt = 0.0;
+          this->duration = 0.0;
+          this->jointVelocities.clear();
+          // Joint Velocity at first point is zero
+          this->jointVelocities.resize(jointAngles.size(), std::vector<double>(jointAngles.size(), 0.0));
+          this->jointVelocities.push_back(std::vector<double>(jointAngles.size(), 0.0));
+        }
+        else if (this->numPoints > 1) {
+          this->dt = this->timeStamps.back() - this->timeStamps[this->numPoints - 2];
+          this->duration = this->timeStamps.back() - this->timeStamps.front();
+          // Add an estimation of joint velocities
+          const double dtSec = this->dt > 0.0 ? this->dt : 1.0;
+          const size_t numJoints = this->jointAngles.back().size();
+          std::vector<double> velocities(numJoints, 0.0);
+          for (size_t j = 0; j < numJoints; ++j) {
+            velocities[j] = (this->jointAngles.back()[j] - this->jointAngles[this->numPoints - 2][j]) / dtSec;
+          }
+          this->jointVelocities.push_back(velocities);
+        }
+        else {
+          this->dt = 0.0;
+          this->duration = 0.0;
+        }
       }
     }
   };
@@ -311,7 +326,8 @@ namespace pfield {
     void setGoalPose(SpatialVector newGoalPose) { this->goalPose = newGoalPose; this->goalSet = true; }
     void clearGoalPose() { this->goalSet = false; }
     void setIKSolver(std::shared_ptr<IKSolver> ikSolver) { this->ikSolver = ikSolver; }
-    void setDynamicQuadraticThreshold(bool enabled) { this->dynamicQuadraticThresholdEnabled = enabled; }
+    void setQuadraticThreshold(double threshold) { this->dStarThreshold = threshold; }
+    void enableDynamicQuadraticThreshold(bool enabled) { this->dynamicQuadraticThresholdEnabled = enabled; }
     double getAttractiveGain() const { return this->attractiveGain; }
     double getRepulsiveGain() const { return this->repulsiveGain; }
     double getRotationalAttractiveGain() const { return this->rotationalAttractiveGain; }
@@ -320,6 +336,8 @@ namespace pfield {
     double getMaxLinearAcceleration() const { return this->maxLinearAcceleration; }
     double getMaxAngularAcceleration() const { return this->maxAngularAcceleration; }
     double getInfluenceDistance() const { return this->influenceDistance; }
+    double getRotationalThreshold() const { return this->rotationalThreshold; }
+    double getQuadraticThreshold() const { return this->dStarThreshold; }
     size_t getNumJoints() const { return this->pfKinematics ? this->pfKinematics->getNumJoints() : 0; }
     size_t getNumLinks() const { return this->pfKinematics ? this->pfKinematics->getNumLinks() : 0; }
     bool isUsingDynamicQuadraticThreshold() const { return this->dynamicQuadraticThresholdEnabled; }
@@ -425,7 +443,7 @@ namespace pfield {
      * @param dt The time step over which to integrate acceleration [s]
      * @return Eigen::VectorXd The resulting whole-body joint velocities [rad/s]
      */
-    Eigen::VectorXd evaluateWholeBodyJointVelocitiesAtConfiguration(
+    Eigen::VectorXd evaluateWholeBodyJointTorquesAtConfiguration(
       const std::vector<double>& jointAngles, const std::vector<double>& prevJointVelocities,
       const SpatialVector& eePose, const double dt);
 
@@ -565,7 +583,7 @@ namespace pfield {
 
     Eigen::VectorXd convertJointTorquesToJointVelocities(
       const Eigen::VectorXd& jointTorques, const std::vector<double>& jointAngles,
-      const std::vector<double>& currentJointVelocities, const double dt) const;
+      const std::vector<double>& prevJointVelocities, const double dt) const;
 
 
     /**
@@ -650,7 +668,7 @@ namespace pfield {
     /**
      * @brief Compute a per-step switch distance d* that blends goal/path clearance and stopping distance.
      *
-     * @note When dynamic thresholding is disabled, the fixed defaultDStarThreshold is used.
+     * @note When dynamic thresholding is disabled, the fixed dStarThreshold is used.
      *
      * @param queryPose The current pose to compute the dynamic threshold for
      * @return double The computed dynamic quadratic threshold distance d* [m]
@@ -713,7 +731,7 @@ namespace pfield {
     );
 
     /**
-     * @brief Plans a path from the start pose to the goal pose using whole-body joint velocities.
+     * @brief Plans a path from the starting configuration to the internal goal pose using whole-body joint velocities.
      *
      * @note This method computes joint velocities by considering both end-effector attraction
      *       to the goal and whole-body obstacle repulsion. Unlike planPathFromTaskSpaceWrench,
@@ -721,7 +739,6 @@ namespace pfield {
      *       providing better whole-body collision avoidance. Forward kinematics is used to
      *       compute the end-effector pose at each step from the integrated joint configuration.
      *
-     * @param startPose The starting end-effector pose as a SpatialVector (used for validation).
      * @param startJointAngles The starting joint angles for the robot [rad].
      * @param dt The time step for each iteration of the path planning [s].
      * @param goalTolerance The tolerance for reaching the goal pose [m].
@@ -729,7 +746,6 @@ namespace pfield {
      * @return PlannedPath The planned path containing poses, twists, joint angles, and timestamps.
      */
     PlannedPath planPathFromWholeBodyJointVelocities(
-      const SpatialVector& startPose,
       const std::vector<double>& startJointAngles,
       const double dt,
       const double goalTolerance,
@@ -791,11 +807,12 @@ namespace pfield {
     std::string eeLinkName; // End-effector link name for kinematic model, IK, and planning
     std::unique_ptr<PFKinematics> pfKinematics; // Kinematics helper for obstacle updates via joint angles
     std::shared_ptr<IKSolver> ikSolver; // Inverse kinematics solver for joint angle computation
+    // Constant Parameters that can be adjusted if neccessary
     const double translationalTolerance = 1e-3; // Threshold for distances to the goal and obstacles [m]
     const double rotationalThreshold = 0.05; // Threshold for rotational geodesic distance [rad]
-    const double defaultDStarThreshold = 1.0; // [m] distance for switching to quadratic attractive potential from conical
     const double softSatBeta = 1.0; // Soft-saturation parameter, higher = more aggressive curve
     const double torqueToVelocityGain = 1.0; // [rad/s] per [Nm] for admittance control conversion
+    double dStarThreshold = 1.0; // [m] distance for switching to quadratic attractive potential from conical
     bool dynamicQuadraticThresholdEnabled = false; // if true, use dynamic d* based on obstacles/kinematics
   };
 

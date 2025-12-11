@@ -2,6 +2,11 @@ geometry_msgs/PoseStamped query_pose
 float32[] joint_angles
 float32[] prev_joint_velocities # Optional: Previous joint velocities for dynamic considerations
 float32 delta_time # Time step for dynamic calculations
+
+# Planning method definitions
+string PLANNING_METHOD_TASK_SPACE="task_space"
+string PLANNING_METHOD_WHOLE_BODY="whole_body"
+
 string planning_method
 ---
 geometry_msgs/TwistStamped autonomy_vector

@@ -29,6 +29,7 @@ find_package(std_msgs REQUIRED)
 find_package(trajectory_msgs REQUIRED)
 find_package(sensor_msgs REQUIRED)
 find_package(control_msgs REQUIRED)
+find_package(ament_index_cpp REQUIRED)
 
 include_directories(
   include/pfields_demo
@@ -56,9 +57,30 @@ ament_target_dependencies(pfield_demo_node
 
 target_link_libraries(pfield_demo_node pfield_library::pfield_library)
 
+add_executable(pfield_teleop_demo_node src/pfield_teleop_demo.cpp)
+ament_target_dependencies(pfield_teleop_demo_node
+  rclcpp
+  potential_fields_interfaces
+  geometry_msgs
+  visualization_msgs
+  nav_msgs
+  tf2_ros
+  tf2_eigen
+  urdf
+  Eigen3
+  std_srvs
+  std_msgs
+  trajectory_msgs
+  sensor_msgs
+  control_msgs
+  ament_index_cpp
+)
+
+target_link_libraries(pfield_teleop_demo_node pfield_library::pfield_library)
+
 # Install the Cpp demo node
 install(
-  TARGETS pfield_demo_node
+  TARGETS pfield_demo_node pfield_teleop_demo_node
   DESTINATION lib/${PROJECT_NAME}
 )
 

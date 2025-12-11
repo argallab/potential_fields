@@ -15,9 +15,9 @@ namespace pfield {
     this->urdfFileName = urdfFilePath;
     this->eeLinkName = eeLinkName;
     this->pfKinematics = std::make_unique<PFKinematics>(this->urdfFileName);
-    const double maxExtent = this->pfKinematics->estimateRobotExtentRadius();
     // Assign influence distance using maximum robot extent or the default, whichever is more generous
     // TODO(Sharwin24): Uncomment this once the estimateRobotExtenRadius function is fixed and verified to be accurate
+    // const double maxExtent = this->pfKinematics->estimateRobotExtentRadius();
     // this->influenceDistance = std::max(this->influenceDistance, maxExtent);
   }
 
@@ -196,7 +196,7 @@ namespace pfield {
     return limits;
   }
 
-  Eigen::VectorXd PotentialField::evaluateWholeBodyJointVelocitiesAtConfiguration(
+  Eigen::VectorXd PotentialField::evaluateWholeBodyJointTorquesAtConfiguration(
     const std::vector<double>& jointAngles, const std::vector<double>& prevJointVelocities, const SpatialVector& eePose,
     const double dt) {
     // --- 1. Compute End-Effector Attraction Joint Torques ---
@@ -208,18 +208,16 @@ namespace pfield {
     // --- 3. Combine Torques ---
     Eigen::VectorXd totalJointTorques = attractionTorques + repulsionTorques;
 
-    // --- 4. Convert Joint Torques to Joint Velocities using Robot Dynamics Equation ---
-    const bool useRobotDynamicsEquation = false; // TODO(Sharwin24): Fix this method and figure out why it's unstable
-    return useRobotDynamicsEquation ?
-      this->convertJointTorquesToJointVelocities(totalJointTorques, jointAngles, prevJointVelocities, dt) :
-      totalJointTorques * this->torqueToVelocityGain;
+    return totalJointTorques;
   }
 
   Eigen::VectorXd PotentialField::convertJointTorquesToJointVelocities(
     const Eigen::VectorXd& jointTorques, const std::vector<double>& jointAngles,
-    const std::vector<double>& currentJointVelocities, const double dt) const {
-
-    if (!this->pfKinematics) {
+    const std::vector<double>& prevJointVelocities, const double dt) const {
+    // TODO(Sharwin24): Fix this method and figure out why it's unstable
+    // https://github.com/argallab/pfields_2025/issues/23
+    const bool useRobotDynamicsEquation = false;
+    if (!this->pfKinematics || !useRobotDynamicsEquation) {
       // If we don't have access to PFKinematics, use a simple proportional mapping
       return this->torqueToVelocityGain * jointTorques;
     }
@@ -227,13 +225,13 @@ namespace pfield {
     // Retrieve Mass Matrix, Coriolis, and Gravity
     Eigen::MatrixXd M = this->pfKinematics->getMassMatrix(jointAngles);
     // C contains the result of C * q_dot since it's simpler to compute
-    Eigen::VectorXd C = this->pfKinematics->getCoriolisVector(jointAngles, currentJointVelocities);
+    Eigen::VectorXd C = this->pfKinematics->getCoriolisVector(jointAngles, prevJointVelocities);
     Eigen::VectorXd G = this->pfKinematics->getGravityVector(jointAngles);
 
     // Add joint damping to stabilize the motion (M*q_ddot = Tau - D*q_dot)
     // A simple constant damping prevents oscillation from the conservative potential field
     const double dampingGain = 20.0;
-    Eigen::VectorXd prevJointVels = Eigen::Map<const Eigen::VectorXd>(currentJointVelocities.data(), currentJointVelocities.size());
+    Eigen::VectorXd prevJointVels = Eigen::Map<const Eigen::VectorXd>(prevJointVelocities.data(), prevJointVelocities.size());
     Eigen::VectorXd dampingTorque = dampingGain * prevJointVels;
 
     Eigen::VectorXd netTorques = jointTorques - C - G - dampingTorque;
@@ -258,7 +256,7 @@ namespace pfield {
     // --- Apply Joint Velocity/Acceleration Limits ---
     if (this->pfKinematics) {
       const auto& model = this->pfKinematics->getModel();
-      for (size_t i = 0; i < jointVelocities.size() && i < (size_t)model.velocityLimit.size(); ++i) {
+      for (int i = 0; i < jointVelocities.size() && i < model.velocityLimit.size(); ++i) {
         double limit = model.velocityLimit[i];
         // Pinocchio sometimes sets limits to infinity or very large values if undefined
         if (limit > 1e-3 && limit < 1e10) {
@@ -278,8 +276,11 @@ namespace pfield {
     }
 
     // 1. Compute whole-body joint velocities
-    Eigen::VectorXd jointVelocities = this->evaluateWholeBodyJointVelocitiesAtConfiguration(
+    Eigen::VectorXd jointTorques = this->evaluateWholeBodyJointTorquesAtConfiguration(
       jointAngles, prevJointVelocities, eePose, dt
+    );
+    Eigen::VectorXd jointVelocities = this->convertJointTorquesToJointVelocities(
+      jointTorques, jointAngles, prevJointVelocities, dt
     );
 
     // 2. Get End-Effector Jacobian
@@ -457,17 +458,19 @@ namespace pfield {
     // Choset Attractive Potential: F = zeta * (q - q_goal)
     const Eigen::Vector3d direction = queryPose.getPosition() - this->goalPose.getPosition();
     const double magnitude = direction.norm();
-    // The Choset attractive potential defines a threshold for switching to quadratic behavior from conical
-    const double dStarThreshold = this->dynamicQuadraticThresholdEnabled ? this->computeDynamicQuadraticThreshold(queryPose)
-      : this->defaultDStarThreshold;
-    if (magnitude <= dStarThreshold) {
-      // Quadratic Attraction Region
-      return -this->attractiveGain * direction;
-    }
-    else {
-      // Conical Attraction Region
-      return  (dStarThreshold * (-this->attractiveGain * direction)) / magnitude;
-    }
+    // TODO(Sharwin24): Investigate why Conical block has problems with oscillations
+    return -this->attractiveGain * direction;
+    // if (magnitude <= dStar) {
+    //   // Quadratic Attraction Region
+    //   return -this->attractiveGain * direction;
+    // }
+    // else {
+    //   // Conical Attraction Region
+    //   // The Choset attractive potential defines a threshold for switching to quadratic behavior from conical
+    //   const double dStar = this->dynamicQuadraticThresholdEnabled ? this->computeDynamicQuadraticThreshold(queryPose)
+    //   : this->dStarThreshold;
+    //   return  (dStar * (-this->attractiveGain * direction)) / magnitude;
+    // }
   }
 
   double PotentialField::minObstacleClearanceAt(const Eigen::Vector3d& point) const {
@@ -502,7 +505,7 @@ namespace pfield {
 
   double PotentialField::computeDynamicQuadraticThreshold(const SpatialVector& queryPose) const {
     // Baseline from existing parameter
-    double baseline = this->defaultDStarThreshold;
+    double baseline = this->dStarThreshold;
     if (!this->isUsingDynamicQuadraticThreshold() || !this->goalSet) { return baseline; }
 
     // Clearance near goal and along straight-line path to goal
@@ -644,39 +647,39 @@ namespace pfield {
 
     // Initialize joint torques to zero (size will be set on first Jacobian computation)
     Eigen::VectorXd jointTorques;
-    bool initialized = false;
+    bool initializedJointTorqueSize = false;
 
     // Setup distance computation request
-    coal::DistanceRequest distReq;
-    distReq.enable_nearest_points = true;
-    coal::DistanceResult distRes;
+    coal::DistanceRequest distRequest;
+    distRequest.enable_nearest_points = true;
+    coal::DistanceResult distResult;
 
     // Iterate over all robot link-obstacle pairs
     for (const auto& link : robotLinks) {
       for (const auto& obs : envObstacles) {
-        distRes.clear();
+        distResult.clear();
         coal::distance(
           link.getCoalCollisionObject().get(),
           obs.getCoalCollisionObject().get(),
-          distReq, distRes
+          distRequest, distResult
         );
 
         // Only consider obstacles within influence distance
-        if (distRes.min_distance < this->influenceDistance) {
+        if (distResult.min_distance < this->influenceDistance) {
           // Extract nearest points (in world frame)
-          Eigen::Vector3d p_robot(
-            distRes.nearest_points[0][0],
-            distRes.nearest_points[0][1],
-            distRes.nearest_points[0][2]
+          Eigen::Vector3d robotPoint(
+            distResult.nearest_points[0][0],
+            distResult.nearest_points[0][1],
+            distResult.nearest_points[0][2]
           );
-          Eigen::Vector3d p_obs(
-            distRes.nearest_points[1][0],
-            distRes.nearest_points[1][1],
-            distRes.nearest_points[1][2]
+          Eigen::Vector3d obstaclePoint(
+            distResult.nearest_points[1][0],
+            distResult.nearest_points[1][1],
+            distResult.nearest_points[1][2]
           );
 
           // Compute repulsive force direction (from obstacle to robot)
-          Eigen::Vector3d direction = p_robot - p_obs;
+          Eigen::Vector3d direction = robotPoint - obstaclePoint;
           if (direction.norm() < NEAR_ZERO_THRESHOLD) {
             direction = Eigen::Vector3d::UnitZ(); // Degenerate case fallback
           }
@@ -685,10 +688,10 @@ namespace pfield {
           }
 
           // Compute repulsive force magnitude using Khatib potential
-          const double d = std::max(distRes.min_distance, NEAR_ZERO_THRESHOLD);
+          const double d = std::max(distResult.min_distance, NEAR_ZERO_THRESHOLD);
           const double Q = this->influenceDistance;
           const double magnitude = this->repulsiveGain * (1.0 / d - 1.0 / Q) * (1.0 / (d * d));
-          Eigen::Vector3d F_rep = direction * magnitude;
+          Eigen::Vector3d repulsiveForce = direction * magnitude;
 
           // Extract the actual link name from the obstacle ID (format: "linkName::collisionName")
           std::string obstacleID = link.getFrameID();
@@ -700,24 +703,24 @@ namespace pfield {
 
           // Get Jacobian at the nearest point on this link
           Eigen::MatrixXd J_link = this->pfKinematics->getJacobianAtPoint(
-            linkName, p_robot, jointAngles
+            linkName, robotPoint, jointAngles
           );
 
           // Initialize joint torques vector on first iteration
-          if (!initialized) {
+          if (!initializedJointTorqueSize) {
             jointTorques = Eigen::VectorXd::Zero(J_link.cols());
-            initialized = true;
+            initializedJointTorqueSize = true;
           }
 
           // Map repulsive force to joint torques and accumulate
           // J_link is 3xN (linear Jacobian only for point forces)
-          jointTorques += J_link.transpose() * F_rep;
+          jointTorques += J_link.transpose() * repulsiveForce;
         }
       }
     }
 
     // If no repulsive forces were computed, return zero vector
-    if (!initialized) {
+    if (!initializedJointTorqueSize) {
       const size_t numJoints = jointAngles.size();
       jointTorques = Eigen::VectorXd::Zero(numJoints);
     }
@@ -728,18 +731,20 @@ namespace pfield {
   std::vector<double> PotentialField::computeInverseKinematics(
     const SpatialVector& targetPose, const std::vector<double>& seedJointAngles) const {
     std::vector<double> jointAngles;
+    bool success = false;
     if (this->ikSolver) {
       Eigen::Isometry3d targetPoseIsometry = Eigen::Isometry3d::Identity();
       targetPoseIsometry.translate(targetPose.getPosition());
       targetPoseIsometry.rotate(targetPose.getOrientation());
       std::string errorMsg;
       Eigen::Matrix<double, 6, Eigen::Dynamic> J;
-      bool success = this->ikSolver->solve(targetPoseIsometry, seedJointAngles, jointAngles, J, errorMsg);
+      success = this->ikSolver->solve(targetPoseIsometry, seedJointAngles, jointAngles, J, errorMsg);
       if (!success) {
-        jointAngles = std::vector<double>{}; // Return empty on failure
+        // TODO(Sharwin24): Need to log or handle this error case properly. Propogate error message up
+        // std::cerr << "[PFKinematics ERROR]: IKSolver failed solve()" << std::endl;
       }
     }
-    else if (this->pfKinematics) {
+    if (this->pfKinematics && this->ikSolver && !success) {
       // Fallback to internal numerical IK if no external solver is provided
       jointAngles = this->pfKinematics->computeInverseKinematics(targetPose, seedJointAngles, this->eeLinkName);
     }
@@ -754,6 +759,9 @@ namespace pfield {
     const size_t maxIters) {
     // Create path and initialize loop variables
     PlannedPath path;
+    path.planningMethod = "task_space";
+    path.goalTolerance = goalTolerance;
+    path.rotationalTolerance = this->rotationalThreshold;
     const double stepDt = (dt > 0.0) ? dt : 0.1;
     SpatialVector current = startPose;
     std::vector<double> jointAngles = startJointAngles;
@@ -790,6 +798,10 @@ namespace pfield {
       timeStamp += stepDt;
     }
 
+    if (!path.success) {
+      path.failureReason = "Max iterations reached without converging to goal.";
+    }
+
     path.dt = stepDt;
     path.numPoints = static_cast<unsigned int>(path.poses.size());
     if (!path.timeStamps.empty()) {
@@ -802,33 +814,35 @@ namespace pfield {
   }
 
   PlannedPath PotentialField::planPathFromWholeBodyJointVelocities(
-    const SpatialVector& startPose,
     const std::vector<double>& startJointAngles,
     const double dt,
     const double goalTolerance,
     const size_t maxIters) {
     // Create path and initialize loop variables
     PlannedPath path;
+    path.planningMethod = "whole_body_velocity";
+    path.goalTolerance = goalTolerance;
+    path.rotationalTolerance = this->rotationalThreshold;
     const double stepDt = (dt > 0.0) ? dt : 0.1;
-    std::vector<double> currentJointAngles = startJointAngles;
     double timeStamp = 0.0;
     // Set up stagnation and position tolerance counters/limits
     size_t stagnationCounter = 0;
-    const double stagnationLimitSeconds = 0.5; // Stop if stuck for 0.5 seconds
+    const double stagnationLimitSeconds = 0.75; // Stop if stuck this many seconds
     const size_t stagnationLimitIterations = static_cast<size_t>(std::ceil(stagnationLimitSeconds / stepDt));
     const size_t stagnationLimit = std::max(static_cast<size_t>(1), stagnationLimitIterations);
-    const double stagnationThreshold = 5e-3; // rad/s (Catch small oscillations)
+    const double stagnationThreshold = 1e-4; // rad/s
     size_t positionToleranceCounter = 0;
-    const double positionToleranceLimitSeconds = 2.0; // Stop if position is met for 2 seconds
+    const double positionToleranceLimitSeconds = 1.0; // Stop if position is met for 1 seconds
     const size_t positionToleranceLimit = static_cast<size_t>(std::ceil(positionToleranceLimitSeconds / stepDt));
 
-    // Compute initial end-effector pose from joint angles using forward kinematics
     if (!this->pfKinematics) {
       // Cannot proceed without kinematics
       path.success = false;
+      path.failureReason = "Kinematics module not initialized.";
       return path;
     }
-
+    // Compute initial end-effector pose from joint angles using forward kinematics
+    std::vector<double> currentJointAngles = startJointAngles;
     SpatialVector currentEEPose = this->pfKinematics->computeEndEffectorPose(currentJointAngles, this->eeLinkName);
     std::vector<double> prevJointVelocities(currentJointAngles.size(), 0.0);
 
@@ -837,8 +851,11 @@ namespace pfield {
       this->updateObstaclesFromKinematics(currentJointAngles);
 
       // --- 2. Compute whole-body joint velocities considering end-effector attraction and obstacle repulsion ---
-      Eigen::VectorXd jointVelocities = this->evaluateWholeBodyJointVelocitiesAtConfiguration(
+      Eigen::VectorXd jointTorques = this->evaluateWholeBodyJointTorquesAtConfiguration(
         currentJointAngles, prevJointVelocities, currentEEPose, stepDt
+      );
+      Eigen::VectorXd jointVelocities = this->convertJointTorquesToJointVelocities(
+        jointTorques, currentJointAngles, prevJointVelocities, stepDt
       );
       // Update prevJointVelocities for next iteration
       prevJointVelocities.assign(jointVelocities.data(), jointVelocities.data() + jointVelocities.size());
@@ -846,29 +863,29 @@ namespace pfield {
       // --- 3. Integrate joint velocities to get next joint configuration (Euler) ---
       std::vector<double> nextJointAngles(currentJointAngles.size());
       for (size_t i = 0; i < currentJointAngles.size(); ++i) {
-        nextJointAngles[i] = currentJointAngles[i] + jointVelocities[i] * stepDt;
+        nextJointAngles[i] = currentJointAngles[i] + (jointVelocities[i] * stepDt);
       }
 
       // --- 4. Compute end-effector pose for the new joint configuration ---
       SpatialVector nextEEPose = this->pfKinematics->computeEndEffectorPose(nextJointAngles, this->eeLinkName);
 
-      // --- 5. Compute end-effector twist (velocity) from pose change ---
-      Eigen::Vector3d linearVelocity = (nextEEPose.getPosition() - currentEEPose.getPosition()) / stepDt;
-      // For angular velocity, compute from quaternion difference
-      Eigen::Quaterniond q_current = currentEEPose.getOrientation();
-      Eigen::Quaterniond q_next = nextEEPose.getOrientation();
-      Eigen::Quaterniond q_delta = q_next * q_current.conjugate();
-      // Convert to axis-angle for angular velocity
-      Eigen::AngleAxisd angleAxis(q_delta);
-      Eigen::Vector3d angularVelocity = (angleAxis.angle() / stepDt) * angleAxis.axis();
-      TaskSpaceTwist eeTwist(linearVelocity, angularVelocity);
+      // --- 5. Compute end-effector twist (velocity) using Jacobian ---
+      // Instead of finite differencing, we use the analytical Jacobian at the current configuration
+      // to get the instantaneous task-space velocity corresponding to the computed joint velocities.
+      Eigen::MatrixXd J = this->pfKinematics->getSpatialJacobianAtPoint(
+        this->eeLinkName, currentEEPose.getPosition(), currentJointAngles
+      );
+      Eigen::VectorXd twistVec = J * jointVelocities; // jointVelocities is from step 2 (k1 equivalent)
+      TaskSpaceTwist eeTwist(twistVec.head(3), twistVec.tail(3));
 
       // --- 6. Record current state in path ---
       path.recordPathPoint(
         timeStamp,
         currentEEPose,
         eeTwist,
-        currentJointAngles
+        currentJointAngles,
+        std::vector<double>(jointVelocities.data(), jointVelocities.data() + jointVelocities.size()),
+        std::vector<double>(jointTorques.data(), jointTorques.data() + jointTorques.size())
       );
 
       // --- 7. Check goal tolerance ---
@@ -885,6 +902,7 @@ namespace pfield {
           // We have held position for a while, likely unable to reach orientation
           // Terminate with success (or partial success)
           path.success = true;
+          path.failureReason = "Position met, but not orientation";
           break;
         }
       }
@@ -893,9 +911,10 @@ namespace pfield {
       }
 
       // --- 8. Check for collisions ---
-      if (this->isRobotInCollisionWithEnvironment(0.0)) {
+      if (this->isRobotInCollisionWithEnvironment(0.05)) {
         // Robot is in collision - path planning failed
         path.success = false;
+        path.failureReason = "Robot collided with environment.";
         break;
       }
 
@@ -911,6 +930,8 @@ namespace pfield {
         // Check if we are close enough to be considered successful?
         // For now, we rely on the strict check in step 7. If we are here, we haven't met the strict tolerance.
         // But we should stop planning to avoid waiting for maxIters.
+        path.failureReason = "Stagnation detected (local minimum or stuck).";
+        path.success = false;
         break;
       }
 
@@ -918,6 +939,10 @@ namespace pfield {
       currentJointAngles = nextJointAngles;
       currentEEPose = nextEEPose;
       timeStamp += stepDt;
+    }
+
+    if (!path.success && path.failureReason.empty()) {
+      path.failureReason = "Max iterations reached without converging to goal.";
     }
 
     // Finalize path metadata
@@ -936,7 +961,7 @@ namespace pfield {
   bool PotentialField::isRobotInCollisionWithEnvironment(double clearanceThreshold) const {
     auto robotObstacles = this->getObstaclesByGroup(ObstacleGroup::ROBOT);
     auto envObstacles = this->getObstaclesByGroup(ObstacleGroup::STATIC);
-    //TODO(Sharwin24): Handle Dynamic Obstacles?
+    //TODO(Sharwin24): Handle Dynamic Obstacles? For now, we ignore them.
 
     // Setup collision request and result before looping over robot obstacles
     coal::CollisionRequest collisionRequest;
@@ -962,6 +987,12 @@ namespace pfield {
   }
 
   bool PotentialField::createPlannedPathCSV(const PlannedPath& path, const std::string& filePath) const {
+    // Open file for writing first to ensure it's accessible
+    std::ofstream csvFile(filePath);
+    if (!csvFile.is_open()) {
+      return false;
+    }
+
     // Creates a CSV file from the given PlannedPath with the following
     const unsigned int numJoints = (path.numPoints > 0) ? static_cast<unsigned int>(path.jointAngles[0].size()) : 0;
     auto jointPositionHeaders = [numJoints]() -> std::string {
@@ -998,27 +1029,29 @@ namespace pfield {
       "vel_x_m_s,vel_y_m_s,vel_z_m_s,"
       "ang_vel_x_rad_s,ang_vel_y_rad_s,ang_vel_z_rad_s,"
       "min_obstacle_clearance_m,"
-      "num_joints"
       + jointPositionHeaders() + jointVelocityHeaders();
 
-    // Open file for writing
-    std::ofstream csvFile(filePath);
-    if (!csvFile.is_open()) {
-      return false;
-    }
+    // Write metadata as commented header lines
+    const Eigen::Vector3d goalPosition = this->goalPose.getPosition();
+    const Eigen::Quaterniond goalOrientation = this->goalPose.getOrientation();
+    csvFile << "# Goal Position: [" << goalPosition.x() << ", " << goalPosition.y() << ", " << goalPosition.z() << "]\n";
+    csvFile << "# Goal Orientation: [" << goalOrientation.x() << ", " << goalOrientation.y() << ", " << goalOrientation.z() << ", " << goalOrientation.w() << "]\n";
+    csvFile << "# Goal Tolerance: " << path.goalTolerance << "\n";
+    csvFile << "# Angular Tolerance: " << path.rotationalTolerance << "\n";
+    csvFile << "# Num Joints: " << numJoints << "\n";
+    csvFile << "# Planning Method: " << path.planningMethod << "\n";
 
     // Write header
     csvFile << header << "\n";
 
     // Write data rows
     for (unsigned int i = 0; i < path.numPoints; ++i) {
+      // Compute everything we need for writing before writing the next row
       const SpatialVector& pose = path.poses[i];
       const TaskSpaceTwist& twist = path.twists[i];
       const double timeStamp = path.timeStamps[i];
       const Eigen::Vector3d position = pose.getPosition();
       const Eigen::Quaterniond orientation = pose.getOrientation();
-
-      // Compute minimum obstacle clearance at this point
       const double minClearance = this->minObstacleClearanceAt(position);
 
       // Write: time
@@ -1041,9 +1074,6 @@ namespace pfield {
 
       // Write: minimum obstacle clearance
       csvFile << minClearance << ",";
-
-      // Write: number of joints
-      csvFile << numJoints << ",";
 
       // Write: joint angles
       if (i < path.jointAngles.size()) {
