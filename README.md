@@ -106,13 +106,44 @@ Notes on robot geometry
 _NOTE: Geometry-derived obstacles from the robot's links are in effort to avoid self-collisions. This will likely be reworked by planning in the configuration space instead of task space._
 
 ## Setting up the workspace
-Once this repository is cloned, you will need to install the `Eigen` dependency locally on your machine before being able to build and launch the `potential_fields` package:
+Once this repository is cloned, you will need to install the required dependencies locally on your machine before being able to build and launch the `potential_fields` package.
+
+### Install System Dependencies
 
 ```bash
-sudo apt install libeigen3-dev
+sudo apt-get update
+sudo apt-get install -y libeigen3-dev liburdfdom-dev libfcl-dev libccd-dev libassimp-dev lsb-release
+sudo apt-get install -y ros-jazzy-urdf
 ```
 
-Ensure that `/usr/include/eigen3` exists and add it to your C++ configurations, below are my settings (_.vscode/c_cpp_properties.json_) for the workspace to allow VS Code to recognize ROS and Eigen types, syntax highlight, and support Ctrl+Click for definitions.
+### Install Pinocchio (via robotpkg)
+
+This package uses Pinocchio for rigid body dynamics. It is recommended to install it via `robotpkg`.
+
+```bash
+# Add robotpkg to apt sources
+sudo mkdir -p /etc/apt/keyrings
+curl -fsSL http://robotpkg.openrobots.org/packages/debian/robotpkg.asc | sudo tee /etc/apt/keyrings/robotpkg.asc
+echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/robotpkg.asc] http://robotpkg.openrobots.org/packages/debian/pub $(lsb_release -cs) robotpkg" | sudo tee /etc/apt/sources.list.d/robotpkg.list
+
+# Install pinocchio
+sudo apt-get update
+sudo apt-get install -y robotpkg-pinocchio
+```
+
+### Configure Environment Variables
+
+You need to add the `robotpkg` installation paths to your environment. Add the following to your `~/.bashrc` (or `~/.zshrc`):
+
+```bash
+export PATH=/opt/openrobots/bin:$PATH
+export PKG_CONFIG_PATH=/opt/openrobots/lib/pkgconfig:$PKG_CONFIG_PATH
+export LD_LIBRARY_PATH=/opt/openrobots/lib:$LD_LIBRARY_PATH
+export PYTHONPATH=/opt/openrobots/lib/python3.10/site-packages:$PYTHONPATH
+export CMAKE_PREFIX_PATH=/opt/openrobots/lib/cmake:$CMAKE_PREFIX_PATH
+```
+
+Ensure that `/usr/include/eigen3` and `/opt/openrobots/include` exist and add them to your C++ configurations. Below are my settings (_.vscode/c_cpp_properties.json_) for the workspace to allow VS Code to recognize ROS, Eigen, and Pinocchio types, syntax highlight, and support Ctrl+Click for definitions.
 
 ```json
 {
@@ -122,7 +153,8 @@ Ensure that `/usr/include/eigen3` exists and add it to your C++ configurations, 
         "includePath": [
             "${workspaceFolder}/**",
             "/opt/ros/jazzy/include/**",
-            "/usr/include/eigen3/**"
+            "/usr/include/eigen3/**",
+            "/opt/openrobots/include/**"
         ],
         "defines": [],
         "compilerPath": "/usr/bin/clang",
