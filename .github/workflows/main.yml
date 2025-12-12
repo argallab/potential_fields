@@ -19,11 +19,13 @@ jobs:
         with:
           ref: ${{ github.event.pull_request.merge_commit_sha }}
 
-      - name: Install Eigen3
-        run: apt-get update && apt-get install -y libeigen3-dev
+      - name: Install Linux dependencies
+        run: apt-get update && apt-get install -y libeigen3-dev liburdfdom-dev libfcl-dev libccd-dev libassimp-dev
 
-      - name: Install Pinocchio
-        run: apt-get install -y libpinocchio-dev
+      - name: Install ROS apt libraries
+        run: |
+          apt-get install -y ros-jazzy-pinocchio
+          apt-get install -y ros-jazzy-urdf
 
       - name: Configure Git Credentials
         run: |
