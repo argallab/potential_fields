@@ -20,12 +20,36 @@ jobs:
           ref: ${{ github.event.pull_request.merge_commit_sha }}
 
       - name: Install Linux dependencies
-        run: apt-get update && apt-get install -y libeigen3-dev liburdfdom-dev libfcl-dev libccd-dev libassimp-dev
+        run: |
+          apt-get update
+          apt-get install -y libeigen3-dev
+          apt-get install -y liburdfdom-dev
+          apt-get install -y libfcl-dev
+          apt-get install -y libccd-dev
+          apt-get install -y libassimp-dev
+          apt-get install -y lsb-release
 
       - name: Install ROS apt libraries
         run: |
           apt-get install -y ros-jazzy-pinocchio
           apt-get install -y ros-jazzy-urdf
+
+      - name: Install robotpkg pinocchio
+        run: |
+          mkdir -p /etc/apt/keyrings
+          curl -fsSL http://robotpkg.openrobots.org/packages/debian/robotpkg.asc | tee /etc/apt/keyrings/robotpkg.asc
+          echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/robotpkg.asc] http://robotpkg.openrobots.org/packages/debian/pub $(lsb_release -cs) robotpkg" \
+          | tee /etc/apt/sources.list.d/robotpkg.list
+          apt-get update
+          apt-get install -y robotpkg-pinocchio
+
+      - name: Set up robotpkg pinocchio environment
+        run: |
+          echo "export PATH=/opt/openrobots/bin:$PATH" >> $GITHUB_ENV
+          echo "export PKG_CONFIG_PATH=/opt/openrobots/lib/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
+          echo "export LD_LIBRARY_PATH=/opt/openrobots/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
+          echo "export PYTHONPATH=/opt/openrobots/lib/python3.10/site-packages:$PYTHONPATH" >> $GITHUB_ENV
+          echo "export CMAKE_PREFIX_PATH=/opt/openrobots/lib/cmake:$CMAKE_PREFIX_PATH" >> $GITHUB_ENV
 
       - name: Configure Git Credentials
         run: |
