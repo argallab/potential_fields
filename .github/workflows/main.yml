@@ -1,4 +1,4 @@
-name: Build, and Test ROS Packages
+name: Build and Test Repository Packages
 
 on:
   push:
