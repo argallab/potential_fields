@@ -61,3 +61,8 @@ jobs:
           target-ros2-distro: jazzy
           extra-cmake-args: -DCMAKE_PREFIX_PATH=/opt/openrobots
           rosdep-skip-keys: "pinocchio coal"
+        env:
+          LD_LIBRARY_PATH: /opt/openrobots/lib:${{ env.LD_LIBRARY_PATH }}
+          PKG_CONFIG_PATH: /opt/openrobots/lib/pkgconfig:${{ env.PKG_CONFIG_PATH }}
+          CMAKE_PREFIX_PATH: /opt/openrobots/lib/cmake:${{ env.CMAKE_PREFIX_PATH }}
+          PYTHONPATH: /opt/openrobots/lib/python3.10/site-packages:${{ env.PYTHONPATH }}
