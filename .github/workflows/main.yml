@@ -4,7 +4,7 @@ on:
   push:
     branches:
       - main
-  pull_request_target:
+  pull_request:
     branches:
       - main
 
@@ -25,8 +25,12 @@ jobs:
       - name: Install Pinocchio
         run: apt-get install -y libpinocchio-dev
 
+      - name: Configure Git Credentials
+        run: |
+          git config --global url."https://x-access-token:${{ secrets.GITHUB_TOKEN }}@github.com/".insteadOf "https://github.com/"
+
       - name: Build and run tests
         uses: ros-tooling/action-ros-ci@v0.4
         with:
-          package-name: potential_fields
+          package-name: potential_fields pfield_library
           target-ros2-distro: jazzy
