@@ -58,5 +58,5 @@ jobs:
       - name: Build and run tests
         uses: ros-tooling/action-ros-ci@v0.4
         with:
-          package-name: potential_fields pfield_library
+          package-name: potential_fields potential_fields_interfaces pfields_demo pfield_library
           target-ros2-distro: jazzy
