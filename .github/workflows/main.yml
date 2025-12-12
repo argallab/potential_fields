@@ -21,11 +21,11 @@ jobs:
 
       - name: Install Eigen3
         run: apt-get update && apt-get install -y libeigen3-dev
-        
+
       - name: Build and run tests
         uses: ros-tooling/action-ros-ci@v0.4
         with:
           package-name: potential_fields
           target-ros2-distro: jazzy
-        env:
-          ROS_REPOS_TOKEN: ${{ secrets.GH_PAT }}
+        # env:
+        #   ROS_REPOS_TOKEN: ${{ secrets.GH_PAT }}
