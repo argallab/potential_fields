@@ -753,7 +753,8 @@ namespace pfield {
      * @param seedJointAngles The initial guess for joint angles [rad].
      * @return std::vector<double> The computed joint angles [rad].
      */
-    std::vector<double> computeInverseKinematics(const SpatialVector& targetPose, const std::vector<double>& seedJointAngles) const;
+    std::vector<double> computeInverseKinematics(
+      const SpatialVector& targetPose, const std::vector<double>& seedJointAngles) const;
 
     /**
      * @brief Creates a CSV file from a planned path with the following columns:

@@ -537,7 +537,8 @@ namespace pfield {
     return M;
   }
 
-  Eigen::VectorXd PFKinematics::getCoriolisVector(const std::vector<double>& jointAngles, const std::vector<double>& jointVelocities) {
+  Eigen::VectorXd PFKinematics::getCoriolisVector(
+    const std::vector<double>& jointAngles, const std::vector<double>& jointVelocities) {
     Eigen::VectorXd q = this->jointValuesToVector(jointAngles);
     Eigen::VectorXd v = this->jointValuesToVector(jointVelocities);
 

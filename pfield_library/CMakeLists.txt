@@ -91,9 +91,10 @@ install(FILES
   DESTINATION lib/cmake/${PROJECT_NAME}
 )
 
+include(CTest)
 if(BUILD_TESTING)
   find_package(GTest REQUIRED)
-  enable_testing()
+  find_package(ament_cmake_cpplint REQUIRED)
 
   # Helper function to add tests
   function(add_pfield_test test_name source_file)
@@ -110,4 +111,19 @@ if(BUILD_TESTING)
   add_pfield_test(test_pf_obstacles test/test_pf_obstacles.cpp)
   add_pfield_test(test_spatial_vector test/test_spatial_vector.cpp)
   add_pfield_test(test_mesh_obstacle test/test_mesh_obstacle.cpp)
+
+  # Add cpplint test using ament_cmake_cpplint
+  # Excluding code that was written by external authors
+  ament_cpplint(
+    EXCLUDE
+    build
+    cmake
+    include/solvers/geofik.h
+    include/solvers/weighted_ik.h
+    include/solvers/xarm_ik_solver.h
+    src/solvers/geofik.cpp
+    src/solvers/weighted_ik.cpp
+    src/solvers/xarm_ik_solver.cpp
+  )
+
 endif()

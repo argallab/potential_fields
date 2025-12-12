@@ -1,6 +1,7 @@
 #include <gtest/gtest.h>
 #include <chrono>
 #include <iostream>
+#include <cstdlib>
 #include <vector>
 #include <eigen3/Eigen/Core>
 #include <eigen3/Eigen/Geometry>
@@ -86,8 +87,14 @@ TEST_F(VisualizationProfilingTest, ProfileVectorFieldGeneration) {
   std::cout << "Time Elapsed: " << elapsed.count() * 1000 << " milliseconds" << std::endl;
   std::cout << "Average Time per Point: " << (elapsed.count() / pointCount) * 1e6 << " microseconds" << std::endl;
 
-  // Assert that it runs within a reasonable time frame (e.g., < 0.1s for 10Hz)
-  // Note: This assertion might be flaky depending on the machine and resolution
-  // For a unit test, we might just want to ensure it completes within a reasonable time.
-  EXPECT_LT(elapsed.count(), 1.0); // Visualization loop should take less than 1 second
+  // Adjust threshold based on environment
+  // CI environments (like GitHub Actions) are often slower and shared, leading to variable performance.
+  double time_threshold = 1.0;
+  if (std::getenv("GITHUB_ACTIONS") || std::getenv("CI")) {
+    std::cout << "Running in CI environment, relaxing time threshold." << std::endl;
+    time_threshold = 5.0; // Relax significantly for CI to prevent flaky failures
+  }
+
+  // Assert that it runs within a reasonable time frame
+  EXPECT_LT(elapsed.count(), time_threshold);
 }

@@ -1036,8 +1036,10 @@ namespace pfield {
     }
 
     // Creates a CSV file from the given PlannedPath with the following
-    const unsigned int numJoints = (path.numPoints > 0 && !path.jointAngles.empty()) ? static_cast<unsigned int>(path.jointAngles[0].size()) : 0;
-    const unsigned int numLinks = (path.numPoints > 0 && !path.linkObstacleClearances.empty()) ? static_cast<unsigned int>(path.linkObstacleClearances[0].size()) : 0;
+    const unsigned int numJoints = (path.numPoints > 0 && !path.jointAngles.empty()) ?
+      static_cast<unsigned int>(path.jointAngles[0].size()) : 0;
+    const unsigned int numLinks = (path.numPoints > 0 && !path.linkObstacleClearances.empty()) ?
+      static_cast<unsigned int>(path.linkObstacleClearances[0].size()) : 0;
 
     auto jointPositionHeaders = [numJoints]() -> std::string {
       std::string jointHeaders;
@@ -1117,9 +1119,10 @@ namespace pfield {
 
     // Write metadata as commented header lines
     const Eigen::Vector3d goalPosition = this->goalPose.getPosition();
-    const Eigen::Quaterniond goalOrientation = this->goalPose.getOrientation();
+    const Eigen::Quaterniond goalOri = this->goalPose.getOrientation();
     csvFile << "# Goal Position: [" << goalPosition.x() << ", " << goalPosition.y() << ", " << goalPosition.z() << "]\n";
-    csvFile << "# Goal Orientation: [" << goalOrientation.x() << ", " << goalOrientation.y() << ", " << goalOrientation.z() << ", " << goalOrientation.w() << "]\n";
+    csvFile << "# Goal Orientation: [" << goalOri.x() << ", " << goalOri.y() << ", " << goalOri.z() << ", "
+      << goalOri.w() << "]\n";
     csvFile << "# Goal Tolerance: " << path.goalTolerance << "\n";
     csvFile << "# Angular Tolerance: " << path.rotationalTolerance << "\n";
     csvFile << "# Num Joints: " << numJoints << "\n";
