@@ -198,12 +198,21 @@ namespace pfield {
 
   Eigen::VectorXd PotentialField::evaluateWholeBodyJointTorquesAtConfiguration(
     const std::vector<double>& jointAngles, const std::vector<double>& prevJointVelocities, const SpatialVector& eePose,
-    const double dt) {
+    const double dt,
+    std::vector<Eigen::Vector3d>* outLinkForces,
+    std::vector<double>* outLinkClearances,
+    Eigen::Vector3d* outAttractionForce) {
     // --- 1. Compute End-Effector Attraction Joint Torques ---
     Eigen::VectorXd attractionTorques = this->computeEndEffectorAttractionJointTorques(eePose, jointAngles);
 
+    if (outAttractionForce) {
+      *outAttractionForce = this->computeAttractiveForceLinear(eePose);
+    }
+
     // --- 2. Compute Whole-Body Obstacle Repulsion Joint Torques ---
-    Eigen::VectorXd repulsionTorques = this->computeWholeBodyRepulsionJointTorques(jointAngles);
+    Eigen::VectorXd repulsionTorques = this->computeWholeBodyRepulsionJointTorques(
+      jointAngles, outLinkForces, outLinkClearances
+    );
 
     // --- 3. Combine Torques ---
     Eigen::VectorXd totalJointTorques = attractionTorques + repulsionTorques;
@@ -640,7 +649,9 @@ namespace pfield {
   }
 
   Eigen::VectorXd PotentialField::computeWholeBodyRepulsionJointTorques(
-    const std::vector<double>& jointAngles) const {
+    const std::vector<double>& jointAngles,
+    std::vector<Eigen::Vector3d>* outLinkForces,
+    std::vector<double>* outLinkClearances) const {
     // Get robot links and environment obstacles
     auto robotLinks = this->getObstaclesByGroup(ObstacleGroup::ROBOT);
     auto envObstacles = this->getObstaclesByGroup(ObstacleGroup::STATIC);
@@ -649,6 +660,16 @@ namespace pfield {
     Eigen::VectorXd jointTorques;
     bool initializedJointTorqueSize = false;
 
+    // Initialize outputs if provided
+    if (outLinkForces) {
+      outLinkForces->clear();
+      outLinkForces->reserve(robotLinks.size());
+    }
+    if (outLinkClearances) {
+      outLinkClearances->clear();
+      outLinkClearances->reserve(robotLinks.size());
+    }
+
     // Setup distance computation request
     coal::DistanceRequest distRequest;
     distRequest.enable_nearest_points = true;
@@ -656,6 +677,9 @@ namespace pfield {
 
     // Iterate over all robot link-obstacle pairs
     for (const auto& link : robotLinks) {
+      Eigen::Vector3d linkNetForce = Eigen::Vector3d::Zero();
+      double linkMinDist = std::numeric_limits<double>::infinity();
+
       for (const auto& obs : envObstacles) {
         distResult.clear();
         coal::distance(
@@ -663,6 +687,10 @@ namespace pfield {
           obs.getCoalCollisionObject().get(),
           distRequest, distResult
         );
+
+        if (distResult.min_distance < linkMinDist) {
+          linkMinDist = distResult.min_distance;
+        }
 
         // Only consider obstacles within influence distance
         if (distResult.min_distance < this->influenceDistance) {
@@ -693,6 +721,8 @@ namespace pfield {
           const double magnitude = this->repulsiveGain * (1.0 / d - 1.0 / Q) * (1.0 / (d * d));
           Eigen::Vector3d repulsiveForce = direction * magnitude;
 
+          linkNetForce += repulsiveForce;
+
           // Extract the actual link name from the obstacle ID (format: "linkName::collisionName")
           std::string obstacleID = link.getFrameID();
           std::string linkName = obstacleID;
@@ -717,6 +747,9 @@ namespace pfield {
           jointTorques += J_link.transpose() * repulsiveForce;
         }
       }
+
+      if (outLinkForces) outLinkForces->push_back(linkNetForce);
+      if (outLinkClearances) outLinkClearances->push_back(linkMinDist);
     }
 
     // If no repulsive forces were computed, return zero vector
@@ -851,9 +884,15 @@ namespace pfield {
       this->updateObstaclesFromKinematics(currentJointAngles);
 
       // --- 2. Compute whole-body joint velocities considering end-effector attraction and obstacle repulsion ---
+      std::vector<Eigen::Vector3d> linkRepulsiveForces;
+      std::vector<double> linkClearances;
+      Eigen::Vector3d attractionForce;
+
       Eigen::VectorXd jointTorques = this->evaluateWholeBodyJointTorquesAtConfiguration(
-        currentJointAngles, prevJointVelocities, currentEEPose, stepDt
+        currentJointAngles, prevJointVelocities, currentEEPose, stepDt,
+        &linkRepulsiveForces, &linkClearances, &attractionForce
       );
+
       Eigen::VectorXd jointVelocities = this->convertJointTorquesToJointVelocities(
         jointTorques, currentJointAngles, prevJointVelocities, stepDt
       );
@@ -885,7 +924,10 @@ namespace pfield {
         eeTwist,
         currentJointAngles,
         std::vector<double>(jointVelocities.data(), jointVelocities.data() + jointVelocities.size()),
-        std::vector<double>(jointTorques.data(), jointTorques.data() + jointTorques.size())
+        std::vector<double>(jointTorques.data(), jointTorques.data() + jointTorques.size()),
+        linkClearances,
+        attractionForce,
+        linkRepulsiveForces
       );
 
       // --- 7. Check goal tolerance ---
@@ -994,7 +1036,9 @@ namespace pfield {
     }
 
     // Creates a CSV file from the given PlannedPath with the following
-    const unsigned int numJoints = (path.numPoints > 0) ? static_cast<unsigned int>(path.jointAngles[0].size()) : 0;
+    const unsigned int numJoints = (path.numPoints > 0 && !path.jointAngles.empty()) ? static_cast<unsigned int>(path.jointAngles[0].size()) : 0;
+    const unsigned int numLinks = (path.numPoints > 0 && !path.linkObstacleClearances.empty()) ? static_cast<unsigned int>(path.linkObstacleClearances[0].size()) : 0;
+
     auto jointPositionHeaders = [numJoints]() -> std::string {
       std::string jointHeaders;
       for (unsigned int j = 0; j < numJoints; ++j) {
@@ -1021,6 +1065,44 @@ namespace pfield {
       }
       return jointVelHeaders;
     };
+    auto jointTorqueHeaders = [numJoints]() -> std::string {
+      std::string jointTorqueHeaders;
+      for (unsigned int j = 0; j < numJoints; ++j) {
+        jointTorqueHeaders += "joint_torque_" + std::to_string(j + 1) + "_N_m,";
+      }
+      if (!jointTorqueHeaders.empty()) {
+        // Insert leading comma
+        jointTorqueHeaders = "," + jointTorqueHeaders;
+        // Remove trailing comma
+        jointTorqueHeaders.pop_back();
+      }
+      return jointTorqueHeaders;
+    };
+    auto linkClearanceHeaders = [numLinks]() -> std::string {
+      std::string headers;
+      for (unsigned int j = 0; j < numLinks; ++j) {
+        headers += "link_" + std::to_string(j) + "_clearance_m,";
+      }
+      if (!headers.empty()) {
+        headers = "," + headers;
+        headers.pop_back();
+      }
+      return headers;
+    };
+    auto linkRepulsiveForceHeaders = [numLinks]() -> std::string {
+      std::string headers;
+      for (unsigned int j = 0; j < numLinks; ++j) {
+        headers += "link_" + std::to_string(j + 1) + "_rep_force_x_N," +
+          "link_" + std::to_string(j + 1) + "_rep_force_y_N," +
+          "link_" + std::to_string(j + 1) + "_rep_force_z_N,";
+      }
+      if (!headers.empty()) {
+        headers = "," + headers;
+        headers.pop_back();
+      }
+      return headers;
+    };
+
     // CSV Header with dynamic joint columns based on number of joints
     const std::string header =
       "time_s,"
@@ -1029,7 +1111,9 @@ namespace pfield {
       "vel_x_m_s,vel_y_m_s,vel_z_m_s,"
       "ang_vel_x_rad_s,ang_vel_y_rad_s,ang_vel_z_rad_s,"
       "min_obstacle_clearance_m,"
-      + jointPositionHeaders() + jointVelocityHeaders();
+      "att_force_x_N,att_force_y_N,att_force_z_N"
+      + jointPositionHeaders() + jointVelocityHeaders() + jointTorqueHeaders()
+      + linkClearanceHeaders() + linkRepulsiveForceHeaders();
 
     // Write metadata as commented header lines
     const Eigen::Vector3d goalPosition = this->goalPose.getPosition();
@@ -1075,13 +1159,28 @@ namespace pfield {
       // Write: minimum obstacle clearance
       csvFile << minClearance << ",";
 
+      // Write: attraction force
+      if (i < path.attractionForces.size()) {
+        const auto& f = path.attractionForces[i];
+        csvFile << f.x() << "," << f.y() << "," << f.z();
+      }
+      else {
+        csvFile << "0,0,0";
+      }
+
       // Write: joint angles
       if (i < path.jointAngles.size()) {
+        csvFile << ",";
         for (unsigned int j = 0; j < numJoints; ++j) {
           csvFile << path.jointAngles[i][j];
           if (j < numJoints - 1) {
             csvFile << ",";
           }
+        }
+      }
+      else {
+        for (unsigned int j = 0; j < numJoints; ++j) {
+          csvFile << ",0";
         }
       }
 
@@ -1093,6 +1192,56 @@ namespace pfield {
           if (j < numJoints - 1) {
             csvFile << ",";
           }
+        }
+      }
+      else {
+        for (unsigned int j = 0; j < numJoints; ++j) {
+          csvFile << ",0";
+        }
+      }
+
+      // Write: joint torques
+      if (i < path.jointTorques.size()) {
+        csvFile << ",";
+        for (unsigned int j = 0; j < numJoints; ++j) {
+          csvFile << path.jointTorques[i][j];
+          if (j < numJoints - 1) {
+            csvFile << ",";
+          }
+        }
+      }
+      else {
+        for (unsigned int j = 0; j < numJoints; ++j) {
+          csvFile << ",0";
+        }
+      }
+
+      // Write: link clearances
+      if (i < path.linkObstacleClearances.size()) {
+        csvFile << ",";
+        for (unsigned int j = 0; j < numLinks; ++j) {
+          csvFile << path.linkObstacleClearances[i][j];
+          if (j < numLinks - 1) csvFile << ",";
+        }
+      }
+      else {
+        for (unsigned int j = 0; j < numLinks; ++j) {
+          csvFile << ",0";
+        }
+      }
+
+      // Write: link repulsive forces
+      if (i < path.repulsiveForces.size()) {
+        csvFile << ",";
+        for (unsigned int j = 0; j < numLinks; ++j) {
+          const auto& f = path.repulsiveForces[i][j];
+          csvFile << f.x() << "," << f.y() << "," << f.z();
+          if (j < numLinks - 1) csvFile << ",";
+        }
+      }
+      else {
+        for (unsigned int j = 0; j < numLinks; ++j) {
+          csvFile << ",0,0,0";
         }
       }
 
