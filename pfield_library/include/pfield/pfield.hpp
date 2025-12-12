@@ -98,10 +98,17 @@ namespace pfield {
      * @param pose The EE pose at the path point
      * @param twist The EE twist at the path point
      * @param jointAngles The joint angles at the path point [rad]
+     * @param jointVelocities The joint velocities at the path point [rad/s] (optional)
+     * @param jointTorques The joint torques at the path point [Nm] (optional)
+     * @param linkClearances The minimum clearances between each link and obstacles [m] (optional)
+     * @param attractionForce The attractive force vector applied to the EE [N] (optional)
+     * @param repulsiveForces The repulsive force vectors applied to each link [N] (optional)
      */
     void recordPathPoint(
       double timeStamp, const SpatialVector& pose, const TaskSpaceTwist& twist,
-      std::vector<double> jointAngles, std::vector<double> jointVelocities = {}, std::vector<double> jointTorques = {},
+      std::vector<double> jointAngles,
+      std::vector<double> jointVelocities = {},
+      std::vector<double> jointTorques = {},
       std::vector<double> linkClearances = {},
       Eigen::Vector3d attractionForce = Eigen::Vector3d::Zero(),
       std::vector<Eigen::Vector3d> repulsiveForces = {}) {
@@ -620,7 +627,7 @@ namespace pfield {
      *
      * @param[in] jointAngles The current joint configuration [rad]
      * @param[out] outLinkForces A pointer to a vector to store the computed forces on each link [N]
-     * @param[out] outLinkClearances A pointer to a vector to store the minimum
+     * @param[out] outLinkClearances A pointer to a vector to store the minimum clearances between each link and obstacles [m]
      * @return Eigen::VectorXd Joint torques for whole-body obstacle avoidance [Nm]
      */
     Eigen::VectorXd computeWholeBodyRepulsionJointTorques(

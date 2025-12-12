@@ -1092,9 +1092,9 @@ namespace pfield {
     auto linkRepulsiveForceHeaders = [numLinks]() -> std::string {
       std::string headers;
       for (unsigned int j = 0; j < numLinks; ++j) {
-        headers += "link_" + std::to_string(j) + "_rep_force_x_N," +
-          "link_" + std::to_string(j) + "_rep_force_y_N," +
-          "link_" + std::to_string(j) + "_rep_force_z_N,";
+        headers += "link_" + std::to_string(j + 1) + "_rep_force_x_N," +
+          "link_" + std::to_string(j + 1) + "_rep_force_y_N," +
+          "link_" + std::to_string(j + 1) + "_rep_force_z_N,";
       }
       if (!headers.empty()) {
         headers = "," + headers;
@@ -1178,6 +1178,11 @@ namespace pfield {
           }
         }
       }
+      else {
+        for (unsigned int j = 0; j < numJoints; ++j) {
+          csvFile << ",0";
+        }
+      }
 
       // Write: joint velocities
       if (i < path.jointVelocities.size()) {
@@ -1187,6 +1192,11 @@ namespace pfield {
           if (j < numJoints - 1) {
             csvFile << ",";
           }
+        }
+      }
+      else {
+        for (unsigned int j = 0; j < numJoints; ++j) {
+          csvFile << ",0";
         }
       }
 
@@ -1200,6 +1210,11 @@ namespace pfield {
           }
         }
       }
+      else {
+        for (unsigned int j = 0; j < numJoints; ++j) {
+          csvFile << ",0";
+        }
+      }
 
       // Write: link clearances
       if (i < path.linkObstacleClearances.size()) {
@@ -1207,6 +1222,11 @@ namespace pfield {
         for (unsigned int j = 0; j < numLinks; ++j) {
           csvFile << path.linkObstacleClearances[i][j];
           if (j < numLinks - 1) csvFile << ",";
+        }
+      }
+      else {
+        for (unsigned int j = 0; j < numLinks; ++j) {
+          csvFile << ",0";
         }
       }
 
@@ -1217,6 +1237,11 @@ namespace pfield {
           const auto& f = path.repulsiveForces[i][j];
           csvFile << f.x() << "," << f.y() << "," << f.z();
           if (j < numLinks - 1) csvFile << ",";
+        }
+      }
+      else {
+        for (unsigned int j = 0; j < numLinks; ++j) {
+          csvFile << ",0,0,0";
         }
       }
 
