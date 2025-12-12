@@ -117,6 +117,7 @@ sudo apt-get install -y ros-jazzy-urdf
 ```
 
 ### Install Pinocchio (via robotpkg)
+Below, I've outlined the steps to install Pinocchio via `robotpkg`. The original documentation can be found on the [pinocchio](https://github.com/stack-of-tasks/pinocchio) repository.
 
 This package uses Pinocchio for rigid body dynamics. It is recommended to install it via `robotpkg`.
 
