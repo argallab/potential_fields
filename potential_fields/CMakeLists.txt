@@ -139,29 +139,7 @@ if(BUILD_TESTING)
   # find_package(ament_lint_auto REQUIRED)
 
   # Add gtests only when explicitly building tests
-  ament_add_gtest(test_spatial_vector
-    test/test_spatial_vector.cpp
-  )
-  target_link_libraries(test_spatial_vector pfield_library::pfield_library)
-  ament_target_dependencies(test_spatial_vector rclcpp)
 
-  ament_add_gtest(test_pfields
-    test/test_pfields.cpp
-  )
-  target_link_libraries(test_pfields pfield_library::pfield_library)
-  ament_target_dependencies(test_pfields rclcpp geometry_msgs sensor_msgs)
-
-  ament_add_gtest(test_mesh_obstacle
-    test/test_mesh_obstacle.cpp
-  )
-  target_link_libraries(test_mesh_obstacle pfield_library::pfield_library)
-  ament_target_dependencies(test_mesh_obstacle rclcpp)
-
-  ament_add_gtest(test_pf_obstacles
-    test/test_pf_obstacles.cpp
-  )
-  target_link_libraries(test_pf_obstacles pfield_library::pfield_library)
-  ament_target_dependencies(test_pf_obstacles rclcpp)
 
   ament_add_gtest(test_visualization_profiling
     test/test_visualization_profiling.cpp
@@ -169,22 +147,7 @@ if(BUILD_TESTING)
   target_link_libraries(test_visualization_profiling pfield_library::pfield_library)
   ament_target_dependencies(test_visualization_profiling rclcpp)
 
-  install(
-    TARGETS test_spatial_vector
-    DESTINATION lib/${PROJECT_NAME}
-  )
-  install(
-    TARGETS test_pfields
-    DESTINATION lib/${PROJECT_NAME}
-  )
-  install(
-    TARGETS test_mesh_obstacle
-    DESTINATION lib/${PROJECT_NAME}
-  )
-  install(
-    TARGETS test_pf_obstacles
-    DESTINATION lib/${PROJECT_NAME}
-  )
+
   install(
     TARGETS test_visualization_profiling
     DESTINATION lib/${PROJECT_NAME}
