@@ -100,6 +100,7 @@ def create_plots_with_kinematics(df: pd.DataFrame, header_data: dict) -> None:
             # Construct column names
             j_pos_keys = [f'joint_{i+1}_rad' for i in range(n_joints)]
             j_vel_keys = [f'joint_vel_{i+1}_rad_s' for i in range(n_joints)]
+            j_torque_keys = [f'joint_torque_{i+1}_N_m' for i in range(n_joints)]
 
             # The header row might have an empty column name, which pandas reads as Unnamed: X
             # We filter those out.
@@ -111,8 +112,43 @@ def create_plots_with_kinematics(df: pd.DataFrame, header_data: dict) -> None:
 
             if all(k in valid_columns for k in j_vel_keys):
                 res["joint_velocities"] = df[j_vel_keys].to_numpy(dtype=float)
+
+            if all(k in valid_columns for k in j_torque_keys):
+                res["joint_torques"] = df[j_torque_keys].to_numpy(dtype=float)
         except Exception as e:
             print(f"Warning: Could not extract joint data: {e}")
+
+    # Extract Link Clearances
+    link_clearance_cols = [c for c in df.columns if 'clearance_m' in c and 'link_' in c]
+    if link_clearance_cols:
+        # Sort by link index to ensure correct order (link_0, link_1, ...)
+        link_clearance_cols.sort(key=lambda x: int(x.split('_')[1]))
+        res["link_clearances"] = df[link_clearance_cols].to_numpy(dtype=float)
+        res["link_names"] = [c.replace('_clearance_m', '') for c in link_clearance_cols]
+
+    # Extract Attraction Force
+    if 'att_force_x_N' in df.columns:
+        res["attraction_force"] = df[['att_force_x_N', 'att_force_y_N', 'att_force_z_N']].to_numpy(dtype=float)
+
+    # Extract Repulsive Forces (Magnitudes per link)
+    import re
+    rep_cols = [c for c in df.columns if '_rep_force_x_N' in c]
+    link_indices = []
+    for c in rep_cols:
+        m = re.search(r'link_(\d+)_rep_force_x_N', c)
+        if m:
+            link_indices.append(int(m.group(1)))
+    link_indices.sort()
+
+    if link_indices:
+        rep_mags = []
+        for i in link_indices:
+            fx = df[f'link_{i}_rep_force_x_N']
+            fy = df[f'link_{i}_rep_force_y_N']
+            fz = df[f'link_{i}_rep_force_z_N']
+            mag = np.sqrt(fx*fx + fy*fy + fz*fz)
+            rep_mags.append(mag)
+        res["link_repulsive_magnitudes"] = np.column_stack(rep_mags)
 
     # Save outputs under data/ with a consistent base name
     save_base = DATA_DIR / 'planned_path'
