@@ -17,6 +17,8 @@
   <depend>assimp</depend>
   <depend>pkg-config</depend>
 
+  <test_depend>gtest</test_depend>
+
   <export>
     <build_type>cmake</build_type>
   </export>
