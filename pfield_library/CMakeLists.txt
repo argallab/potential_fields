@@ -90,3 +90,24 @@ install(FILES
   "${CMAKE_CURRENT_BINARY_DIR}/${PROJECT_NAME}ConfigVersion.cmake"
   DESTINATION lib/cmake/${PROJECT_NAME}
 )
+
+if(BUILD_TESTING)
+  find_package(GTest REQUIRED)
+  enable_testing()
+
+  # Helper function to add tests
+  function(add_pfield_test test_name source_file)
+    add_executable(${test_name} ${source_file})
+    target_link_libraries(${test_name} PRIVATE ${PROJECT_NAME} GTest::gtest_main)
+    # Add include directory for mocks
+    target_include_directories(${test_name} PRIVATE ${CMAKE_CURRENT_SOURCE_DIR}/test)
+    # Set C++ standard to match library
+    set_target_properties(${test_name} PROPERTIES CXX_STANDARD 20)
+    add_test(NAME ${test_name} COMMAND ${test_name})
+  endfunction()
+
+  add_pfield_test(test_pfields test/test_pfields.cpp)
+  add_pfield_test(test_pf_obstacles test/test_pf_obstacles.cpp)
+  add_pfield_test(test_spatial_vector test/test_spatial_vector.cpp)
+  add_pfield_test(test_mesh_obstacle test/test_mesh_obstacle.cpp)
+endif()
