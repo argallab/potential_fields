@@ -31,7 +31,6 @@ jobs:
 
       - name: Install ROS apt libraries
         run: |
-          apt-get install -y ros-jazzy-pinocchio
           apt-get install -y ros-jazzy-urdf
 
       - name: Install robotpkg pinocchio
@@ -60,3 +59,5 @@ jobs:
         with:
           package-name: potential_fields potential_fields_interfaces pfields_demo pfield_library
           target-ros2-distro: jazzy
+          extra-cmake-args: -DCMAKE_PREFIX_PATH=/opt/openrobots
+          rosdep-skip-keys: "pinocchio coal"
