@@ -41,7 +41,6 @@
 #include "solvers/ik_solver.hpp"
 
 namespace pfield {
-
   struct PFLimits {
     double minX; // Minimum X coordinate of the bounding box [m]
     double maxX; // Maximum X coordinate of the bounding box [m]
@@ -78,6 +77,9 @@ namespace pfield {
     std::vector<std::vector<double>> jointAngles; // Joint angles for each point in the path [rad]
     std::vector<std::vector<double>> jointVelocities; // Joint velocities for each point in the path [rad/s]
     std::vector<std::vector<double>> jointTorques; // Joint torques for each point in the path [Nm]
+    std::vector<std::vector<double>> linkObstacleClearances; // Min Clearances between links and obstacles [m]
+    std::vector<Eigen::Vector3d> attractionForces; // Attractive Force vectors applied to the EE
+    std::vector<std::vector<Eigen::Vector3d>> repulsiveForces; // Repulsive Force vectors applied to each link
     unsigned int numPoints; // The number of points in the planned path, should be equal across all vectors
     double duration; // Total duration of the path [s]
     double dt; // Time difference between consecutive points [s]
@@ -99,45 +101,19 @@ namespace pfield {
      */
     void recordPathPoint(
       double timeStamp, const SpatialVector& pose, const TaskSpaceTwist& twist,
-      std::vector<double> jointAngles, std::vector<double> jointVelocities = {}, std::vector<double> jointTorques = {}) {
+      std::vector<double> jointAngles, std::vector<double> jointVelocities = {}, std::vector<double> jointTorques = {},
+      std::vector<double> linkClearances = {},
+      Eigen::Vector3d attractionForce = Eigen::Vector3d::Zero(),
+      std::vector<Eigen::Vector3d> repulsiveForces = {}) {
+      this->timeStamps.push_back(timeStamp);
       this->poses.push_back(pose);
       this->twists.push_back(twist);
       this->jointAngles.push_back(jointAngles);
-      this->timeStamps.push_back(timeStamp);
-      this->numPoints = static_cast<unsigned int>(this->poses.size());
-      if (!jointTorques.empty()) {
-        this->jointTorques.push_back(jointTorques);
-      }
-      if (!jointVelocities.empty()) {
-        this->jointVelocities.push_back(jointVelocities);
-      }
-      else {
-        // Estimate joint velocities if not provided from previous point
-        if (numPoints == 1) {
-          this->dt = 0.0;
-          this->duration = 0.0;
-          this->jointVelocities.clear();
-          // Joint Velocity at first point is zero
-          this->jointVelocities.resize(jointAngles.size(), std::vector<double>(jointAngles.size(), 0.0));
-          this->jointVelocities.push_back(std::vector<double>(jointAngles.size(), 0.0));
-        }
-        else if (this->numPoints > 1) {
-          this->dt = this->timeStamps.back() - this->timeStamps[this->numPoints - 2];
-          this->duration = this->timeStamps.back() - this->timeStamps.front();
-          // Add an estimation of joint velocities
-          const double dtSec = this->dt > 0.0 ? this->dt : 1.0;
-          const size_t numJoints = this->jointAngles.back().size();
-          std::vector<double> velocities(numJoints, 0.0);
-          for (size_t j = 0; j < numJoints; ++j) {
-            velocities[j] = (this->jointAngles.back()[j] - this->jointAngles[this->numPoints - 2][j]) / dtSec;
-          }
-          this->jointVelocities.push_back(velocities);
-        }
-        else {
-          this->dt = 0.0;
-          this->duration = 0.0;
-        }
-      }
+      this->jointVelocities.push_back(jointVelocities);
+      this->jointTorques.push_back(jointTorques);
+      this->linkObstacleClearances.push_back(linkClearances);
+      this->attractionForces.push_back(attractionForce);
+      this->repulsiveForces.push_back(repulsiveForces);
     }
   };
 
@@ -437,15 +413,21 @@ namespace pfield {
      * @brief Computes the whole-body joint velocities resulting from the combination
      *        of the attractive and repulsive forces at the given configuration and joint velocities.
      *
-     * @param jointAngles The current joint angles of the robot [rad]
-     * @param prevJointVelocities The previous joint velocities of the robot [rad/s]
-     * @param eePose The current end-effector pose
-     * @param dt The time step over which to integrate acceleration [s]
+     * @param[in] jointAngles The current joint angles of the robot [rad]
+     * @param[in] prevJointVelocities The previous joint velocities of the robot [rad/s]
+     * @param[in] eePose The current end-effector pose
+     * @param[in] dt The time step over which to integrate acceleration [s]
+     * @param[out] outLinkForces A vector of linear forces acting on each link [N]
+     * @param[out] outLinkClearances A vector of minimum clearances between each link and obstacles [m]
+     * @param[out] outAttractionForce The linear force vector acting on the end-effector [N]
      * @return Eigen::VectorXd The resulting whole-body joint velocities [rad/s]
      */
     Eigen::VectorXd evaluateWholeBodyJointTorquesAtConfiguration(
       const std::vector<double>& jointAngles, const std::vector<double>& prevJointVelocities,
-      const SpatialVector& eePose, const double dt);
+      const SpatialVector& eePose, const double dt,
+      std::vector<Eigen::Vector3d>* outLinkForces = nullptr,
+      std::vector<double>* outLinkClearances = nullptr,
+      Eigen::Vector3d* outAttractionForce = nullptr);
 
     /**
      * @brief Computes the task-space twist resulting from whole-body joint velocities.
@@ -636,10 +618,15 @@ namespace pfield {
      *       at the nearest points and mapping them to joint space via link Jacobian transposes.
      *       Uses COAL distance queries and the Khatib repulsive potential formulation.
      *
-     * @param jointAngles The current joint configuration [rad]
+     * @param[in] jointAngles The current joint configuration [rad]
+     * @param[out] outLinkForces A pointer to a vector to store the computed forces on each link [N]
+     * @param[out] outLinkClearances A pointer to a vector to store the minimum
      * @return Eigen::VectorXd Joint torques for whole-body obstacle avoidance [Nm]
      */
-    Eigen::VectorXd computeWholeBodyRepulsionJointTorques(const std::vector<double>& jointAngles) const;
+    Eigen::VectorXd computeWholeBodyRepulsionJointTorques(
+      const std::vector<double>& jointAngles,
+      std::vector<Eigen::Vector3d>* outLinkForces = nullptr,
+      std::vector<double>* outLinkClearances = nullptr) const;
 
     // ============ Path Planning ============
 
