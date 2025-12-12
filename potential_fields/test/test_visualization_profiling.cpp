@@ -37,7 +37,7 @@ protected:
 
     // Parameters matching PotentialFieldManager defaults
     visualizerBufferArea = 1.0;
-    fieldResolution = 0.1; // Using a finer resolution to stress test, or match default 0.5
+    fieldResolution = 0.5;
   }
 
   std::shared_ptr<pfield::PotentialField> pf;
