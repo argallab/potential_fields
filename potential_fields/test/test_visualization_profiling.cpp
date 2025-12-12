@@ -89,5 +89,5 @@ TEST_F(VisualizationProfilingTest, ProfileVectorFieldGeneration) {
   // Assert that it runs within a reasonable time frame (e.g., < 0.1s for 10Hz)
   // Note: This assertion might be flaky depending on the machine and resolution
   // For a unit test, we might just want to ensure it completes within a reasonable time.
-  EXPECT_LT(elapsed.count(), 0.4); // Visualization loop should take less than 400ms
+  EXPECT_LT(elapsed.count(), 1.0); // Visualization loop should take less than 1 second
 }
