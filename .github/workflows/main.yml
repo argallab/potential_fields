@@ -22,6 +22,9 @@ jobs:
       - name: Install Eigen3
         run: apt-get update && apt-get install -y libeigen3-dev
 
+      - name: Install Pinocchio
+        run: apt-get install -y libpinocchio-dev
+
       - name: Build and run tests
         uses: ros-tooling/action-ros-ci@v0.4
         with:
