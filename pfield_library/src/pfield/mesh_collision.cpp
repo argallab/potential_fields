@@ -54,7 +54,8 @@ namespace pfield {
       }
       else if (path.find("package://") == 0) {
         // Warn that package:// is not fully supported without ROS
-        std::cerr << "Warning: package:// URI used in ROS-agnostic build. Assuming path relative to current directory or absolute path after stripping prefix." << std::endl;
+        std::cerr << "Warning: package:// URI used in ROS-agnostic build. \n"
+          "Assuming path relative to current directory or absolute path after stripping prefix." << std::endl;
         // Naive stripping: remove package://
         path = path.substr(10);
       }
@@ -62,7 +63,9 @@ namespace pfield {
 
     Assimp::Importer importer;
     // aiProcess_Triangulate is important because we need triangles
-    const aiScene* scene = importer.ReadFile(path, aiProcess_Triangulate | aiProcess_JoinIdenticalVertices | aiProcess_SortByPType);
+    const aiScene* scene = importer.ReadFile(
+      path, aiProcess_Triangulate | aiProcess_JoinIdenticalVertices | aiProcess_SortByPType
+    );
 
     if (!scene || scene->mFlags & AI_SCENE_FLAGS_INCOMPLETE || !scene->mRootNode) {
       throw std::runtime_error("Failed to load mesh: " + uri + " (" + importer.GetErrorString() + ")");
@@ -92,7 +95,9 @@ namespace pfield {
         for (unsigned int i = 0; i < mesh->mNumFaces; ++i) {
           aiFace face = mesh->mFaces[i];
           if (face.mNumIndices == 3) {
-            tris.emplace_back(vertex_offset + face.mIndices[0], vertex_offset + face.mIndices[1], vertex_offset + face.mIndices[2]);
+            tris.emplace_back(
+              vertex_offset + face.mIndices[0], vertex_offset + face.mIndices[1], vertex_offset + face.mIndices[2]
+            );
           }
         }
         vertex_offset += mesh->mNumVertices;
