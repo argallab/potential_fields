@@ -90,12 +90,12 @@ namespace pfield {
      *        collision origin expressed in the base frame (at nominal zero joint values)
      *        and r_local is the local bounding-sphere radius of the collision geometry.
      *
-     * Geometry handling:
-     *  - Box(l,w,h): r_local = 0.5 * sqrt(l^2 + w^2 + h^2)
-     *  - Sphere(r): r_local = r
-     *  - Cylinder(r,len): r_local = sqrt(r^2 + (len/2)^2)
-     *  - Mesh(file,scale): if mesh extents are unavailable, uses a conservative heuristic:
-     *      r_local ≈ meshFallbackRadius * max(scale.x, scale.y, scale.z)
+     * @note Geometry handling:
+     *      - Box(l,w,h): r_local = 0.5 * sqrt(l^2 + w^2 + h^2)
+     *      - Sphere(r): r_local = r
+     *      - Cylinder(r,len): r_local = sqrt(r^2 + (len/2)^2)
+     *      - Mesh(file,scale): if mesh extents are unavailable, uses a conservative heuristic:
+     *          r_local ≈ meshFallbackRadius * max(scale.x, scale.y, scale.z)
      *
      * @return double Estimated robot radius in meters. Returns 0.0 if no collision
      *         geometry is found or the URDF model is not initialized.
