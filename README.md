@@ -47,13 +47,13 @@ potential_fields_interfaces
 └── srv
 
 # Example ROS 2 Package demonstrating potential_fields usage
-potential_fields_demo
+potential_fields_demos
 ├── config
 ├── include
-│   └── potential_fields_demo
+│   └── potential_fields_demos
 ├── launch
 ├── meshes
-├── potential_fields_demo
+├── potential_fields_demos
 ├── src
 └── urdf
 ```
