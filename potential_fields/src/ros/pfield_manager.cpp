@@ -9,7 +9,7 @@
 ///   - Selects a MotionPlugin (e.g., Null, Franka) and assigns its IKSolver to the PotentialField
 ///   - Optionally initializes kinematics from a URDF and adapts influence distance based on robot extent
 ///
-/// PARAMETERS (declared as ROS 2 parameters):
+/// PARAMETERS:
 ///   visualize_pf_frequency (float64): Timer frequency for PF updates [Hz]
 ///   attractive_gain (float64): Gain for translational attraction [Ns/m]
 ///   rotational_attractive_gain (float64): Gain for rotational attraction [Ns·m/rad]
