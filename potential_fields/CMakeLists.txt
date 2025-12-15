@@ -38,7 +38,7 @@ find_package(pinocchio REQUIRED)
 # find_package(Franka REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 # Look in the default user install location if not found in system paths
-find_package(pfield_library REQUIRED)
+find_package(potential_fields_library REQUIRED)
 
 
 # Setup robot_plugins library
@@ -56,7 +56,7 @@ ament_target_dependencies(robot_plugins
   urdf
   # Franka
 )
-target_link_libraries(robot_plugins pfield_library::pfield_library)
+target_link_libraries(robot_plugins potential_fields_library::potential_fields_library)
 target_include_directories(robot_plugins PUBLIC
   include/potential_fields/robot_plugins
 )
@@ -105,7 +105,7 @@ ament_target_dependencies(pfield_manager
 
 target_link_libraries(pfield_manager
   ${potential_fields_interfaces_LIBRARIES}
-  pfield_library::pfield_library
+  potential_fields_library::potential_fields_library
   robot_plugins
 )
 
@@ -144,7 +144,7 @@ if(BUILD_TESTING)
   ament_add_gtest(test_visualization_profiling
     test/test_visualization_profiling.cpp
   )
-  target_link_libraries(test_visualization_profiling pfield_library::pfield_library)
+  target_link_libraries(test_visualization_profiling potential_fields_library::potential_fields_library)
   ament_target_dependencies(test_visualization_profiling rclcpp)
 
 

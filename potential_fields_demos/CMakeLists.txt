@@ -14,7 +14,7 @@ find_package(ament_cmake_python REQUIRED)
 find_package(ament_cmake_gtest REQUIRED)
 find_package(rclcpp REQUIRED)
 find_package(rclpy REQUIRED)
-find_package(pfield_library REQUIRED)
+find_package(potential_fields_library REQUIRED)
 find_package(potential_fields_interfaces REQUIRED)
 find_package(Doxygen)
 find_package(geometry_msgs REQUIRED)
@@ -55,7 +55,7 @@ ament_target_dependencies(pfield_demo_node
   control_msgs
 )
 
-target_link_libraries(pfield_demo_node pfield_library::pfield_library)
+target_link_libraries(pfield_demo_node potential_fields_library::potential_fields_library)
 
 add_executable(pfield_teleop_demo_node src/pfield_teleop_demo.cpp)
 ament_target_dependencies(pfield_teleop_demo_node
@@ -76,7 +76,7 @@ ament_target_dependencies(pfield_teleop_demo_node
   ament_index_cpp
 )
 
-target_link_libraries(pfield_teleop_demo_node pfield_library::pfield_library)
+target_link_libraries(pfield_teleop_demo_node potential_fields_library::potential_fields_library)
 
 # Install the Cpp demo node
 install(

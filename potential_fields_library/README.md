@@ -1,6 +1,6 @@
-# pfield_library
+# potential_fields_library
 
-The `pfield_library` is a core, ROS-agnostic C++ library that implements potential field-based motion planning algorithms. It provides the mathematical primitives, field models, and integration schemes necessary for generating smooth, collision-free trajectories for robotic manipulators and mobile robots.
+The `potential_fields_library` is a core, ROS-agnostic C++ library that implements potential field-based motion planning algorithms. It provides the mathematical primitives, field models, and integration schemes necessary for generating smooth, collision-free trajectories for robotic manipulators and mobile robots.
 
 ## Overview and Features
 
@@ -37,7 +37,7 @@ This library is structured as a colcon package. To build it within a workspace:
 
 ```bash
 cd <workspace_root>
-colcon build --packages-select pfield_library
+colcon build --packages-select potential_fields_library
 ```
 
 ### Building with CMake (Standalone)
@@ -53,13 +53,13 @@ make install # Might have to try with sudo to install to /usr/local
 
 ## Usage
 
-To use `pfield_library` in your C++ project, link against it in your `CMakeLists.txt`:
+To use `potential_fields_library` in your C++ project, link against it in your `CMakeLists.txt`:
 
 ```cmake
-find_package(pfield_library REQUIRED)
+find_package(potential_fields_library REQUIRED)
 
 add_executable(my_planner main.cpp)
-target_link_libraries(my_planner PRIVATE pfield_library::pfield_library)
+target_link_libraries(my_planner PRIVATE potential_fields_library::potential_fields_library)
 ```
 
 ### Basic Example

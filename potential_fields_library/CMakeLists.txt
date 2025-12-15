@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(pfield_library)
+project(potential_fields_library)
 
 # Default to C++20
 if(NOT CMAKE_CXX_STANDARD)

@@ -23,7 +23,7 @@
   <depend>hpp-fcl</depend>
   <depend>pinocchio</depend>
   <depend>ament_index_cpp</depend>
-  <depend>pfield_library</depend>
+  <depend>potential_fields_library</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
