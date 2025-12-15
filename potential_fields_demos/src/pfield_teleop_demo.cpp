@@ -167,8 +167,8 @@ void PFTeleopDemo::createAndPublishObstacles() {
   cage.frame_id = "cage";
   cage.type = "Mesh";
   cage.group = "Static";
-  // std::string share_directory = ament_index_cpp::get_package_share_directory("pfields_demo");
-  cage.mesh_resource = "package://pfields_demo/meshes/r01_scene/icos_mesh.obj";
+  // std::string share_directory = ament_index_cpp::get_package_share_directory("potential_fields_demo");
+  cage.mesh_resource = "package://potential_fields_demo/meshes/r01_scene/icos_mesh.obj";
   cage.pose.position.x = 0.05;
   cage.pose.position.y = -0.4;
   cage.pose.position.z = 0.4044;

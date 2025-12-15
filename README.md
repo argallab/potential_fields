@@ -47,13 +47,13 @@ potential_fields_interfaces
 └── srv
 
 # Example ROS 2 Package demonstrating potential_fields usage
-pfields_demo
+potential_fields_demo
 ├── config
 ├── include
-│   └── pfields_demo
+│   └── potential_fields_demo
 ├── launch
 ├── meshes
-├── pfields_demo
+├── potential_fields_demo
 ├── src
 └── urdf
 ```
@@ -180,7 +180,7 @@ colcon test && colcon test-result --verbose
 Use `pf_demo.launch.xml` to launch the demo node that also launches the potential_fields package (`pfield.launch.xml`):
 
 ```bash
-ros2 launch pfields_demo pf_demo.launch.xml
+ros2 launch potential_fields_demos pf_demo.launch.xml
 ```
 
 Launching the project without any arguments is good enough to launch a basic potential field and visualization. Of course, arguments are necessary to customize the PF package with your robot, RViz config, gain parameters, etc.

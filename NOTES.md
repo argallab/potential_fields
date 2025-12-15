@@ -244,7 +244,7 @@ ros2 launch xarm_moveit_config xarm7_moveit_realmove.launch.py robot_ip:=192.168
 # Launch JParse
 ros2 launch manipulator_control xarm_main_vel.launch use_teleop_control:=true use_teleop_control_jparse:=true
 # Launch PF Node that hosts Path Planning service (and demo service)
-ros2 launch pfields_demo pf_demo.launch.xml use_rviz:=false motion_plugin_type:="xarm" end_effector_frame:="link_tcp" urdf_file_path:="xarm7.urdf"
+ros2 launch potential_fields_demo pf_demo.launch.xml use_rviz:=false motion_plugin_type:="xarm" end_effector_frame:="link_tcp" urdf_file_path:="xarm7.urdf"
 ```
 
 ### Demo Obstacles

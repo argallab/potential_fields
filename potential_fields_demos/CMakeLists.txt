@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.8)
-project(pfields_demo)
+project(potential_fields_demo)
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -32,7 +32,7 @@ find_package(control_msgs REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 
 include_directories(
-  include/pfields_demo
+  include/potential_fields_demo
   ${potential_fields_interfaces_INCLUDE_DIRS}
 )
 
@@ -87,8 +87,8 @@ install(
 # Install the Python demo node
 install(
   PROGRAMS
-  pfields_demo/pf_demo.py
-  pfields_demo/sphere_robot_demo.py
+  potential_fields_demo/pf_demo.py
+  potential_fields_demo/sphere_robot_demo.py
   DESTINATION lib/${PROJECT_NAME}
 )
 

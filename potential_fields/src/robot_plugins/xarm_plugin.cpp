@@ -10,10 +10,10 @@
 XArmPlugin::XArmPlugin() : MotionPlugin("xarm_motion_plugin") {
   std::string urdf_path;
   try {
-    urdf_path = ament_index_cpp::get_package_share_directory("pfields_demo") + "/urdf/xarm7.urdf";
+    urdf_path = ament_index_cpp::get_package_share_directory("potential_fields_demos") + "/urdf/xarm7.urdf";
   }
   catch (const std::exception& e) {
-    std::cerr << "Error finding pfields_demo package: " << e.what() << std::endl;
+    std::cerr << "Error finding potential_fields_demos package: " << e.what() << std::endl;
   }
   this->ikSolver = std::make_shared<pfield::XArmIKSolver>(urdf_path);
 }
