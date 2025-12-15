@@ -4,8 +4,9 @@
   <name>potential_fields_library</name>
   <version>1.0.0</version>
   <description>Library for managing a vector field overlaid onto a robot's task-space</description>
+  <author>Sharwin Patil</author>
   <maintainer email="sharwinpatil@u.northwestern.edu">Sharwin Patil</maintainer>
-  <license>TODO</license>
+  <license>Apache 2.0</license>
 
   <buildtool_depend>cmake</buildtool_depend>
 
