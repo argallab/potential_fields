@@ -239,10 +239,10 @@ pfields:latest
 Once the docker container is started, run `colcon build` and `source install/setup.bash` to initialize the ROS workspace, and then launch the appropriate nodes:
 
 ```bash
-# Robot Launch
+# Robot Launch TODO(Sharwin24): Change robot ip to a variable to be populated by the user
 ros2 launch xarm_moveit_config xarm7_moveit_realmove.launch.py robot_ip:=192.168.1.199 add_gripper:=true
 # Launch JParse
-ros2 launch manipulator_control xarm_main_vel.launch use_teleop_control:=true use_teleop_control_jparse:=true
+ros2 launch manipulator_control xarm_main_vel.launch.xml use_teleop_control:=true use_teleop_control_jparse:=true
 # Launch PF Node that hosts Path Planning service (and demo service)
 ros2 launch potential_fields_demos pf_demo.launch.xml use_rviz:=false motion_plugin_type:="xarm" end_effector_frame:="link_tcp" urdf_file_path:="xarm7.urdf"
 ```
@@ -353,3 +353,46 @@ Has Spiky repulsive behavior
 Done
 
 ### Demo 5 (Reach Goal): Simple Translation and Rotation to achieve goal pose
+
+# README Feedback
+Move note about MATH.md to the end of README
+Add how to contribute instructions
+Add author to title with link to Github
+Create PR and issue template
+Add Table of contents
+Add robot-agnostic information (how-to)
+Discuss ROS2 version compatibility
+Get rid of scripts and move script stuff to README instructions
+Remove data stuff
+Be more explicit for setting up workspace section
+Clarify VSCode workspace configurations section
+How to use with C++ Only
+Put copyright footer in READMEs with my name
+Add main branch protections and PR rules for merging to pass workflows
+Update About section
+Move TODO.md, NOTES.md, data folder contents, and prototyping to other private repo
+Clean up images folder
+Move setting up instructions higher, and condense sections about Core C++ library and ROS integration
+Fix ROS integration section
+separate Docker instructions and move dev container instructions there too
+Put `colcon build` and `source install/setup.bash` into separate code blocks
+Split these code blocks into copy-able blocks for each command
+```bash
+# In the Docker/ directory
+docker build -t pfields .
+# After the image is built, the container can be created and started by running:
+sudo docker run -it --privileged \
+-v /dev:/dev \
+-v /home/$USER/workspaces/pfield_ws:/home/workspace/src \ # Change path to user defined path
+-e DISPLAY \
+-e QT_X11_NO_MITSHM=1 \
+--name argallab_pfields \
+--net=host \
+pfields:latest
+```
+Create a new minimal Docker
+Get familiar with RAP Information: https://www.ieee-ras.org/publications/ra-p
+Info about xhost +local:docker
+
+Need to add xarm-ros2 git clone command to dockerfile if providing that demo
+`git clone https://github.com/xArm-Developer/xarm_ros2.git --recursive -b $ROS_DISTRO`
