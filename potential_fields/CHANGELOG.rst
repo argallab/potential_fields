@@ -2,8 +2,8 @@
 Changelog for package potential_fields
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+1.0.1 (2025-12-17)
+------------------
 * Copyright notices in code files
 * Updating exclusion for CMakeLists
 * Licenses in all packages

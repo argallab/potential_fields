@@ -2,8 +2,8 @@
 Changelog for package potential_fields_demos
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+1.0.1 (2025-12-17)
+------------------
 * Licenses in all packages
 * Copyright notice text to all code files
 * Updating package.xml and CMakeLists with copyright testing

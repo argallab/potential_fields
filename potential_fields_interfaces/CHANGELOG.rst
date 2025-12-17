@@ -2,8 +2,8 @@
 Changelog for package potential_fields_interfaces
 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
 
-Forthcoming
------------
+1.0.1 (2025-12-17)
+------------------
 * Licenses in all packages
 * Updating package.xml and CMakeLists with copyright testing
 * Updating XML files with author and license
