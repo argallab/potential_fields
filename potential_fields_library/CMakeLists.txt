@@ -11,6 +11,7 @@ if(CMAKE_COMPILER_IS_GNUCXX OR CMAKE_CXX_COMPILER_ID MATCHES "Clang")
 endif()
 
 # Find dependencies
+find_package(ament_cmake REQUIRED)
 find_package(Eigen3 REQUIRED)
 find_package(pinocchio REQUIRED)
 find_package(coal REQUIRED) # HPP-FCL renamed to coal
@@ -95,6 +96,7 @@ include(CTest)
 if(BUILD_TESTING)
   find_package(GTest REQUIRED)
   find_package(ament_cmake_cpplint REQUIRED)
+  find_package(ament_cmake_copyright REQUIRED)
 
   # Helper function to add tests
   function(add_pfield_test test_name source_file)
@@ -115,6 +117,19 @@ if(BUILD_TESTING)
   # Add cpplint test using ament_cmake_cpplint
   # Excluding code that was written by external authors
   ament_cpplint(
+    EXCLUDE
+    build
+    cmake
+    include/solvers/geofik.h
+    include/solvers/weighted_ik.h
+    include/solvers/xarm_ik_solver.h
+    src/solvers/geofik.cpp
+    src/solvers/weighted_ik.cpp
+    src/solvers/xarm_ik_solver.cpp
+  )
+
+  # Add copyright test using ament_cmake_copyright
+  ament_copyright(
     EXCLUDE
     build
     cmake

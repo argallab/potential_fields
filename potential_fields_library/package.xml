@@ -4,10 +4,10 @@
   <name>potential_fields_library</name>
   <version>1.0.0</version>
   <description>Library for managing a vector field overlaid onto a robot's task-space</description>
-  <author>Sharwin Patil</author>
   <maintainer email="sharwinpatil@u.northwestern.edu">Sharwin Patil</maintainer>
   <license>Apache 2.0</license>
 
+  <buildtool_depend>ament_cmake</buildtool_depend>
   <buildtool_depend>cmake</buildtool_depend>
 
   <depend>eigen</depend>
@@ -20,6 +20,8 @@
 
   <test_depend>gtest</test_depend>
   <test_depend>ament_cmake_cpplint</test_depend>
+  <test_depend>ament_cmake_copyright</test_depend>
+
 
   <export>
     <build_type>cmake</build_type>

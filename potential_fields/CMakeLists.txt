@@ -137,24 +137,21 @@ install(
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   # find_package(ament_lint_auto REQUIRED)
+  find_package(ament_cmake_copyright REQUIRED)
+  find_package(ament_cmake_cpplint REQUIRED)
 
   # Add gtests only when explicitly building tests
-
-
   ament_add_gtest(test_visualization_profiling
     test/test_visualization_profiling.cpp
   )
   target_link_libraries(test_visualization_profiling potential_fields_library::potential_fields_library)
   ament_target_dependencies(test_visualization_profiling rclcpp)
-
-
   install(
     TARGETS test_visualization_profiling
     DESTINATION lib/${PROJECT_NAME}
   )
 
-  find_package(ament_cmake_cpplint REQUIRED)
-  # Runs cpplint over your C/C++ sources as a CTest
+  # Runs cpplint over C/C++ sources as a CTest
   ament_cpplint(
     EXCLUDE
     include/potential_fields/robot_plugins/examples_common.h
@@ -175,6 +172,9 @@ if(BUILD_TESTING)
   # set(ament_cmake_cpplint_FOUND TRUE)
 
   # ament_lint_auto_find_test_dependencies()
+
+  # Run Copyright checks
+  ament_copyright()
 endif()
 
 # Building documentation should be optional.

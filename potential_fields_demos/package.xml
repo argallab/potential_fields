@@ -4,12 +4,12 @@
   <name>potential_fields_demos</name>
   <version>1.0.0</version>
   <description>Demo Package for potential_fields</description>
-  <author>Sharwin Patil</author>
   <maintainer email="sharwinpatil@u.northwestern.edu">Sharwin Patil</maintainer>
   <license>Apache 2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
   <buildtool_depend>ament_cmake_python</buildtool_depend>
+
   <depend>rclcpp</depend>
   <depend>rclpy</depend>
   <depend>potential_fields_library</depend>
@@ -28,8 +28,8 @@
   <depend>Eigen3</depend>
   <depend>ament_index_cpp</depend>
 
-  <!-- Python packaging support -->
   <exec_depend>ament_cmake_python</exec_depend>
+  <test_depend>ament_cmake_copyright</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

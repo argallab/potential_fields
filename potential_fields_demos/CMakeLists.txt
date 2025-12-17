@@ -112,6 +112,10 @@ install(
 if(BUILD_TESTING)
   # find_package(ament_lint_auto REQUIRED)
   # ament_lint_auto_find_test_dependencies()
+  find_package(ament_cmake_copyright REQUIRED)
+
+  # Run copyright check
+  ament_copyright()
 endif()
 
 ament_python_install_package(${PROJECT_NAME})

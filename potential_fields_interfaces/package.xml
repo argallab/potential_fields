@@ -4,7 +4,6 @@
   <name>potential_fields_interfaces</name>
   <version>1.0.0</version>
   <description>Custom Messages and Services for potential_fields package</description>
-  <author>Sharwin Patil</author>
   <maintainer email="sharwinpatil@u.northwestern.edu">Sharwin Patil</maintainer>
   <license>Apache 2.0</license>
 
@@ -12,6 +11,7 @@
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
+  <test_depend>ament_cmake_copyright</test_depend>
 
   <depend>std_msgs</depend>
   <depend>geometry_msgs</depend>
