@@ -1,10 +1,10 @@
 #!/bin/bash
 
-# Run this script to build the pfield_library
+# Run this script to build the potential_fields_library
 
-echo "Building pfield_library..."
+echo "Building potential_fields_library..."
 
 # Build using colcon
-colcon build --packages-select pfield_library
+colcon build --packages-select potential_fields_library
 
-echo -e "\e[32mpfield_library built\e[0m"
+echo -e "\e[32mpotential_fields_library built\e[0m"

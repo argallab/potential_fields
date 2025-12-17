@@ -3,7 +3,7 @@
 # Builds everything in the repository
 
 # Run Colcon Build in the repository directory
-# Builds all packages including pfield_library
+# Builds all packages including potential_fields_library
 colcon build
 
 echo -e "\e[32mRepository build complete.\e[0m"

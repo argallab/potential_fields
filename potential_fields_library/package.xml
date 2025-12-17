@@ -1,0 +1,29 @@
+<?xml version="1.0"?>
+<?xml-model href="http://download.ros.org/schema/package_format3.xsd" schematypens="http://www.w3.org/2001/XMLSchema"?>
+<package format="3">
+  <name>potential_fields_library</name>
+  <version>1.0.0</version>
+  <description>Library for managing a vector field overlaid onto a robot's task-space</description>
+  <maintainer email="sharwinpatil@u.northwestern.edu">Sharwin Patil</maintainer>
+  <license>Apache 2.0</license>
+
+  <buildtool_depend>ament_cmake</buildtool_depend>
+  <buildtool_depend>cmake</buildtool_depend>
+
+  <depend>eigen</depend>
+  <depend>pinocchio</depend>
+  <depend>coal</depend>
+  <depend>urdfdom</depend>
+  <depend>urdfdom_headers</depend>
+  <depend>assimp</depend>
+  <depend>pkg-config</depend>
+
+  <test_depend>gtest</test_depend>
+  <test_depend>ament_cmake_cpplint</test_depend>
+  <test_depend>ament_cmake_copyright</test_depend>
+
+
+  <export>
+    <build_type>cmake</build_type>
+  </export>
+</package>

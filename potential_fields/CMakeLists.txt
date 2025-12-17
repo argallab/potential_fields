@@ -38,7 +38,7 @@ find_package(pinocchio REQUIRED)
 # find_package(Franka REQUIRED)
 find_package(ament_index_cpp REQUIRED)
 # Look in the default user install location if not found in system paths
-find_package(pfield_library REQUIRED)
+find_package(potential_fields_library REQUIRED)
 
 
 # Setup robot_plugins library
@@ -56,7 +56,7 @@ ament_target_dependencies(robot_plugins
   urdf
   # Franka
 )
-target_link_libraries(robot_plugins pfield_library::pfield_library)
+target_link_libraries(robot_plugins potential_fields_library::potential_fields_library)
 target_include_directories(robot_plugins PUBLIC
   include/potential_fields/robot_plugins
 )
@@ -105,7 +105,7 @@ ament_target_dependencies(pfield_manager
 
 target_link_libraries(pfield_manager
   ${potential_fields_interfaces_LIBRARIES}
-  pfield_library::pfield_library
+  potential_fields_library::potential_fields_library
   robot_plugins
 )
 
@@ -137,24 +137,21 @@ install(
 if(BUILD_TESTING)
   find_package(ament_cmake_gtest REQUIRED)
   # find_package(ament_lint_auto REQUIRED)
+  find_package(ament_cmake_copyright REQUIRED)
+  find_package(ament_cmake_cpplint REQUIRED)
 
   # Add gtests only when explicitly building tests
-
-
   ament_add_gtest(test_visualization_profiling
     test/test_visualization_profiling.cpp
   )
-  target_link_libraries(test_visualization_profiling pfield_library::pfield_library)
+  target_link_libraries(test_visualization_profiling potential_fields_library::potential_fields_library)
   ament_target_dependencies(test_visualization_profiling rclcpp)
-
-
   install(
     TARGETS test_visualization_profiling
     DESTINATION lib/${PROJECT_NAME}
   )
 
-  find_package(ament_cmake_cpplint REQUIRED)
-  # Runs cpplint over your C/C++ sources as a CTest
+  # Runs cpplint over C/C++ sources as a CTest
   ament_cpplint(
     EXCLUDE
     include/potential_fields/robot_plugins/examples_common.h
@@ -175,6 +172,17 @@ if(BUILD_TESTING)
   # set(ament_cmake_cpplint_FOUND TRUE)
 
   # ament_lint_auto_find_test_dependencies()
+
+  # Run Copyright checks
+  ament_copyright(
+    EXCLUDE
+    include/potential_fields/robot_plugins/examples_common.h
+    include/potential_fields/robot_plugins/geofik.h
+    include/potential_fields/robot_plugins/weighted_ik.h
+    src/robot_plugins/geofik.cpp
+    src/robot_plugins/examples_common.cpp
+    src/robot_plugins/weighted_ik.cpp
+  )
 endif()
 
 # Building documentation should be optional.

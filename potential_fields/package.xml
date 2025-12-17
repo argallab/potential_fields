@@ -8,6 +8,7 @@
   <license>Apache 2.0</license>
 
   <buildtool_depend>ament_cmake</buildtool_depend>
+
   <depend>rclcpp</depend>
   <depend>potential_fields_interfaces</depend>
   <depend>geometry_msgs</depend>
@@ -23,11 +24,12 @@
   <depend>hpp-fcl</depend>
   <depend>pinocchio</depend>
   <depend>ament_index_cpp</depend>
-  <depend>pfield_library</depend>
+  <depend>potential_fields_library</depend>
 
   <test_depend>ament_lint_auto</test_depend>
   <test_depend>ament_lint_common</test_depend>
   <test_depend>ament_cmake_cpplint</test_depend>
+  <test_depend>ament_cmake_copyright</test_depend>
 
   <export>
     <build_type>ament_cmake</build_type>

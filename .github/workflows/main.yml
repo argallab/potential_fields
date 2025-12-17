@@ -57,7 +57,7 @@ jobs:
       - name: Build and run tests
         uses: ros-tooling/action-ros-ci@v0.4
         with:
-          package-name: potential_fields potential_fields_interfaces pfields_demo pfield_library
+          package-name: potential_fields potential_fields_interfaces potential_fields_demos potential_fields_library
           target-ros2-distro: jazzy
           extra-cmake-args: -DCMAKE_PREFIX_PATH=/opt/openrobots
           rosdep-skip-keys: "pinocchio coal"

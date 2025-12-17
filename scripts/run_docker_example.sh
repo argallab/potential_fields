@@ -24,8 +24,8 @@ echo ""
 echo "================================================================"
 echo "3. Starting Container"
 echo "================================================================"
-echo "NOTE: The container will automatically build 'pfield_library' on startup."
-echo "      Wait for 'pfield_library successfully installed' before typing."
+echo "NOTE: The container will automatically build 'potential_fields_library' on startup."
+echo "      Wait for 'potential_fields_library successfully installed' before typing."
 echo ""
 
 docker run -it --rm \

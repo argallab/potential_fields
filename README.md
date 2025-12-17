@@ -2,7 +2,21 @@
 
 ---
 
-For information about the mathematical formulation of potential fields used in this package, see [MATH.md](MATH.md). This README provides an overview of the package structure, instructions for building and launching the package, and details about usage. There is a [README.md](pfield_library/README.md) in the `pfield_library` folder that contains information about the independent C++ library.
+# Table Of Contents
+
+- [Table Of Contents](#table-of-contents)
+- [ROS Package Structure and Overview](#ros-package-structure-and-overview)
+  - [Package layout (high level)](#package-layout-high-level)
+  - [Core C++ libraries (ROS-agnostic)](#core-c-libraries-ros-agnostic)
+  - [ROS integration: PotentialFieldManager node](#ros-integration-potentialfieldmanager-node)
+    - [Publishers](#publishers)
+    - [Subscribers](#subscribers)
+    - [Services](#services)
+  - [Setting up the workspace](#setting-up-the-workspace)
+    - [Install System Dependencies](#install-system-dependencies)
+    - [Install Pinocchio (via robotpkg)](#install-pinocchio-via-robotpkg)
+    - [Configure Environment Variables](#configure-environment-variables)
+  - [Building, Testing, and Launching](#building-testing-and-launching)
 
 # ROS Package Structure and Overview
 
@@ -15,7 +29,7 @@ This package is split into two parts:
 
 ```bash
 # Core C++ potential field library (ROS-agnostic)
-pfield_library
+potential_fields_library
 ├── cmake
 ├── include
 │   ├── pfield
@@ -47,13 +61,13 @@ potential_fields_interfaces
 └── srv
 
 # Example ROS 2 Package demonstrating potential_fields usage
-pfields_demo
+potential_fields_demos
 ├── config
 ├── include
-│   └── pfields_demo
+│   └── potential_fields_demos
 ├── launch
 ├── meshes
-├── pfields_demo
+├── potential_fields_demos
 ├── src
 └── urdf
 ```
@@ -103,8 +117,6 @@ Notes on robot geometry
 - You can supply obstacles directly via `pfield/obstacles` from any node.
 - Alternatively, provide a URDF path to the node via `urdf_file_path`; the PF library will initialize `PFKinematics`, estimate robot extent (for influence distance), and can update geometry-derived obstacles as planning progresses.
 
-_NOTE: Geometry-derived obstacles from the robot's links are in effort to avoid self-collisions. This will likely be reworked by planning in the configuration space instead of task space._
-
 ## Setting up the workspace
 Once this repository is cloned, you will need to install the required dependencies locally on your machine before being able to build and launch the `potential_fields` package.
 
@@ -113,7 +125,7 @@ Once this repository is cloned, you will need to install the required dependenci
 ```bash
 sudo apt-get update
 sudo apt-get install -y libeigen3-dev liburdfdom-dev libfcl-dev libccd-dev libassimp-dev lsb-release
-sudo apt-get install -y ros-jazzy-urdf
+sudo apt-get install -y ros-${ROS_DISTRO}-urdf
 ```
 
 ### Install Pinocchio (via robotpkg)
@@ -180,7 +192,11 @@ colcon test && colcon test-result --verbose
 Use `pf_demo.launch.xml` to launch the demo node that also launches the potential_fields package (`pfield.launch.xml`):
 
 ```bash
-ros2 launch pfields_demo pf_demo.launch.xml
+ros2 launch potential_fields_demos pf_demo.launch.xml
 ```
 
 Launching the project without any arguments is good enough to launch a basic potential field and visualization. Of course, arguments are necessary to customize the PF package with your robot, RViz config, gain parameters, etc.
+
+---
+
+For information about the mathematical formulation of potential fields used in this package, see [MATH.md](MATH.md). This README provides an overview of the package structure, instructions for building and launching the package, and details about usage. There is a [README.md](potential_fields_library/README.md) in the `potential_fields_library` folder that contains information about the independent C++ library.

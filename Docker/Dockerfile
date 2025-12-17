@@ -167,8 +167,7 @@ RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> ~/.bashrc
 
 # RUN chmod a+x entrypoint.sh
 COPY ./entrypoint.sh /
-COPY ./build_pfield_lib.sh /usr/local/bin/
-RUN chmod a+x /entrypoint.sh && chmod a+x /usr/local/bin/build_pfield_lib.sh
+RUN chmod a+x /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
 CMD ["bash"]

@@ -11,6 +11,7 @@
 # Immediate TODOs
 - Create walkthrough video about files and what they do
 - Go through ROS package release process for open sourcing on ROS index
+- Fix Build Warnings
 
 - Include installation instructions for fcl, pinnochio, libfranka and other external dependencies in README
 - Create a minimum Docker Image for PF and robot dependencies
@@ -20,9 +21,7 @@
 - Allow editing pfield parameters dynamically during runtime via ROS2 parameters
 - Plot Net force vs time as well, maybe force on each joint. Would help debug Attractive and Repulsive forces.
 - Use RK4 to integrate joint velocities into joint positions and for integrating joint positions into end-effector poses and test if this improves accuracy/stability of the planner.
-- Verify Unit tests for pfield_library and move them to a tests folder that can be run with colcon test or gtest
-- User node should be required to pass in mesh/urdf directory so that they can just type "object.obj" and have the path be resolved by the pfield_library
-- Put Joint Torques in PlannedPath Struct
+- User node should be required to pass in mesh/urdf directory so that they can just type "object.obj" and have the path be resolved by the potential_fields_library
 
 # Future TODOs and Refactors
 - Create U-shaped obstacle test case for classic local minima problem
@@ -30,6 +29,6 @@
   - Add unit tests for Extent Estimator
 - Define IKSolver and MotionPlugin more concretely. IKSolver should be an ABC for a user to implement an IK implementation.
   MotionPlugin should be an ABC for a user to implement how to talk to real robot and should be capable of both ROS-agnostic and ROS-aware implementations.
-  - Refactor where solvers and robot_plugins are stored across the pfield_library and potential_fields ROS package.
+  - Refactor where solvers and robot_plugins are stored across the potential_fields_library and potential_fields ROS package.
 - Document process for creating plots and how to save data during runtime for plotting later
 - Review papers for improvements to potential field algorithms. Demiana is helping with researching relevant papers.
