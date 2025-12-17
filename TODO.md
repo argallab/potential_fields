@@ -11,6 +11,7 @@
 # Immediate TODOs
 - Create walkthrough video about files and what they do
 - Go through ROS package release process for open sourcing on ROS index
+- Fix Build Warnings
 
 - Include installation instructions for fcl, pinnochio, libfranka and other external dependencies in README
 - Create a minimum Docker Image for PF and robot dependencies
