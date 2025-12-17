@@ -174,7 +174,15 @@ if(BUILD_TESTING)
   # ament_lint_auto_find_test_dependencies()
 
   # Run Copyright checks
-  ament_copyright()
+  ament_copyright(
+    EXCLUDE
+    include/potential_fields/robot_plugins/examples_common.h
+    include/potential_fields/robot_plugins/geofik.h
+    include/potential_fields/robot_plugins/weighted_ik.h
+    src/robot_plugins/geofik.cpp
+    src/robot_plugins/examples_common.cpp
+    src/robot_plugins/weighted_ik.cpp
+  )
 endif()
 
 # Building documentation should be optional.

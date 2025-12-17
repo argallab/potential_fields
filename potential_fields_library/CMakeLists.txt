@@ -118,27 +118,17 @@ if(BUILD_TESTING)
   # Excluding code that was written by external authors
   ament_cpplint(
     EXCLUDE
-    build
     cmake
-    include/solvers/geofik.h
-    include/solvers/weighted_ik.h
-    include/solvers/xarm_ik_solver.h
-    src/solvers/geofik.cpp
-    src/solvers/weighted_ik.cpp
-    src/solvers/xarm_ik_solver.cpp
+    include/solvers/**
+    src/solvers/**
   )
 
   # Add copyright test using ament_cmake_copyright
   ament_copyright(
     EXCLUDE
-    build
     cmake
-    include/solvers/geofik.h
-    include/solvers/weighted_ik.h
-    include/solvers/xarm_ik_solver.h
-    src/solvers/geofik.cpp
-    src/solvers/weighted_ik.cpp
-    src/solvers/xarm_ik_solver.cpp
+    include/solvers/**
+    src/solvers/**
   )
 
 endif()
