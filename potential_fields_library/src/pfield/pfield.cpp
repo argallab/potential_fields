@@ -816,6 +816,11 @@ namespace pfield {
     TaskSpaceTwist prevTwist; // previous applied twist (starts zero)
     double timeStamp = 0.0;
     for (size_t iter = 0; iter < maxIters; ++iter) {
+      // Calculate forces for recording
+      Eigen::Vector3d attForce = this->computeAttractiveForceLinear(current);
+      Eigen::Vector3d repForce = this->computeRepulsiveForceLinear(current);
+      double minClearance = this->minObstacleClearanceAt(current.getPosition());
+
       // Perform RK4 integration step to get next pose and the applied twist
       // including removal of opposing repulsive force components and enforcement of motion constraints
       auto [nextPoseRK4, appliedTwist] = this->rungeKuttaStep(current, prevTwist, stepDt);
@@ -826,7 +831,12 @@ namespace pfield {
         timeStamp,
         current,
         appliedTwist,
-        currentJointAngles
+        currentJointAngles,
+        {}, // joint velocities
+        {}, // joint torques
+        {minClearance}, // link clearances (using EE clearance)
+        attForce,
+        {repForce} // repulsive forces (using EE repulsion)
       );
 
       // Check goal after recording
@@ -842,7 +852,11 @@ namespace pfield {
 
       // Update loop variables
       current = nextPoseRK4;
-      prevTwist = appliedTwist; // supply velocity-limited twist as previous for next acceleration limiting
+      // Estimate velocity at the end of the interval for the next step
+      // v_bar = (v_prev + v_next) / 2  =>  v_next = 2 * v_bar - v_prev
+      Eigen::Vector3d linVelNext = 2.0 * appliedTwist.getLinearVelocity() - prevTwist.getLinearVelocity();
+      Eigen::Vector3d angVelNext = 2.0 * appliedTwist.getAngularVelocity() - prevTwist.getAngularVelocity();
+      prevTwist = TaskSpaceTwist(linVelNext, angVelNext);
       timeStamp += stepDt;
     }
 
@@ -1195,8 +1209,7 @@ namespace pfield {
 
         // Helper lambda to safely write an inner double element or 0 if missing
         auto writeInnerDouble = [&](const std::vector<std::vector<double>>& mat, unsigned int row, unsigned int col) {
-          if (row < mat.size() && col < mat[row].size()) return mat[row][col];
-          return 0.0;
+          return (row < mat.size() && col < mat[row].size()) ? mat[row][col] : 0.0;
         };
 
         // Write: joint angles (rad)
