@@ -57,6 +57,12 @@ PFDemo::PFDemo() : Node("pfield_demo") {
   this->tfBuffer = std::make_shared<tf2_ros::Buffer>(this->get_clock());
   this->tfListener = std::make_shared<tf2_ros::TransformListener>(*this->tfBuffer, this);
 
+  // Before publishing obstacles wait for the pfield/obstacles topic to exist
+  RCLCPP_INFO(this->get_logger(), "Waiting for subscribers to the /pfield/obstacles topic...");
+  while (this->obstaclePub->get_subscription_count() == 0) {
+    rclcpp::sleep_for(std::chrono::milliseconds(100));
+  }
+  RCLCPP_INFO(this->get_logger(), "Subscribers detected on the /pfield/obstacles topic. Publishing obstacles...");
   this->createAndPublishObstacles();
 
   // Initialize demo service
@@ -102,9 +108,9 @@ void PFDemo::handleRunPlanPathDemo(
 
   geometry_msgs::msg::Pose goalPose;
   // goalPose = startPose;
-  goalPose.position.x = 0.6;
+  goalPose.position.x = 0.5;
   goalPose.position.y = 0.1;
-  goalPose.position.z = 0.45;
+  goalPose.position.z = 0.5;
   goalPose.orientation.x = 0.70709;
   goalPose.orientation.y = 9.8864e-05;
   goalPose.orientation.z = 0.70712;
@@ -116,7 +122,7 @@ void PFDemo::handleRunPlanPathDemo(
   pathPlanRequest->delta_time = 0.02; // 20 ms between waypoints
   pathPlanRequest->goal_tolerance = 0.01; // 10 mm tolerance
   pathPlanRequest->max_iterations = 25000; // Max iterations for planning
-  pathPlanRequest->planning_method = PlanPath::Request::PLANNING_METHOD_WHOLE_BODY; // "task_space" or "whole_body"
+  pathPlanRequest->planning_method = PlanPath::Request::PLANNING_METHOD_TASK_SPACE; // "task_space" or "whole_body"
   const double dt = pathPlanRequest->delta_time;
 
   // Publish the goal pose
@@ -175,8 +181,8 @@ void PFDemo::handlePlanPathResponse(rclcpp::Client<PlanPath>::SharedFuture futur
   }
 
   // Begin streaming EE velocity commands to follow the path
-  // this->startEEVelocityStreaming(pathPlanResponse->end_effector_velocity_trajectory, dt);
-  this->startJointVelocityStreaming(pathPlanResponse->joint_trajectory, dt);
+  this->startEEVelocityStreaming(pathPlanResponse->end_effector_velocity_trajectory, dt);
+  // this->startJointVelocityStreaming(pathPlanResponse->joint_trajectory, dt);
 }
 
 void PFDemo::createAndPublishObstacles() {

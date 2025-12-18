@@ -106,6 +106,21 @@ namespace pfield {
     return J.transpose() * y;
   }
 
+  static inline std::vector<double> approximateJointVelocities(
+    const std::vector<double>& currentJointAngles,
+    const std::vector<double>& previousJointAngles,
+    const double dt) {
+      std::vector<double> jointVelocities;
+      if (currentJointAngles.size() != previousJointAngles.size() || dt <= 0.0) {
+        return jointVelocities; // return empty on error
+      }
+      jointVelocities.reserve(currentJointAngles.size());
+      for (size_t i = 0; i < currentJointAngles.size(); ++i) {
+        jointVelocities.push_back((currentJointAngles[i] - previousJointAngles[i]) / dt);
+      }
+      return jointVelocities;
+    }
+
   constexpr double DEFAULT_ATTRACTIVE_GAIN = 1.0; // Gain for attractive force [Ns/m]
   constexpr double DEFAULT_ROTATIONAL_ATTRACTIVE_GAIN = 0.7; // Gain for rotational attractive force [Ns/m]
   constexpr double DEFAULT_MAX_LINEAR_VELOCITY = 5.0; // [m/s]

@@ -135,6 +135,16 @@ namespace pfield {
       this->linkObstacleClearances.push_back(linkClearances);
       this->attractionForces.push_back(attractionForce);
       this->repulsiveForces.push_back(repulsiveForces);
+      
+      // If jointVelocities are empty, approximate them
+      if (jointVelocities.empty() && this->jointAngles.size() > 1) {
+        const size_t lastIdx = this->jointAngles.size() - 1;
+        auto estimatedVelocities = approximateJointVelocities(
+          this->jointAngles[lastIdx - 1],
+          this->jointAngles[lastIdx],
+          timeStamp - this->timeStamps[lastIdx - 1]);
+        this->jointVelocities[lastIdx] = estimatedVelocities;
+      }
     }
   };
 
@@ -725,8 +735,6 @@ namespace pfield {
    * @param startJointAngles The starting joint angles for the robot [rad].
    * @param dt The time step for each iteration of the path planning [s].
    * @param goalTolerance The tolerance for reaching the goal pose [m].
-   * @param stagnationLimit The number of iterations to consider for stagnation detection, defaults to 100.
-   * @param stagnationThreshold The threshold for detecting stagnation in position change, defaults to 1e-4 [m].
    * @param maxIters The maximum number of iterations to perform for path planning, defaults to 30000.
    * @return PlannedPath The planned path containing poses, twists, joint angles, and timestamps.
    */

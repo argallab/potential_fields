@@ -793,6 +793,7 @@ namespace pfield {
     }
     if (this->pfKinematics && this->ikSolver && !success) {
       // Fallback to internal numerical IK if no external solver is provided
+      // std::cerr << "[PFKinematics WARNING]: Falling back to pinocchio numerical IK solver." << std::endl;
       jointAngles = this->pfKinematics->computeInverseKinematics(targetPose, seedJointAngles, this->eeLinkName);
     }
     return jointAngles;
@@ -811,21 +812,21 @@ namespace pfield {
     path.rotationalTolerance = this->rotationalThreshold;
     const double stepDt = (dt > 0.0) ? dt : 0.1;
     SpatialVector current = startPose;
-    std::vector<double> jointAngles = startJointAngles;
+    std::vector<double> currentJointAngles = startJointAngles;
     TaskSpaceTwist prevTwist; // previous applied twist (starts zero)
     double timeStamp = 0.0;
     for (size_t iter = 0; iter < maxIters; ++iter) {
       // Perform RK4 integration step to get next pose and the applied twist
       // including removal of opposing repulsive force components and enforcement of motion constraints
       auto [nextPoseRK4, appliedTwist] = this->rungeKuttaStep(current, prevTwist, stepDt);
-      jointAngles = this->computeInverseKinematics(nextPoseRK4, jointAngles);
+      currentJointAngles = this->computeInverseKinematics(nextPoseRK4, currentJointAngles);
 
       // Record current state
       path.recordPathPoint(
         timeStamp,
         current,
         appliedTwist,
-        jointAngles
+        currentJointAngles
       );
 
       // Check goal after recording
@@ -837,7 +838,7 @@ namespace pfield {
       }
 
       // Update obstacles from new JointAngles
-      this->updateObstaclesFromKinematics(jointAngles);
+      this->updateObstaclesFromKinematics(currentJointAngles);
 
       // Update loop variables
       current = nextPoseRK4;
@@ -1043,9 +1044,15 @@ namespace pfield {
   }
 
   bool PotentialField::createPlannedPathCSV(const PlannedPath& path, const std::string& filePath) const {
-    // Open file for writing first to ensure it's accessible
-    std::ofstream csvFile(filePath);
-    if (!csvFile.is_open()) {
+    std::ofstream csvFile;
+    try {
+      // Open file for writing first to ensure it's accessible
+      csvFile.open(filePath, std::ios::out);
+      if (!csvFile.is_open()) {
+        return false;
+      }
+    } catch (const std::exception& e) {
+      std::cerr << "[PotentialField ERROR]: Failed to open CSV file for writing: " << e.what() << std::endl;
       return false;
     }
 
@@ -1130,139 +1137,108 @@ namespace pfield {
       "att_force_x_N,att_force_y_N,att_force_z_N"
       + jointPositionHeaders() + jointVelocityHeaders() + jointTorqueHeaders()
       + linkClearanceHeaders() + linkRepulsiveForceHeaders();
+  
+    try {
+      // Write metadata as commented header lines
+      const Eigen::Vector3d goalPosition = this->goalPose.getPosition();
+      const Eigen::Quaterniond goalOri = this->goalPose.getOrientation();
+      csvFile << "# Goal Position: [" << goalPosition.x() << ", " << goalPosition.y() << ", " << goalPosition.z() << "]\n";
+      csvFile << "# Goal Orientation: [" << goalOri.x() << ", " << goalOri.y() << ", " << goalOri.z() << ", "
+        << goalOri.w() << "]\n";
+      csvFile << "# Goal Tolerance: " << path.goalTolerance << "\n";
+      csvFile << "# Angular Tolerance: " << path.rotationalTolerance << "\n";
+      csvFile << "# Num Joints: " << numJoints << "\n";
+      csvFile << "# Planning Method: " << path.planningMethod << "\n";
 
-    // Write metadata as commented header lines
-    const Eigen::Vector3d goalPosition = this->goalPose.getPosition();
-    const Eigen::Quaterniond goalOri = this->goalPose.getOrientation();
-    csvFile << "# Goal Position: [" << goalPosition.x() << ", " << goalPosition.y() << ", " << goalPosition.z() << "]\n";
-    csvFile << "# Goal Orientation: [" << goalOri.x() << ", " << goalOri.y() << ", " << goalOri.z() << ", "
-      << goalOri.w() << "]\n";
-    csvFile << "# Goal Tolerance: " << path.goalTolerance << "\n";
-    csvFile << "# Angular Tolerance: " << path.rotationalTolerance << "\n";
-    csvFile << "# Num Joints: " << numJoints << "\n";
-    csvFile << "# Planning Method: " << path.planningMethod << "\n";
+      // Write header
+      csvFile << header << "\n";
 
-    // Write header
-    csvFile << header << "\n";
+      // Write data rows
+      for (unsigned int i = 0; i < path.numPoints; ++i) {
+        // Safely obtain pose, twist, and timestamp with bounds checks
+        SpatialVector pose = (i < path.poses.size()) ? path.poses[i] : SpatialVector();
+        TaskSpaceTwist twist = (i < path.twists.size()) ? path.twists[i] : TaskSpaceTwist();
+        double timeStamp = (i < path.timeStamps.size()) ? path.timeStamps[i] : 0.0;
+        const Eigen::Vector3d position = pose.getPosition();
+        const Eigen::Quaterniond orientation = pose.getOrientation();
+        const double minClearance = this->minObstacleClearanceAt(position);
 
-    // Write data rows
-    for (unsigned int i = 0; i < path.numPoints; ++i) {
-      // Compute everything we need for writing before writing the next row
-      const SpatialVector& pose = path.poses[i];
-      const TaskSpaceTwist& twist = path.twists[i];
-      const double timeStamp = path.timeStamps[i];
-      const Eigen::Vector3d position = pose.getPosition();
-      const Eigen::Quaterniond orientation = pose.getOrientation();
-      const double minClearance = this->minObstacleClearanceAt(position);
+        // Write: time (s)
+        csvFile << timeStamp << ",";
 
-      // Write: time
-      csvFile << timeStamp << ",";
+        // Write: position (x, y, z)
+        csvFile << position.x() << "," << position.y() << "," << position.z() << ",";
 
-      // Write: position (x, y, z)
-      csvFile << position.x() << "," << position.y() << "," << position.z() << ",";
+        // Write: orientation quaternion (x, y, z, w)
+        csvFile << orientation.x() << "," << orientation.y() << ","
+          << orientation.z() << "," << orientation.w() << ",";
 
-      // Write: orientation quaternion (x, y, z, w)
-      csvFile << orientation.x() << "," << orientation.y() << ","
-        << orientation.z() << "," << orientation.w() << ",";
+        // Write: linear velocity (x, y, z)
+        csvFile << twist.linearVelocity.x() << "," << twist.linearVelocity.y() << ","
+          << twist.linearVelocity.z() << ",";
 
-      // Write: linear velocity (x, y, z)
-      csvFile << twist.linearVelocity.x() << "," << twist.linearVelocity.y() << ","
-        << twist.linearVelocity.z() << ",";
+        // Write: angular velocity (x, y, z)
+        csvFile << twist.angularVelocity.x() << "," << twist.angularVelocity.y() << ","
+          << twist.angularVelocity.z() << ",";
 
-      // Write: angular velocity (x, y, z)
-      csvFile << twist.angularVelocity.x() << "," << twist.angularVelocity.y() << ","
-        << twist.angularVelocity.z() << ",";
+        // Write: minimum obstacle clearance (clearance)
+        csvFile << minClearance << ",";
 
-      // Write: minimum obstacle clearance
-      csvFile << minClearance << ",";
-
-      // Write: attraction force
-      if (i < path.attractionForces.size()) {
-        const auto& f = path.attractionForces[i];
-        csvFile << f.x() << "," << f.y() << "," << f.z();
-      }
-      else {
-        csvFile << "0,0,0";
-      }
-
-      // Write: joint angles
-      if (i < path.jointAngles.size()) {
-        csvFile << ",";
-        for (unsigned int j = 0; j < numJoints; ++j) {
-          csvFile << path.jointAngles[i][j];
-          if (j < numJoints - 1) {
-            csvFile << ",";
-          }
-        }
-      }
-      else {
-        for (unsigned int j = 0; j < numJoints; ++j) {
-          csvFile << ",0";
-        }
-      }
-
-      // Write: joint velocities
-      if (i < path.jointVelocities.size()) {
-        csvFile << ",";
-        for (unsigned int j = 0; j < numJoints; ++j) {
-          csvFile << path.jointVelocities[i][j];
-          if (j < numJoints - 1) {
-            csvFile << ",";
-          }
-        }
-      }
-      else {
-        for (unsigned int j = 0; j < numJoints; ++j) {
-          csvFile << ",0";
-        }
-      }
-
-      // Write: joint torques
-      if (i < path.jointTorques.size()) {
-        csvFile << ",";
-        for (unsigned int j = 0; j < numJoints; ++j) {
-          csvFile << path.jointTorques[i][j];
-          if (j < numJoints - 1) {
-            csvFile << ",";
-          }
-        }
-      }
-      else {
-        for (unsigned int j = 0; j < numJoints; ++j) {
-          csvFile << ",0";
-        }
-      }
-
-      // Write: link clearances
-      if (i < path.linkObstacleClearances.size()) {
-        csvFile << ",";
-        for (unsigned int j = 0; j < numLinks; ++j) {
-          csvFile << path.linkObstacleClearances[i][j];
-          if (j < numLinks - 1) csvFile << ",";
-        }
-      }
-      else {
-        for (unsigned int j = 0; j < numLinks; ++j) {
-          csvFile << ",0";
-        }
-      }
-
-      // Write: link repulsive forces
-      if (i < path.repulsiveForces.size()) {
-        csvFile << ",";
-        for (unsigned int j = 0; j < numLinks; ++j) {
-          const auto& f = path.repulsiveForces[i][j];
+        // Write: attraction force (x, y, z)
+        if (i < path.attractionForces.size()) {
+          const auto& f = path.attractionForces[i];
           csvFile << f.x() << "," << f.y() << "," << f.z();
-          if (j < numLinks - 1) csvFile << ",";
         }
-      }
-      else {
-        for (unsigned int j = 0; j < numLinks; ++j) {
-          csvFile << ",0,0,0";
+        else {
+          csvFile << "0,0,0";
         }
-      }
 
-      csvFile << "\n";
+        // Helper lambda to safely write an inner double element or 0 if missing
+        auto writeInnerDouble = [&](const std::vector<std::vector<double>>& mat, unsigned int row, unsigned int col) {
+          if (row < mat.size() && col < mat[row].size()) return mat[row][col];
+          return 0.0;
+        };
+
+        // Write: joint angles (rad)
+        for (unsigned int j = 0; j < numJoints; ++j) {
+          csvFile << "," << writeInnerDouble(path.jointAngles, i, j);
+        }
+
+        // Write: joint velocities
+        for (unsigned int j = 0; j < numJoints; ++j) {
+          csvFile << "," << writeInnerDouble(path.jointVelocities, i, j);
+        }
+
+        // Write: joint torques
+        for (unsigned int j = 0; j < numJoints; ++j) {
+          csvFile << "," << writeInnerDouble(path.jointTorques, i, j);
+        }
+
+        // Write: link clearances
+        for (unsigned int j = 0; j < numLinks; ++j) {
+          double val = 0.0;
+          if (i < path.linkObstacleClearances.size() && j < path.linkObstacleClearances[i].size()) {
+            val = path.linkObstacleClearances[i][j];
+          }
+          csvFile << "," << val;
+        }
+
+        // Write: link repulsive forces
+        for (unsigned int j = 0; j < numLinks; ++j) {
+          if (i < path.repulsiveForces.size() && j < path.repulsiveForces[i].size()) {
+            const auto& f = path.repulsiveForces[i][j];
+            csvFile << "," << f.x() << "," << f.y() << "," << f.z();
+          }
+          else {
+            csvFile << ",0,0,0";
+          }
+        }
+
+        csvFile << "\n";
+      }
+    } catch (const std::exception& e) {
+      std::cerr << "[PotentialField ERROR]: Failed to write to CSV file: " << e.what() << std::endl;
+      return false;
     }
 
     csvFile.close();

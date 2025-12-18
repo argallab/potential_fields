@@ -435,7 +435,7 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
     )
   );
   this->pField->setGoalPose(goalSV);
-  // Convert starting_joint_angles (std::vector<float>) to std::vector<double> expected by planPathFromTaskSpaceWrench
+  // Convert starting_joint_angles (std::vector<float>) to std::vector<double> expected by planning methods
   std::vector<double> startJointAnglesDouble(
     request->starting_joint_angles.cbegin(), request->starting_joint_angles.cend()
   );
@@ -450,6 +450,8 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
       }
     }
     RCLCPP_INFO(this->get_logger(), "IK Found StartJointAngles: [%s]", jointAnglesStr.c_str());
+  } else {
+    RCLCPP_INFO(this->get_logger(), "Using provided %zu joint angles.", startJointAnglesDouble.size());
   }
   pfield::PlannedPath planningResult;
   try {
@@ -478,7 +480,7 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
       if (!request->planning_method.empty() && request->planning_method != PlanPath::Request::PLANNING_METHOD_TASK_SPACE) {
         RCLCPP_WARN(this->get_logger(), "Unknown planning method '%s'", request->planning_method.c_str());
       }
-      RCLCPP_INFO(this->get_logger(), "Using Task-Space Wrench Planning");
+      RCLCPP_INFO(this->get_logger(), "Defaulting to Task-Space Wrench Planning");
       planningResult = this->pField->planPathFromTaskSpaceWrench(
         /*startPose=*/startSV,
         /*startJointAngles=*/startJointAnglesDouble,
@@ -561,13 +563,15 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
   );
   // Right before exiting, update the query pose to the start of the planned path
   // to visualize the planned trajectory from the new query pose
-  this->queryPose = planningResult.poses.front();
-  // Update currentJointAngles to match the start of the path so IK has a good seed
-  // this->currentJointAngles = startJointAnglesDouble;
-  RCLCPP_INFO(this->get_logger(),
-    "Updating query pose to start of planned path at pos=(%.3f, %.3f, %.3f)",
-    this->queryPose.getPosition().x(), this->queryPose.getPosition().y(), this->queryPose.getPosition().z()
-  );
+  if (response->success && !planningResult.poses.empty()) {
+    this->queryPose = planningResult.poses.front();
+    // Update currentJointAngles to match the start of the path so IK has a good seed
+    // this->currentJointAngles = startJointAnglesDouble;
+    RCLCPP_INFO(this->get_logger(),
+      "Updating query pose to start of planned path at pos=(%.3f, %.3f, %.3f)",
+      this->queryPose.getPosition().x(), this->queryPose.getPosition().y(), this->queryPose.getPosition().z()
+    );
+  }
   if (!response->success) {
     // If planning failed, log final pose and distance to goal
     if (planningResult.poses.empty()) {
@@ -589,12 +593,18 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
     response->error_message = "Planning failed to reach goal within tolerance.";
   }
   // Create a CSV file of the planned path for analysis
-  const std::string csvFilePath = "data/planned_path.csv";
-  if (!this->pField->createPlannedPathCSV(planningResult, csvFilePath)) {
-    RCLCPP_WARN(this->get_logger(), "Failed to create planned path CSV at %s", csvFilePath.c_str());
-  }
-  else {
-    RCLCPP_INFO(this->get_logger(), "Planned path CSV created at %s", csvFilePath.c_str());
+  RCLCPP_INFO(this->get_logger(), "Creating planned path CSV file...");
+  RCLCPP_INFO(this->get_logger(), "Planning success: %s", planningResult.success ? "true" : "false");
+  try {
+    const std::string csvFilePath = "data/planned_path.csv";
+    if (!this->pField->createPlannedPathCSV(planningResult, csvFilePath)) {
+      RCLCPP_WARN(this->get_logger(), "Failed to create planned path CSV at %s", csvFilePath.c_str());
+    }
+    else {
+      RCLCPP_INFO(this->get_logger(), "Planned path CSV created at %s", csvFilePath.c_str());
+    }
+  } catch (const std::exception& e) {
+    RCLCPP_ERROR(this->get_logger(), "Exception while creating planned path CSV: %s", e.what());
   }
 }
 
@@ -613,8 +623,8 @@ MarkerArray PotentialFieldManager::visualizePF(std::shared_ptr<pfield::Potential
     queryPoseMarkerArray.markers.cend());
   auto endQueryPose = this->now();
   MarkerArray thresholdMarkers = this->createThresholdMarkers(pf);
-  markerArray.markers.insert(markerArray.markers.cend(), thresholdMarkers.markers.cbegin(),
-    thresholdMarkers.markers.cend());
+  // markerArray.markers.insert(markerArray.markers.cend(), thresholdMarkers.markers.cbegin(),
+  //   thresholdMarkers.markers.cend());
   auto endThreshold = this->now();
   if (this->visualizeFieldVectors) {
     MarkerArray potentialVectorMarkers = this->createPotentialVectorMarkers(pf);
