@@ -104,37 +104,17 @@ namespace pfield {
     }
     case ObstacleType::CYLINDER: {
       // Get the XY radial distance of the point to the cylinder axis
-      // You can think of this as projecting the point onto the XY plane and the cylinder axis along its height (Z) axis
       Eigen::Vector2d radialPoint(localPoint.x(), localPoint.y());
       const double radialDist = radialPoint.norm();
-      // Get distance along height (Z) axis
       const double halfHeight = this->geometry.height / 2.0;
-      const double distanceToTop = localPoint.z() - halfHeight;
-      // Outside distance to finite cylinder is distance to union of infinite cylinder and top/bottom planes
       Eigen::Vector3d normalLocal = Eigen::Vector3d::Zero();
-      double distanceToSurface = 0.0;
-      if (radialDist > this->geometry.radius && std::abs(localPoint.z()) <= halfHeight) {
-        // Outside on the lateral surface region (within height): distance from side surface
-        distanceToSurface = radialDist - this->geometry.radius;
-        normalLocal = (radialDist > NEAR_ZERO_THRESHOLD) ?
-          Eigen::Vector3d(localPoint.x() / radialDist, localPoint.y() / radialDist, 0.0) :
-          Eigen::Vector3d::UnitX();
-      }
-      else if (localPoint.z() > halfHeight) {
-        // Above top plane
-        distanceToSurface = distanceToTop;
-        normalLocal = Eigen::Vector3d::UnitZ();
-      }
-      else if (localPoint.z() < -halfHeight) {
-        // Below bottom plane
-        distanceToSurface = (-halfHeight - localPoint.z());
-        normalLocal = -Eigen::Vector3d::UnitZ();
-      }
-      else {
+      // Check if inside the infinite cylinder along Z axis and within height bounds
+      if (radialDist <= this->geometry.radius && std::abs(localPoint.z()) <= halfHeight) {
         // Inside: nearest feature between side surface, top, bottom
         double distanceToSide = this->geometry.radius - radialDist;
         double distanceToTopPlane = halfHeight - localPoint.z();
         double distanceToBottomPlane = halfHeight + localPoint.z();
+
         // Determine closest feature
         if (distanceToTopPlane < distanceToSide && distanceToTopPlane < distanceToBottomPlane) {
           // The top plane is the closest feature
@@ -153,10 +133,40 @@ namespace pfield {
             Eigen::Vector3d(-localPoint.x() / radialDist, -localPoint.y() / radialDist, 0.0) :
             -Eigen::Vector3d::UnitX();
         }
-        normal = rotateVector(this->orientation, normalLocal);
-        return;
       }
-      signedDistance = distanceToSurface;
+      else {
+        // Outside
+        // Compute closest point on cylinder surface
+        Eigen::Vector3d closestPoint = Eigen::Vector3d::Zero();
+
+        // Radial component
+        if (radialDist > this->geometry.radius) {
+          if (radialDist > NEAR_ZERO_THRESHOLD) {
+            closestPoint.head<2>() = radialPoint / radialDist * this->geometry.radius;
+          }
+          else {
+            closestPoint.head<2>() = Eigen::Vector2d(this->geometry.radius, 0); // Arbitrary
+          }
+        }
+        else {
+          closestPoint.head<2>() = radialPoint;
+        }
+
+        // Z component
+        if (localPoint.z() > halfHeight) closestPoint.z() = halfHeight;
+        else if (localPoint.z() < -halfHeight) closestPoint.z() = -halfHeight;
+        else closestPoint.z() = localPoint.z();
+
+        Eigen::Vector3d diff = localPoint - closestPoint;
+        signedDistance = diff.norm();
+        if (signedDistance > NEAR_ZERO_THRESHOLD) {
+          normalLocal = diff / signedDistance;
+        }
+        else {
+          normalLocal = Eigen::Vector3d::UnitX();
+        }
+      }
+
       // Rotate the output normal back to world frame
       normal = rotateVector(this->orientation, normalLocal);
       break;
