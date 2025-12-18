@@ -19,6 +19,7 @@
 #include <eigen3/Eigen/Geometry>
 // URDF types used by common helpers (e.g., pose conversion)
 #include <urdf_model/model.h>
+#include <vector>
 
 namespace pfield {
 
@@ -110,16 +111,16 @@ namespace pfield {
     const std::vector<double>& currentJointAngles,
     const std::vector<double>& previousJointAngles,
     const double dt) {
-      std::vector<double> jointVelocities;
-      if (currentJointAngles.size() != previousJointAngles.size() || dt <= 0.0) {
-        return jointVelocities; // return empty on error
-      }
-      jointVelocities.reserve(currentJointAngles.size());
-      for (size_t i = 0; i < currentJointAngles.size(); ++i) {
-        jointVelocities.push_back((currentJointAngles[i] - previousJointAngles[i]) / dt);
-      }
-      return jointVelocities;
+    std::vector<double> jointVelocities;
+    if (currentJointAngles.size() != previousJointAngles.size() || dt <= 0.0) {
+      return jointVelocities; // return empty on error
     }
+    jointVelocities.reserve(currentJointAngles.size());
+    for (size_t i = 0; i < currentJointAngles.size(); ++i) {
+      jointVelocities.push_back((currentJointAngles[i] - previousJointAngles[i]) / dt);
+    }
+    return jointVelocities;
+  }
 
   constexpr double DEFAULT_ATTRACTIVE_GAIN = 1.0; // Gain for attractive force [Ns/m]
   constexpr double DEFAULT_ROTATIONAL_ATTRACTIVE_GAIN = 0.7; // Gain for rotational attractive force [Ns/m]

@@ -445,7 +445,8 @@ namespace pfield {
 
     if (!this->model.existFrame(eeLinkName)) {
       // TODO(Sharwin24): Log error properly
-      std::cerr << "[PFKinematics ERROR]: computeInverseKinematics: End-effector link '" << eeLinkName << "' not found in model" << std::endl;
+      std::cerr << "[PFKinematics ERROR]: computeInverseKinematics: End-effector link '"
+        << eeLinkName << "' not found in model" << std::endl;
       return {};
     }
     pinocchio::FrameIndex frameId = this->model.getFrameId(eeLinkName);

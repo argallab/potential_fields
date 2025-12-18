@@ -135,7 +135,6 @@ namespace pfield {
       this->linkObstacleClearances.push_back(linkClearances);
       this->attractionForces.push_back(attractionForce);
       this->repulsiveForces.push_back(repulsiveForces);
-      
       // If jointVelocities are empty, approximate them
       if (jointVelocities.empty() && this->jointAngles.size() > 1) {
         const size_t lastIdx = this->jointAngles.size() - 1;

@@ -1051,7 +1051,8 @@ namespace pfield {
       if (!csvFile.is_open()) {
         return false;
       }
-    } catch (const std::exception& e) {
+    }
+    catch (const std::exception& e) {
       std::cerr << "[PotentialField ERROR]: Failed to open CSV file for writing: " << e.what() << std::endl;
       return false;
     }
@@ -1137,7 +1138,6 @@ namespace pfield {
       "att_force_x_N,att_force_y_N,att_force_z_N"
       + jointPositionHeaders() + jointVelocityHeaders() + jointTorqueHeaders()
       + linkClearanceHeaders() + linkRepulsiveForceHeaders();
-  
     try {
       // Write metadata as commented header lines
       const Eigen::Vector3d goalPosition = this->goalPose.getPosition();
@@ -1236,7 +1236,8 @@ namespace pfield {
 
         csvFile << "\n";
       }
-    } catch (const std::exception& e) {
+    }
+    catch (const std::exception& e) {
       std::cerr << "[PotentialField ERROR]: Failed to write to CSV file: " << e.what() << std::endl;
       return false;
     }
