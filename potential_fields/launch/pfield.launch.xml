@@ -5,6 +5,7 @@
   <arg name="end_effector_frame" default="ee_link" description="The name of the end-effector link frame"/>
   <arg name="urdf_file_path" default="" description="The absolute filepath to the URDF file for the robot"/>
   <arg name="motion_plugin_type" default="" description="The type of motion plugin to use in PFieldManager (e.g. 'franka')"/>
+  <arg name="visualization_method" default="" description="How query poses are visualized: 'task_space' or 'whole_body_velocity'"/>
 
   <!-- RViz -->
   <node pkg="rviz2" exec="rviz2" args="-d $(var rviz_config) --fixed-frame $(var rviz_fixed_frame)" if="$(var use_rviz)" output="screen">
@@ -20,5 +21,6 @@
     <param name="end_effector_frame" value="$(var end_effector_frame)"/>
     <param name="urdf_file_path" value="$(var urdf_file_path)"/>
     <param name="motion_plugin_type" value="$(var motion_plugin_type)"/>
+    <param name="visualization_method" value="$(var visualization_method)"/>
   </node>
 </launch>

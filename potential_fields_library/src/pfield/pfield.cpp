@@ -25,6 +25,48 @@
 
 namespace pfield {
 
+  std::pair<SpatialVector, TaskSpaceTwist> PotentialField::stepIntegration(
+    const SpatialVector& currentPose,
+    const TaskSpaceTwist& prevTwist,
+    const double dt,
+    const std::string& integrationMethod,
+    std::vector<double>& jointAngles,
+    const std::vector<double>& jointVelocities) {
+
+    TaskSpaceTwist twist;
+
+    if (integrationMethod == "whole_body") {
+      // Use provided joint angles/velocities
+      twist = this->evaluateWholeBodyTaskSpaceTwistAtConfiguration(
+        jointAngles, jointVelocities, currentPose, dt
+      );
+      twist = this->applyMotionConstraints(twist, prevTwist, dt);
+    }
+    else {
+      // Task Space
+      TaskSpaceWrench wrench = this->evaluateWrenchAtPoseWithOpposingForceRemoval(currentPose);
+      twist = this->applyMotionConstraints(this->wrenchToTwist(wrench), prevTwist, dt);
+    }
+
+    // Integrate
+    Eigen::Vector3d nextPosition = this->integrateLinearVelocity(
+      currentPose.getPosition(), twist.linearVelocity, dt);
+    Eigen::Quaterniond nextOrientation = this->integrateAngularVelocity(
+      currentPose.getOrientation(), twist.angularVelocity, dt);
+    SpatialVector nextPose(nextPosition, nextOrientation);
+
+    // Update Kinematics/Obstacles
+    std::vector<double> seed = jointAngles.empty() ? std::vector<double>(this->getNumJoints(), 0.0) : jointAngles;
+    std::vector<double> newJoints = this->computeInverseKinematics(nextPose, seed);
+
+    if (!newJoints.empty()) {
+      jointAngles = newJoints;
+      this->updateObstaclesFromKinematics(jointAngles);
+    }
+
+    return {nextPose, twist};
+  }
+
   void PotentialField::initializeKinematics(const std::string& urdfFilePath, const std::string& eeLinkName) {
     this->urdfFileName = urdfFilePath;
     this->eeLinkName = eeLinkName;

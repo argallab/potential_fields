@@ -78,6 +78,7 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   this->visualizeFieldVectors = this->declare_parameter("visualize_field_vectors", false); // Whether to visualize the PF vectors
   this->urdfFileName = this->declare_parameter("urdf_file_path", std::string());
   this->motionPluginType = this->declare_parameter("motion_plugin_type", std::string()); // Motion Plugin Type [e.g. "franka"]
+  this->visualizationMethod = this->declare_parameter("visualization_method", std::string()); // Method for how query pose looks
   // Get parameters from yaml file
   this->visualizerFrequency = this->get_parameter("visualize_pf_frequency").as_double();
   this->attractiveGain = this->get_parameter("attractive_gain").as_double();
@@ -95,6 +96,7 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   this->visualizeFieldVectors = this->get_parameter("visualize_field_vectors").as_bool();
   this->urdfFileName = this->get_parameter("urdf_file_path").as_string();
   this->motionPluginType = this->get_parameter("motion_plugin_type").as_string();
+  this->visualizationMethod = this->get_parameter("visualization_method").as_string();
 
   // Initialize the potential fields
   this->pField = std::make_shared<pfield::PotentialField>(
@@ -128,6 +130,19 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
     this->influenceDistance,
     this->pField->getQuadraticThreshold()
   );
+
+  // Initialize the query visualization method
+  std::transform(
+    this->visualizationMethod.cbegin(),
+    this->visualizationMethod.cend(),
+    this->visualizationMethod.begin(),
+    [](unsigned char c) { return std::tolower(c); }
+  );
+  if (this->visualizationMethod.empty()
+    || this->visualizationMethod != "task_space"
+    || this->visualizationMethod != "whole_body_velocity") {
+    this->visualizationMethod = "task_space";
+  }
 
   // Initialize the motion plugin
   std::transform(
@@ -316,22 +331,20 @@ void PotentialFieldManager::integrateQueryPoseFromField() {
   // Advance pose using constrained interpolation (acceleration limits applied internally)
   const double dt = this->now().seconds() - this->lastQueryUpdate.seconds();
   this->lastQueryUpdate = this->now();
-  pfield::TaskSpaceWrench wrench = this->pField->evaluateWrenchAtPoseWithOpposingForceRemoval(this->queryPose);
-  pfield::TaskSpaceTwist twist = this->pField->applyMotionConstraints(
-    this->pField->wrenchToTwist(wrench), this->prevQueryTwist, dt);
-  Eigen::Vector3d nextPosition = this->pField->integrateLinearVelocity(
-    this->queryPose.getPosition(), twist.linearVelocity, dt);
-  Eigen::Quaterniond nextOrientation = this->pField->integrateAngularVelocity(
-    this->queryPose.getOrientation(), twist.angularVelocity, dt);
+
+  // Use the helper function to perform integration
+  // We use "task_space" as the default method for visualization unless specified otherwise
+  auto [nextPose, twist] = this->pField->stepIntegration(
+    this->queryPose,
+    this->prevQueryTwist,
+    dt,
+    this->visualizationMethod,
+    this->currentJointAngles
+    // prevJointVelocities defaults to empty
+  );
+
   // Update the query pose
-  this->queryPose = pfield::SpatialVector(nextPosition, nextOrientation);
-  // Update robot obstacles based on query pose using IK
-  std::vector<double> zeroJoints(this->pField->getNumJoints(), 0.0);
-  std::vector<double> newJoints = this->pField->computeInverseKinematics(this->queryPose, zeroJoints);
-  if (!newJoints.empty()) {
-    this->currentJointAngles = newJoints;
-    this->pField->updateObstaclesFromKinematics(this->currentJointAngles);
-  }
+  this->queryPose = nextPose;
   // Supply velocity-limited twist as previous for next acceleration limiting
   this->prevQueryTwist = twist;
 }
@@ -450,7 +463,8 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
       }
     }
     RCLCPP_INFO(this->get_logger(), "IK Found StartJointAngles: [%s]", jointAnglesStr.c_str());
-  } else {
+  }
+  else {
     RCLCPP_INFO(this->get_logger(), "Using provided %zu joint angles.", startJointAnglesDouble.size());
   }
   pfield::PlannedPath planningResult;
@@ -603,7 +617,8 @@ void PotentialFieldManager::handlePlanPath(const PlanPath::Request::SharedPtr re
     else {
       RCLCPP_INFO(this->get_logger(), "Planned path CSV created at %s", csvFilePath.c_str());
     }
-  } catch (const std::exception& e) {
+  }
+  catch (const std::exception& e) {
     RCLCPP_ERROR(this->get_logger(), "Exception while creating planned path CSV: %s", e.what());
   }
 }

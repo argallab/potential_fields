@@ -352,6 +352,25 @@ namespace pfield {
     std::vector<PotentialFieldObstacle> getEnvObstacles() const { return this->envObstacles; }
     std::vector<PotentialFieldObstacle> getRobotObstacles() const { return this->robotObstacles; }
 
+    /**
+     * @brief Integrates the current pose forward in time based on the potential field.
+     * 
+     * @param currentPose The current pose of the robot/query point.
+     * @param prevTwist The previous twist (for acceleration limiting).
+     * @param dt The time step [s].
+     * @param integrationMethod The method to use: "task_space" or "whole_body".
+     * @param jointAngles Current joint angles (required for "whole_body", updated via IK for "task_space").
+     * @param jointVelocities Previous joint velocities (required for "whole_body").
+     * @return A pair containing the new SpatialVector and the TaskSpaceTwist applied.
+     */
+    std::pair<SpatialVector, TaskSpaceTwist> stepIntegration(
+      const SpatialVector& currentPose,
+      const TaskSpaceTwist& prevTwist,
+      const double dt,
+      const std::string& integrationMethod,
+      std::vector<double>& jointAngles,
+      const std::vector<double>& jointVelocities = {});
+
     // ============ Obstacle Management ============
 
     /**

@@ -98,6 +98,7 @@ private:
   std::string eeFrame; // End-effector frame name for planning and kinematics
   std::string urdfFileName; // URDF file name
   std::string motionPluginType; // Motion Plugin Type [e.g., "null", "franka", etc.]
+  std::string visualizationMethod; // Visualization method: "task_space" or "whole_body_velocity"
   std::shared_ptr<pfield::PotentialField> pField; // Potential Field Instance containing main PF functionality
   std::unique_ptr<MotionPlugin> motionPlugin; // The MotionPlugin containing robot-specific functions like IK and state reading
   std::shared_ptr<pfield::IKSolver> ikSolver; // The IKSolver obtained from the MotionPlugin
