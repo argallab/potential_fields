@@ -819,7 +819,6 @@ namespace pfield {
       // Calculate forces for recording
       Eigen::Vector3d attForce = this->computeAttractiveForceLinear(current);
       Eigen::Vector3d repForce = this->computeRepulsiveForceLinear(current);
-      double minClearance = this->minObstacleClearanceAt(current.getPosition());
 
       // Perform RK4 integration step to get next pose and the applied twist
       // including removal of opposing repulsive force components and enforcement of motion constraints
@@ -834,7 +833,7 @@ namespace pfield {
         currentJointAngles,
         {}, // joint velocities
         {}, // joint torques
-        {minClearance}, // link clearances (using EE clearance)
+        {}, // Link Clearance
         attForce,
         {repForce} // repulsive forces (using EE repulsion)
       );
