@@ -819,7 +819,6 @@ namespace pfield {
       // Calculate forces for recording
       Eigen::Vector3d attForce = this->computeAttractiveForceLinear(current);
       Eigen::Vector3d repForce = this->computeRepulsiveForceLinear(current);
-      double minClearance = this->minObstacleClearanceAt(current.getPosition());
 
       // Perform RK4 integration step to get next pose and the applied twist
       // including removal of opposing repulsive force components and enforcement of motion constraints
@@ -834,7 +833,7 @@ namespace pfield {
         currentJointAngles,
         {}, // joint velocities
         {}, // joint torques
-        {minClearance}, // link clearances (using EE clearance)
+        {}, // Link Clearances
         attForce,
         {repForce} // repulsive forces (using EE repulsion)
       );
@@ -853,7 +852,7 @@ namespace pfield {
       // Update loop variables
       current = nextPoseRK4;
       // Estimate velocity at the end of the interval for the next step
-      // v_bar = (v_prev + v_next) / 2  =>  v_next = 2 * v_bar - v_prev
+      // v_bar = (v_prev + v_next) / 2  ->  v_next = 2 * v_bar - v_prev
       Eigen::Vector3d linVelNext = 2.0 * appliedTwist.getLinearVelocity() - prevTwist.getLinearVelocity();
       Eigen::Vector3d angVelNext = 2.0 * appliedTwist.getAngularVelocity() - prevTwist.getAngularVelocity();
       prevTwist = TaskSpaceTwist(linVelNext, angVelNext);
