@@ -13,14 +13,12 @@
 - Go through ROS package release process for open sourcing on ROS index
 - Fix Build Warnings
 - CSV Save Path should come from user via service with a good default (and maybe a bool to save it or not)
-
 - Include installation instructions for fcl, pinnochio, libfranka and other external dependencies in README
 - Create a minimum Docker Image for PF and robot dependencies
 - Investigate Configuration Space planninewewfeeg with the PF
   - Principles of Robot Motion, Choset et al.
   - Modern Robotics, Lynch and Park
 - Allow editing pfield parameters dynamically during runtime via ROS2 parameters
-- Plot Net force vs time as well, maybe force on each joint. Would help debug Attractive and Repulsive forces.
 - Use RK4 to integrate joint velocities into joint positions and for integrating joint positions into end-effector poses and test if this improves accuracy/stability of the planner.
 - User node should be required to pass in mesh/urdf directory so that they can just type "object.obj" and have the path be resolved by the potential_fields_library
 

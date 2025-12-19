@@ -8,6 +8,14 @@ from matplotlib import animation
 import scipy
 
 
+def _has_valid_data(arr) -> bool:
+    """Check if array contains valid finite data (not all inf/nan)."""
+    if arr is None:
+        return False
+    arr = np.asarray(arr, dtype=float)
+    return arr.size > 0 and np.any(np.isfinite(arr))
+
+
 def _is_positive_finite(v: float) -> bool:
     return math.isfinite(v) and v > 1e-12
 
@@ -833,15 +841,15 @@ def plot_kinematics(title: str,
 
     # Row 1, Col 2: Joint Positions
     ax12 = axes[0, 1]
-    if joint_pos is not None:
+    if joint_pos is not None and _has_valid_data(joint_pos):
         num_joints = joint_pos.shape[1]
         for j in range(num_joints):
             ax12.plot(t, joint_pos[:, j], label=f'q{j+1}')
         ax12.set_ylabel('Joint Pos [rad]')
         ax12.legend(loc='best', fontsize=8, ncol=2)
     else:
-        ax12.text(0.5, 0.5, 'No joint positions provided', transform=ax12.transAxes,
-                  ha='center', va='center', fontsize=10, color='gray')
+        ax12.text(0.5, 0.5, 'No Joint Position Data', transform=ax12.transAxes,
+              ha='center', va='center', fontsize=10, color='black', fontweight='bold')
     ax12.grid(True, linestyle=':')
 
     # Row 1, Col 3: Distance to goal (if provided) else |p|
@@ -947,25 +955,25 @@ def plot_kinematics(title: str,
 
     # Row 2, Col 2: Joint Velocities
     ax22 = axes[1, 1]
-    if joint_vel is not None:
+    if joint_vel is not None and _has_valid_data(joint_vel):
         num_joints = joint_vel.shape[1]
         for j in range(num_joints):
             ax22.plot(t, joint_vel[:, j], label=f'dq{j+1}')
         ax22.set_ylabel('Joint Vel [rad/s]')
         ax22.legend(loc='best', fontsize=8, ncol=2)
     else:
-        ax22.text(0.5, 0.5, 'No joint velocities provided', transform=ax22.transAxes,
-                  ha='center', va='center', fontsize=10, color='gray')
+        ax22.text(0.5, 0.5, 'No Joint Velocity Data', transform=ax22.transAxes,
+              ha='center', va='center', fontsize=10, color='black', fontweight='bold')
     ax22.grid(True, linestyle=':')
 
     # Row 2, Col 3: Min clearance (if present)
     ax23 = axes[1, 2]
-    if min_clear is not None:
+    if min_clear is not None and _has_valid_data(min_clear):
         ax23.plot(t, min_clear, color='C2', label='min_clearance')
         ax23.legend(loc='best', fontsize=9)
     else:
-        ax23.text(0.5, 0.5, 'No min_clearance provided', transform=ax23.transAxes,
-                  ha='center', va='center', fontsize=10, color='gray')
+        ax23.text(0.5, 0.5, 'No Min Clearance Data', transform=ax23.transAxes,
+              ha='center', va='center', fontsize=10, color='black', fontweight='bold')
     ax23.set_ylabel('Clearance [m]')
     ax23.grid(True, linestyle=':')
 
@@ -981,20 +989,20 @@ def plot_kinematics(title: str,
 
     # Row 3, Col 2: Joint Torques
     ax32 = axes[2, 1]
-    if joint_torques is not None:
+    if joint_torques is not None and _has_valid_data(joint_torques):
         num_joints = joint_torques.shape[1]
         for j in range(num_joints):
             ax32.plot(t, joint_torques[:, j], label=f'tau{j+1}')
         ax32.set_ylabel('Joint Torque [Nm]')
         ax32.legend(loc='best', fontsize=8, ncol=2)
     else:
-        ax32.text(0.5, 0.5, 'No joint torques provided', transform=ax32.transAxes,
-                  ha='center', va='center', fontsize=10, color='gray')
+        ax32.text(0.5, 0.5, 'No Joint Torque Data', transform=ax32.transAxes,
+              ha='center', va='center', fontsize=10, color='black', fontweight='bold')
     ax32.grid(True, linestyle=':')
 
     # Row 3, Col 3: Link Clearances
     ax33 = axes[2, 2]
-    if link_clearances is not None:
+    if link_clearances is not None and _has_valid_data(link_clearances):
         for i in range(link_clearances.shape[1]):
             label = link_names[i] if link_names else f"Link {i}"
             ax33.plot(t, link_clearances[:, i], label=label)
@@ -1003,12 +1011,13 @@ def plot_kinematics(title: str,
         ax33.legend(loc='best', fontsize=7)
     else:
         ax33.text(0.5, 0.5, "No Link Clearance Data", ha='center',
-                  va='center', transform=ax33.transAxes)
+              va='center', transform=ax33.transAxes, fontsize=10, color='black', fontweight='bold')
         ax33.set_ylabel('Link Clearance [m]')
+    ax33.grid(True, linestyle=':')
 
     # Row 4, Col 1: Angular velocity components (+|w|) if present
     ax41 = axes[3, 0]
-    if wx is not None and wy is not None and wz is not None:
+    if wx is not None and wy is not None and wz is not None and _has_valid_data(wx):
         ax41.plot(t, wx, label='wx')
         ax41.plot(t, wy, label='wy')
         ax41.plot(t, wz, label='wz')
@@ -1017,15 +1026,15 @@ def plot_kinematics(title: str,
         ax41.set_ylabel('Angular vel [rad/s]')
         ax41.legend(loc='best', fontsize=9)
     else:
-        ax41.text(0.5, 0.5, 'No angular velocity provided', transform=ax41.transAxes,
-                  ha='center', va='center', fontsize=10, color='gray')
+        ax41.text(0.5, 0.5, 'No Angular Velocity Data', transform=ax41.transAxes,
+              ha='center', va='center', fontsize=10, color='black', fontweight='bold')
         ax41.set_ylabel('Angular vel [rad/s]')
     ax41.grid(True, linestyle=':')
     ax41.set_xlabel('Time [s]')
 
     # Row 4, Col 2: Attraction Force
     ax42 = axes[3, 1]
-    if attraction_force is not None:
+    if attraction_force is not None and _has_valid_data(attraction_force):
         ax42.plot(t, attraction_force[:, 0], label='Fx')
         ax42.plot(t, attraction_force[:, 1], label='Fy')
         ax42.plot(t, attraction_force[:, 2], label='Fz')
@@ -1036,13 +1045,14 @@ def plot_kinematics(title: str,
         ax42.legend(loc='best', fontsize=9)
     else:
         ax42.text(0.5, 0.5, "No Attraction Force Data", ha='center',
-                  va='center', transform=ax42.transAxes)
+              va='center', transform=ax42.transAxes, fontsize=10, color='black', fontweight='bold')
         ax42.set_ylabel('Attraction Force [N]')
+    ax42.grid(True, linestyle=':')
     ax42.set_xlabel('Time [s]')
 
     # Row 4, Col 3: Repulsive Forces (Magnitudes)
     ax43 = axes[3, 2]
-    if link_repulsive_magnitudes is not None:
+    if link_repulsive_magnitudes is not None and _has_valid_data(link_repulsive_magnitudes):
         for i in range(link_repulsive_magnitudes.shape[1]):
             label = link_names[i] if link_names else f"Link {i}"
             ax43.plot(t, link_repulsive_magnitudes[:, i], label=label)
@@ -1051,8 +1061,9 @@ def plot_kinematics(title: str,
         ax43.legend(loc='best', fontsize=7)
     else:
         ax43.text(0.5, 0.5, "No Repulsive Force Data", ha='center',
-                  va='center', transform=ax43.transAxes)
+              va='center', transform=ax43.transAxes, fontsize=10, color='black', fontweight='bold')
         ax43.set_ylabel('Repulsive Force Mag [N]')
+    ax43.grid(True, linestyle=':')
     ax43.set_xlabel('Time [s]')
 
     # Create a text box for the description if provided

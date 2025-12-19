@@ -1248,9 +1248,21 @@ namespace pfield {
           csvFile << "0,0,0";
         }
 
-        // Helper lambda to safely write an inner double element or 0 if missing
+        // Helper lambda to safely write an inner double element or NaN if missing
         auto writeInnerDouble = [&](const std::vector<std::vector<double>>& mat, unsigned int row, unsigned int col) {
-          return (row < mat.size() && col < mat[row].size()) ? mat[row][col] : 0.0;
+          return (row < mat.size() && col < mat[row].size()) ? mat[row][col] : std::numeric_limits<double>::quiet_NaN();
+        };
+
+        // Helper lambda to safely write an inner Vector3d element or NaNs if missing
+        auto writeInnerVector3d = [&](const std::vector<std::vector<Eigen::Vector3d>>& mat, unsigned int row, unsigned int col) {
+          if (row < mat.size() && col < mat[row].size()) {
+            const auto& v = mat[row][col];
+            csvFile << "," << v.x() << "," << v.y() << "," << v.z();
+          } else {
+            csvFile << "," << std::numeric_limits<double>::quiet_NaN()
+                    << "," << std::numeric_limits<double>::quiet_NaN()
+                    << "," << std::numeric_limits<double>::quiet_NaN();
+          }
         };
 
         // Write: joint angles (rad)
@@ -1270,22 +1282,12 @@ namespace pfield {
 
         // Write: link clearances
         for (unsigned int j = 0; j < numLinks; ++j) {
-          double val = 0.0;
-          if (i < path.linkObstacleClearances.size() && j < path.linkObstacleClearances[i].size()) {
-            val = path.linkObstacleClearances[i][j];
-          }
-          csvFile << "," << val;
+          csvFile << "," << writeInnerDouble(path.linkObstacleClearances, i, j);
         }
 
         // Write: link repulsive forces
         for (unsigned int j = 0; j < numLinks; ++j) {
-          if (i < path.repulsiveForces.size() && j < path.repulsiveForces[i].size()) {
-            const auto& f = path.repulsiveForces[i][j];
-            csvFile << "," << f.x() << "," << f.y() << "," << f.z();
-          }
-          else {
-            csvFile << ",0,0,0";
-          }
+          writeInnerVector3d(path.repulsiveForces, i, j);
         }
 
         csvFile << "\n";
