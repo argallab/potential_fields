@@ -6,4 +6,4 @@ install/
 .prompts/
 .venv/
 __pycache__/
-data/rosbags/
+data/
