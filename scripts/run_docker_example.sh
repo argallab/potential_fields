@@ -4,17 +4,17 @@
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 echo "================================================================"
-echo "1. Building Docker Image 'pfields_2025'"
+echo "1. Building Docker Image 'potential_fields'"
 echo "================================================================"
 # Build the image using the Dockerfile in Docker/ folder
 # Context is the project root
-docker build -t pfields_2025 -f "$PROJECT_ROOT/Docker/Dockerfile" "$PROJECT_ROOT"
+docker build -t potential_fields -f "$PROJECT_ROOT/Docker/Dockerfile" "$PROJECT_ROOT"
 
 echo ""
 echo "================================================================"
 echo "2. Preparing to Run Container"
 echo "================================================================"
-echo " - Mounting workspace: $PROJECT_ROOT -> /home/workspace/src/pfields_2025"
+echo " - Mounting workspace: $PROJECT_ROOT -> /home/workspace/src/potential_fields"
 echo " - Enabling X11 forwarding (for GUI apps like Rviz)"
 
 # Allow local connections to X server (be careful with security on public networks)
@@ -34,8 +34,8 @@ docker run -it --rm \
     --env="DISPLAY=$DISPLAY" \
     --env="QT_X11_NO_MITSHM=1" \
     --volume="/tmp/.X11-unix:/tmp/.X11-unix:rw" \
-    --volume="$PROJECT_ROOT:/home/workspace/src/pfields_2025" \
-    pfields_2025
+    --volume="$PROJECT_ROOT:/home/workspace/src/potential_fields" \
+    potential_fields
 
 # Example usage inside container:
 # $ colcon build --packages-select potential_fields

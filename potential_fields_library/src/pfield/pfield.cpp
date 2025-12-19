@@ -280,7 +280,7 @@ namespace pfield {
     const Eigen::VectorXd& jointTorques, const std::vector<double>& jointAngles,
     const std::vector<double>& prevJointVelocities, const double dt) const {
     // TODO(Sharwin24): Fix this method and figure out why it's unstable
-    // https://github.com/argallab/pfields_2025/issues/23
+    // https://github.com/argallab/potential_fields/issues/23
     const bool useRobotDynamicsEquation = false;
     if (!this->pfKinematics || !useRobotDynamicsEquation) {
       // If we don't have access to PFKinematics, use a simple proportional mapping
