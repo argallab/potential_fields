@@ -197,6 +197,55 @@ ros2 launch potential_fields_demos pf_demo.launch.xml
 
 Launching the project without any arguments is good enough to launch a basic potential field and visualization. Of course, arguments are necessary to customize the PF package with your robot, RViz config, gain parameters, etc.
 
+## Running with Docker
+The script below showcases the 3 steps to creating a docker image and running it in a container.
+
+```bash
+#!/bin/bash
+
+# Get the absolute path to the project root
+PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+
+echo "================================================================"
+echo "1. Building Docker Image 'potential_fields'"
+echo "================================================================"
+# Build the image using the Dockerfile in Docker/ folder
+# Context is the project root
+docker build -t potential_fields -f "$PROJECT_ROOT/Docker/Dockerfile" "$PROJECT_ROOT"
+
+echo ""
+echo "================================================================"
+echo "2. Preparing to Run Container"
+echo "================================================================"
+echo " - Mounting workspace: $PROJECT_ROOT -> /home/workspace/src/potential_fields"
+echo " - Enabling X11 forwarding (for GUI apps like Rviz)"
+
+# Allow local connections to X server (be careful with security on public networks)
+xhost +local:docker > /dev/null 2>&1
+
+echo ""
+echo "================================================================"
+echo "3. Starting Container"
+echo "================================================================"
+echo "NOTE: The container will automatically build 'potential_fields_library' on startup."
+echo "      Wait for 'potential_fields_library successfully installed' before typing."
+echo ""
+
+docker run -it --rm \
+    --net=host \
+    --privileged \
+    --env="DISPLAY=$DISPLAY" \
+    --env="QT_X11_NO_MITSHM=1" \
+    --volume="/tmp/.X11-unix:/tmp/.X11-unix:rw" \
+    --volume="$PROJECT_ROOT:/home/workspace/src/potential_fields" \
+    potential_fields
+
+# Example usage inside container:
+# $ colcon build --packages-select potential_fields potential_fields_demos potential_fields_library potential_fields_interfaces
+# $ source install/setup.bash
+# $ ros2 launch potential_fields ...
+```
+
 ---
 
 For information about the mathematical formulation of potential fields used in this package, see [MATH.md](MATH.md). This README provides an overview of the package structure, instructions for building and launching the package, and details about usage. There is a [README.md](potential_fields_library/README.md) in the `potential_fields_library` folder that contains information about the independent C++ library.
