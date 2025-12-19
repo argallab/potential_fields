@@ -62,6 +62,22 @@ add_executable(my_planner main.cpp)
 target_link_libraries(my_planner PRIVATE potential_fields_library::potential_fields_library)
 ```
 
+## Folder Structure
+
+These headers and sources implement the planning and kinematics logic without depending on ROS:
+
+- `pfield/` — Potential-field primitives and algorithms
+    - Spatial math: `SpatialVector` (position + unit quaternion).
+    - Field model: attractive/repulsive potentials, wrench -> twist mapping, soft saturation, rate limiting, RK4 integration.
+    - Obstacles: spheres, boxes/OBB, cylinders, meshes; signed distance and outward normal queries.
+    - Optional kinematics: `PFKinematics` can be initialized from a URDF file to derive robot extent and geometry-driven obstacles.
+
+- `robot_plugins/` — Robot adapters and IK
+    - Interfaces: `MotionPlugin` (runtime robot integration), `IKSolver` (task-space IK + Jacobian).
+    - Implementations: `NullMotionPlugin` (no hardware), `FrankaPlugin` (example hardware). Plugins provide the `IKSolver` to the PF.
+
+The intent is that this layer stays reusable and testable outside of ROS; the ROS node simply wires it up to topics/services.
+
 ### Basic Example
 
 ```cpp
