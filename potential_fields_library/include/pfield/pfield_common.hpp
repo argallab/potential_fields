@@ -107,6 +107,18 @@ namespace pfield {
     return J.transpose() * y;
   }
 
+  /**
+   * @brief Approximates joint velocities given current and previous joint angles and a time step
+   * 
+   * @note This function uses finite differencing to estimate joint velocities which may be noisy and
+   *       inaccurate for small dt values. This can likely be improved with filtering or by providing more
+   *       historical velocity data to compute a better estimate.
+   * 
+   * @param currentJointAngles The current joint angles [rad]
+   * @param previousJointAngles The previous joint angles [rad]
+   * @param dt The time difference between the current and previous joint angles [s]
+   * @return std::vector<double> The approximated joint velocities [rad/s]
+   */
   static inline std::vector<double> approximateJointVelocities(
     const std::vector<double>& currentJointAngles,
     const std::vector<double>& previousJointAngles,
