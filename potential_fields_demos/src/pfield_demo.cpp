@@ -63,7 +63,7 @@ PFDemo::PFDemo() : Node("pfield_demo") {
     rclcpp::sleep_for(std::chrono::milliseconds(100));
   }
   RCLCPP_INFO(this->get_logger(), "Subscribers detected on the /pfield/obstacles topic. Publishing obstacles...");
-  this->createAndPublishObstacles();
+  // this->createAndPublishObstacles();
 
   // Initialize demo service
   this->runPlanPathDemoService = this->create_service<std_srvs::srv::Empty>(
@@ -109,8 +109,8 @@ void PFDemo::handleRunPlanPathDemo(
   geometry_msgs::msg::Pose goalPose;
   // goalPose = startPose;
   goalPose.position.x = 0.5;
-  goalPose.position.y = 0.1;
-  goalPose.position.z = 0.5;
+  goalPose.position.y = 0.2;
+  goalPose.position.z = 0.4;
   goalPose.orientation.x = 0.70709;
   goalPose.orientation.y = 9.8864e-05;
   goalPose.orientation.z = 0.70712;
