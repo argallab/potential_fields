@@ -12,6 +12,7 @@
 - Create walkthrough video about files and what they do
 - Go through ROS package release process for open sourcing on ROS index
 - Fix Build Warnings
+- CSV Save Path should come from user via service with a good default (and maybe a bool to save it or not)
 
 - Include installation instructions for fcl, pinnochio, libfranka and other external dependencies in README
 - Create a minimum Docker Image for PF and robot dependencies
