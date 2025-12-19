@@ -707,7 +707,11 @@ TEST(PotentialFieldTest, PlanPathTwistMatchesRK4ConstrainedTwist) {
     // compare components strictly
     EXPECT_NEAR((expected.getLinearVelocity() - path.twists[i].getLinearVelocity()).norm(), 0.0, 1e-9);
     EXPECT_NEAR((expected.getAngularVelocity() - path.twists[i].getAngularVelocity()).norm(), 0.0, 1e-9);
-    prevLimited = path.twists[i];
+    // Planner estimates end-of-interval twist as v_next = 2*v_bar - v_prev (where v_bar is the RK4-averaged twist).
+    prevLimited = pfield::TaskSpaceTwist(
+      2.0 * path.twists[i].getLinearVelocity() - prevLimited.getLinearVelocity(),
+      2.0 * path.twists[i].getAngularVelocity() - prevLimited.getAngularVelocity()
+    );
   }
 }
 
