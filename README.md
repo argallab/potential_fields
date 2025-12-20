@@ -1,5 +1,6 @@
 ![Header](./images/github-header-banner.png)
-### Authored by: [_Sharwin Patil_](https://github.com/Sharwin24)
+### Authored by: [_Sharwin Patil_](https://github.com/Sharwin24) [(_LinkedIn_)](https://www.linkedin.com/in/sharwinpatil/) [(_Website_)](https://www.sharwinpatil.info/)
+
 
 # Table Of Contents
 
