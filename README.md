@@ -1,6 +1,10 @@
 ![Header](./images/github-header-banner.png)
 ### Authored by: [_Sharwin Patil_](https://github.com/Sharwin24) [(_LinkedIn_)](https://www.linkedin.com/in/sharwinpatil/) [(_Website_)](https://www.sharwinpatil.info/)
 
+---
+[![Build and Test Repository Packages](https://github.com/argallab/potential_fields/actions/workflows/main.yml/badge.svg)](https://github.com/argallab/potential_fields/actions/workflows/main.yml)
+
+---
 
 # Table Of Contents
 
