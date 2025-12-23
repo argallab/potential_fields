@@ -47,7 +47,7 @@ jobs:
           echo "export PATH=/opt/openrobots/bin:$PATH" >> $GITHUB_ENV
           echo "export PKG_CONFIG_PATH=/opt/openrobots/lib/pkgconfig:$PKG_CONFIG_PATH" >> $GITHUB_ENV
           echo "export LD_LIBRARY_PATH=/opt/openrobots/lib:$LD_LIBRARY_PATH" >> $GITHUB_ENV
-          echo "export PYTHONPATH=/opt/openrobots/lib/python3.10/site-packages:$PYTHONPATH" >> $GITHUB_ENV
+          echo "export PYTHONPATH=/opt/openrobots/lib/python3.12/site-packages:$PYTHONPATH" >> $GITHUB_ENV
           echo "export CMAKE_PREFIX_PATH=/opt/openrobots/lib/cmake:$CMAKE_PREFIX_PATH" >> $GITHUB_ENV
 
       - name: Configure Git Credentials
@@ -65,11 +65,11 @@ jobs:
           LD_LIBRARY_PATH: /opt/openrobots/lib:${{ env.LD_LIBRARY_PATH }}
           PKG_CONFIG_PATH: /opt/openrobots/lib/pkgconfig:${{ env.PKG_CONFIG_PATH }}
           CMAKE_PREFIX_PATH: /opt/openrobots/lib/cmake:${{ env.CMAKE_PREFIX_PATH }}
-          PYTHONPATH: /opt/openrobots/lib/python3.10/site-packages:${{ env.PYTHONPATH }}
+          PYTHONPATH: /opt/openrobots/lib/python3.12/site-packages:${{ env.PYTHONPATH }}
       - name: Debug File Structure
         run: find . -maxdepth 3 -not -path '*/.*'
       - name: Launch Verification (Smoke Test)
         shell: bash
         run: |
-          source ${{ github.workspace }}/ros_ws/install/setup.bash
+          source ros_ws/install/setup.bash
           timeout 10s ros2 launch potential_fields pfield.launch.xml use_rviz:=false  || [ $? -eq 124 ]
