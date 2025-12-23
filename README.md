@@ -9,7 +9,7 @@
 # Table Of Contents
 
 - [Table Of Contents](#table-of-contents)
-  - [Overvew of Package layout](#overvew-of-package-layout)
+  - [Package Overview](#package-overview)
 - [Getting Started](#getting-started)
   - [Install System Dependencies](#install-system-dependencies)
   - [Install Pinocchio (via robotpkg)](#install-pinocchio-via-robotpkg)
@@ -17,6 +17,8 @@
     - [Configuring Visual Studio Code Environment](#configuring-visual-studio-code-environment)
 - [Building, Testing, and Launching](#building-testing-and-launching)
 - [Running with Docker](#running-with-docker)
+    - [Building the Image](#building-the-image)
+    - [Running the Container](#running-the-container)
 - [Usage \& Examples](#usage--examples)
     - [Launching the Demo](#launching-the-demo)
     - [Key Launch Arguments](#key-launch-arguments)
@@ -28,7 +30,8 @@
 - [Potential Field Equations](#potential-field-equations)
 - [Contributing](#contributing)
 
-## Overvew of Package layout
+## Package Overview
+The `potential_fields` repository provides an implementation of artifical potential field methods for path planning and shared control of robotic manipulators. The package is designed to be modular and extensible, allowing users to easily integrate it with different robot platforms and kinematics solvers. This package was developed with ROS 2 Jazzy in mind, but the core C++ library is ROS-agnostic and can be used independently. I plan to extend support to future ROS distributions as they are released.
 
 This package is split into two parts:
 
@@ -185,27 +188,38 @@ ros2 launch potential_fields_demos pf_demo.launch.xml
 Launching the project without any arguments is good enough to launch a basic potential field and visualization. Of course, arguments are necessary to customize the PF package with your robot, RViz config, gain parameters, etc.
 
 # Running with Docker
-The script below goes through the steps for creating a docker image and running it in a container. Build the image first with `docker build`:
+This repository provides two Dockerfiles in the `Docker/` directory:
 
+1. **`Dockerfile` (Default)**: Contains the full environment including the XArm SDK, MoveIt, and other dependencies required to run the full XArm7 demo.
+2. **`Dockerfile.minimal`**: A lightweight image containing only the essential dependencies (ROS 2 Jazzy, Pinocchio, Eigen, etc.) required to build and test the core library and basic demos.
+
+### Building the Image
+
+To build the **Full Demo Image** (Recommended for trying out the XArm demo):
 ```bash
 # Get the absolute path to the project root
-# You can also set PROJECT_ROOT manually if needed
-# This macro just gets the directory of this script and sets it as the project root
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
-# Build the image using the Dockerfile in Docker/ folder
-# Context is the project root
+# Build using the default Dockerfile
 docker build -t potential_fields -f "$PROJECT_ROOT/Docker/Dockerfile" "$PROJECT_ROOT"
 ```
 
-Before running the container, ensure that your X server allows connections from Docker containers so RViz and other graphical applications can display properly.
+To build the **Minimal Image** (Faster build, good for CI or core development):
+```bash
+# Build using Dockerfile.minimal
+docker build -t potential_fields_minimal -f "$PROJECT_ROOT/Docker/Dockerfile.minimal" "$PROJECT_ROOT"
+```
+
+### Running the Container
+
+Before running the container, ensure that your X server allows connections from Docker containers so RViz can display properly.
 
 ```bash
 # Allow local connections to X server (be careful with security on public networks)
 xhost +local:docker > /dev/null 2>&1
 ```
 
-Then, run the container with the following command:
+Run the container (replace `potential_fields` with `potential_fields_minimal` if you built the minimal image so you can have both images on your system):
 
 ```bash
 docker run -it --rm \
@@ -215,13 +229,13 @@ docker run -it --rm \
   --env="QT_X11_NO_MITSHM=1" \
   --volume="/tmp/.X11-unix:/tmp/.X11-unix:rw" \
   --volume="$PROJECT_ROOT:/home/workspace/src/potential_fields" \
-  potential_fields # <-- Image name
+  potential_fields
 ```
 
 After building the image, you don't need to rebuild it unless you make changes to the code or dependencies. You can run the container multiple times using the same image:
 
 ```bash
-# Start the container from the existing image (we named it potential_fields earlier)
+# Start the container from the existing image
 docker start -it potential_fields
 ```
 

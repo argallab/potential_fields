@@ -132,18 +132,8 @@ RUN git clone https://github.com/xArm-Developer/xArm-Python-SDK.git && \
     cd xArm-Python-SDK && \
     pip install . --break-system-packages
 
-# # Install EigenPy
-# RUN apt-get update && \
-#     apt install robotpkg-py35-eigenpy
-
-# install example robot data for urdf models
-# RUN git clone --recursive https://github.com/Gepetto/example-robot-data.git && \
-#     cd example-robot-data && \
-#     mkdir -p build && \
-#     cd build && \
-#     cmake .. && \
-#     make && \
-#     make install
+# # install xArm ros2 packages
+# RUN git clone https://github.com/xArm-Developer/xarm_ros2.git --recursive -b $ROS_DISTRO
 
 # install box 2d
 RUN pip3 install Box2D --break-system-packages

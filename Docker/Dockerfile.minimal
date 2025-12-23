@@ -1,0 +1,63 @@
+FROM ros:jazzy
+ENV ROS_DISTRO jazzy
+
+# Install essential build tools and system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+  build-essential \
+  cmake \
+  git \
+  curl \
+  lsb-release \
+  python3-colcon-common-extensions \
+  python3-pip \
+  # Dependencies from main.yml
+  libeigen3-dev \
+  liburdfdom-dev \
+  libfcl-dev \
+  libccd-dev \
+  libassimp-dev \
+  # ROS dependencies
+  ros-${ROS_DISTRO}-urdf \
+  ros-${ROS_DISTRO}-rviz2 \
+  ros-${ROS_DISTRO}-tf2-eigen \
+  ros-${ROS_DISTRO}-tf2-ros \
+  ros-${ROS_DISTRO}-geometric-shapes \
+  ros-${ROS_DISTRO}-robot-state-publisher \
+  ros-${ROS_DISTRO}-joint-state-publisher \
+  ros-${ROS_DISTRO}-xacro \
+  && apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Install robotpkg and Pinocchio (from main.yml)
+RUN mkdir -p /etc/apt/keyrings && \
+  curl -fsSL http://robotpkg.openrobots.org/packages/debian/robotpkg.asc | tee /etc/apt/keyrings/robotpkg.asc && \
+  echo "deb [arch=amd64 signed-by=/etc/apt/keyrings/robotpkg.asc] http://robotpkg.openrobots.org/packages/debian/pub $(lsb_release -cs) robotpkg" \
+  | tee /etc/apt/sources.list.d/robotpkg.list && \
+  apt-get update && \
+  apt-get install -y robotpkg-pinocchio && \
+  apt-get clean && rm -rf /var/lib/apt/lists/*
+
+# Set environment variables for Pinocchio
+ENV PATH=/opt/openrobots/bin:$PATH \
+  PKG_CONFIG_PATH=/opt/openrobots/lib/pkgconfig:$PKG_CONFIG_PATH \
+  LD_LIBRARY_PATH=/opt/openrobots/lib:$LD_LIBRARY_PATH \
+  PYTHONPATH=/opt/openrobots/lib/python3.10/site-packages:$PYTHONPATH \
+  CMAKE_PREFIX_PATH=/opt/openrobots/lib/cmake:$CMAKE_PREFIX_PATH
+
+# Setup environment
+ENV LANG=C.UTF-8
+ENV LC_ALL=C.UTF-8
+ENV QT_X11_NO_MITSHM=1
+
+# Create workspace
+RUN mkdir -p /home/workspace/src
+WORKDIR /home/workspace
+
+# Source ROS 2
+RUN echo "source /opt/ros/$ROS_DISTRO/setup.bash" >> ~/.bashrc
+
+# Copy entrypoint
+COPY ./entrypoint.sh /
+RUN chmod a+x /entrypoint.sh
+
+ENTRYPOINT ["/entrypoint.sh"]
+CMD ["bash"]
