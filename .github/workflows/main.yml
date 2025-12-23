@@ -67,8 +67,7 @@ jobs:
           CMAKE_PREFIX_PATH: /opt/openrobots/lib/cmake:${{ env.CMAKE_PREFIX_PATH }}
           PYTHONPATH: /opt/openrobots/lib/python3.10/site-packages:${{ env.PYTHONPATH }}
       - name: Launch Verification (Smoke Test)
+        shell: bash
         run: |
-          # Source the workspace created by action-ros-ci
-          # action-ros-ci typically builds in 'ros_ws'
           source /github/home/work/potential_fields/potential_fields/ros_ws/install/setup.bash
-          timeout 5s ros2 launch potential_fields pfield.launch.xml use_rviz:=false  || [ $? -eq 124 ]
+          timeout 10s ros2 launch potential_fields pfield.launch.xml use_rviz:=false  || [ $? -eq 124 ]
