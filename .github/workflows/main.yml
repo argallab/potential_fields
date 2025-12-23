@@ -71,5 +71,6 @@ jobs:
       - name: Launch Verification (Smoke Test)
         shell: bash
         run: |
+          source /opt/ros/jazzy/setup.bash
           source ros_ws/install/setup.bash
           timeout 10s ros2 launch potential_fields pfield.launch.xml use_rviz:=false  || [ $? -eq 124 ]
