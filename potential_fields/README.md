@@ -26,3 +26,7 @@ Notes on robot geometry
 
 - You can supply obstacles directly via `pfield/obstacles` from any node.
 - Alternatively, provide a URDF path to the node via `urdf_file_path`; the PF library will initialize `PFKinematics`, estimate robot extent (for influence distance), and can update geometry-derived obstacles as planning progresses.
+
+---
+
+Copyright Notice [Sharwin Patil](https://www.sharwinpatil.info/) 2025
