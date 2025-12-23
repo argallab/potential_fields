@@ -177,34 +177,44 @@ ros2 launch potential_fields_demos pf_demo.launch.xml
 Launching the project without any arguments is good enough to launch a basic potential field and visualization. Of course, arguments are necessary to customize the PF package with your robot, RViz config, gain parameters, etc.
 
 # Running with Docker
-The script below goes through the steps for creating a docker image and running it in a container.
+The script below goes through the steps for creating a docker image and running it in a container. Build the image first with `docker build`:
 
 ```bash
-#!/bin/bash
-
 # Get the absolute path to the project root
+# You can also set PROJECT_ROOT manually if needed
+# This macro just gets the directory of this script and sets it as the project root
 PROJECT_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 # Build the image using the Dockerfile in Docker/ folder
 # Context is the project root
 docker build -t potential_fields -f "$PROJECT_ROOT/Docker/Dockerfile" "$PROJECT_ROOT"
+```
 
+Before running the container, ensure that your X server allows connections from Docker containers so RViz and other graphical applications can display properly.
+
+```bash
 # Allow local connections to X server (be careful with security on public networks)
 xhost +local:docker > /dev/null 2>&1
+```
 
+Then, run the container with the following command:
+
+```bash
 docker run -it --rm \
-    --net=host \
-    --privileged \
-    --env="DISPLAY=$DISPLAY" \
-    --env="QT_X11_NO_MITSHM=1" \
-    --volume="/tmp/.X11-unix:/tmp/.X11-unix:rw" \
-    --volume="$PROJECT_ROOT:/home/workspace/src/potential_fields" \
-    potential_fields
+  --net=host \
+  --privileged \
+  --env="DISPLAY=$DISPLAY" \
+  --env="QT_X11_NO_MITSHM=1" \
+  --volume="/tmp/.X11-unix:/tmp/.X11-unix:rw" \
+  --volume="$PROJECT_ROOT:/home/workspace/src/potential_fields" \
+  potential_fields # <-- Image name
+```
 
-# Example usage inside container:
-# $ colcon build --packages-select potential_fields potential_fields_demos potential_fields_library potential_fields_interfaces
-# $ source install/setup.bash
-# $ ros2 launch potential_fields ...
+After building the image, you don't need to rebuild it unless you make changes to the code or dependencies. You can run the container multiple times using the same image:
+
+```bash
+# Start the container from the existing image (we named it potential_fields earlier)
+docker start -it potential_fields
 ```
 
 # Using C++ Library without ROS
