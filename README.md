@@ -9,18 +9,16 @@
 # Table Of Contents
 
 - [Table Of Contents](#table-of-contents)
-- [ROS Package Structure and Overview](#ros-package-structure-and-overview)
-  - [Package layout (high level)](#package-layout-high-level)
-  - [Core C++ libraries (ROS-agnostic)](#core-c-libraries-ros-agnostic)
-  - [ROS integration: PotentialFieldManager node](#ros-integration-potentialfieldmanager-node)
-    - [Publishers](#publishers)
-    - [Subscribers](#subscribers)
-    - [Services](#services)
-  - [Setting up the workspace](#setting-up-the-workspace)
-    - [Install System Dependencies](#install-system-dependencies)
-    - [Install Pinocchio (via robotpkg)](#install-pinocchio-via-robotpkg)
-    - [Configure Environment Variables](#configure-environment-variables)
-  - [Building, Testing, and Launching](#building-testing-and-launching)
+  - [Overvew of Package layout](#overvew-of-package-layout)
+- [Getting Started](#getting-started)
+  - [Install System Dependencies](#install-system-dependencies)
+  - [Install Pinocchio (via robotpkg)](#install-pinocchio-via-robotpkg)
+  - [Configure Environment Variables](#configure-environment-variables)
+    - [Configuring Visual Studio Code Environment](#configuring-visual-studio-code-environment)
+- [Building, Testing, and Launching](#building-testing-and-launching)
+- [Running with Docker](#running-with-docker)
+- [Using C++ Library without ROS](#using-c-library-without-ros)
+- [Potential Field Equations](#potential-field-equations)
 
 ## Overvew of Package layout
 
@@ -217,7 +215,7 @@ There is a [README.md](potential_fields_library/README.md) in the `potential_fie
 
 # Potential Field Equations
 
-For information about the mathematical formulation of potential fields used in this package, see [MATH.md](MATH.md). This README provides an overview of the package structure, instructions for building and launching the package, and details about usage. 
+For information about the mathematical formulation of potential fields used in this package, see [MATH.md](MATH.md). This README provides an overview of the package structure, instructions for building and launching the package, and details about usage.
 
 ---
 
