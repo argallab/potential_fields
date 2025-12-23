@@ -71,4 +71,4 @@ jobs:
           # Source the workspace created by action-ros-ci
           # action-ros-ci typically builds in 'ros_ws'
           source /github/home/work/potential_fields/potential_fields/ros_ws/install/setup.bash
-          timeout 5s ros2 launch potential_fields_demos demo_launch.py || [ $? -eq 124 ]
+          timeout 5s ros2 launch potential_fields pfield.launch.xml use_rviz:=false  || [ $? -eq 124 ]
