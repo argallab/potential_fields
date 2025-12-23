@@ -313,4 +313,8 @@ See [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to contribute to this 
 
 Copyright Notice [Sharwin Patil](https://www.sharwinpatil.info/) 2025
 
-Contact me at: _`sharwinpatil@u.northwestern.edu`_
+Contact me at:
+
+```txt
+sharwinpatil@u.northwestern.edu
+```
