@@ -69,5 +69,9 @@ jobs:
       - name: Launch Verification (Smoke Test)
         shell: bash
         run: |
-          source /github/home/work/potential_fields/potential_fields/ros_ws/install/setup.bash
+          SETUP_FILE=$(find . -name "setup.bash" | grep "install/setup.bash" | head -n 1)
+          if [ -z "$SETUP_FILE" ]; then
+            SETUP_FILE=$(find / -name "setup.bash" 2>/dev/null | grep "install/setup.bash" | head -n 1)
+          fi
+          source "$SETUP_FILE"
           timeout 10s ros2 launch potential_fields pfield.launch.xml use_rviz:=false  || [ $? -eq 124 ]
