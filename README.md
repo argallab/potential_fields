@@ -243,7 +243,7 @@ You can customize the behavior by passing arguments to the launch command:
 - **`motion_plugin_type`**: Specifies which robot plugin to load (e.g., `xarm`, `franka`, or leave empty for `null`).
 - **`end_effector_frame`**: The name of the link to control (e.g., `link_eef`, `panda_hand`).
 - **`rviz_fixed_frame`**: The fixed frame for visualization (default: `world`).
-- **`use_rviz`**: Set to `false` to run without the GUI.
+- **`use_rviz`**: Set to `false` to run without the GUI (if using a headless setup or with a MoveIt robot that launches RViz for you).
 
 ### Core Launch File
 If you are integrating this into your own robot package, you will likely include the core launch file `pfield.launch.xml` from the `potential_fields` package directly.
