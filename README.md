@@ -17,8 +17,16 @@
     - [Configuring Visual Studio Code Environment](#configuring-visual-studio-code-environment)
 - [Building, Testing, and Launching](#building-testing-and-launching)
 - [Running with Docker](#running-with-docker)
-- [Using C++ Library without ROS](#using-c-library-without-ros)
+- [Usage \& Examples](#usage--examples)
+    - [Launching the Demo](#launching-the-demo)
+    - [Key Launch Arguments](#key-launch-arguments)
+    - [Core Launch File](#core-launch-file)
+  - [Supporting your own Robot](#supporting-your-own-robot)
+    - [The Abstract Base Classes](#the-abstract-base-classes)
+    - [How to Implement \& Integrate](#how-to-implement--integrate)
+  - [Using C++ Library without ROS](#using-c-library-without-ros)
 - [Potential Field Equations](#potential-field-equations)
+- [Contributing](#contributing)
 
 ## Overvew of Package layout
 
@@ -217,7 +225,78 @@ After building the image, you don't need to rebuild it unless you make changes t
 docker start -it potential_fields
 ```
 
-# Using C++ Library without ROS
+# Usage & Examples
+Now that you are setup with the package, know how to build and launch the package, and have a working Docker setup (if you choose to use Docker), you can explore the demos in the `potential_fields_demos` package.
+
+### Launching the Demo
+The primary entry point for the demos is `pf_demo.launch.xml`. This launch file starts the potential field manager, the visualization (RViz), and a demo node that interacts with the potential field.
+
+To launch the XArm7 demo (The robot tested in the videos on my website):
+```bash
+ros2 launch potential_fields_demos pf_demo.launch.xml urdf_file_path:=xarm7.urdf use_rviz:=false motion_plugin_type:=xarm end_effector_frame:=link_eef
+```
+
+### Key Launch Arguments
+You can customize the behavior by passing arguments to the launch command:
+
+- **`urdf_file_path`**: Path to the robot's URDF file (relative to `potential_fields_demos/urdf` for the demo launch).
+- **`motion_plugin_type`**: Specifies which robot plugin to load (e.g., `xarm`, `franka`, or leave empty for `null`).
+- **`end_effector_frame`**: The name of the link to control (e.g., `link_eef`, `panda_hand`).
+- **`rviz_fixed_frame`**: The fixed frame for visualization (default: `world`).
+- **`use_rviz`**: Set to `false` to run without the GUI.
+
+### Core Launch File
+If you are integrating this into your own robot package, you will likely include the core launch file `pfield.launch.xml` from the `potential_fields` package directly.
+
+```xml
+<include file="$(find-pkg-share potential_fields)/launch/pfield.launch.xml">
+  <arg name="urdf_file_path" value="$(var my_urdf_path)"/>
+  <arg name="motion_plugin_type" value="my_robot_plugin"/>
+  <!-- ... other arguments ... -->
+</include>
+```
+
+## Supporting your own Robot
+The library uses two Abstract Base Classes (ABCs) to decouple the core potential field logic from specific robot hardware and kinematics solvers.
+
+### The Abstract Base Classes
+
+1. **`pfield::IKSolver`** (`ik_solver.hpp`)
+   - **Purpose:** Pure mathematical interface for Inverse Kinematics. It converts a desired Cartesian pose (or twist) into joint configurations (or velocities).
+   - **Key Method:** `solve(...)` takes a target pose and seed configuration, returning the joint solution and Jacobian.
+   - **When to implement:** If your robot has a custom analytical solver or you want to wrap a specific numerical solver (like KDL, Trac-IK, or a vendor API).
+
+2. **`MotionPlugin`** (`motion_plugin.hpp`)
+   - **Purpose:** The hardware abstraction layer. It handles communication with the robot controller.
+   - **Key Methods:**
+     - `readRobotState(...)`: Fetches current joint angles and EE pose.
+     - `sendCartesianTwist(...)` / `sendJointStates(...)`: Sends commands to the robot.
+     - `getIKSolver()`: Returns the specific `IKSolver` instance associated with this robot.
+   - **When to implement:** For every new robot platform. This class usually instantiates and owns the `IKSolver`.
+
+### How to Implement & Integrate
+
+**Step 1: Create Files**
+- Create `MyRobotIKSolver` inheriting from `pfield::IKSolver` in `potential_fields_library`.
+- Create `MyRobotPlugin` inheriting from `MotionPlugin` in `potential_fields`. This class should instantiate `MyRobotIKSolver`.
+
+**Step 2: Edit `pfield_manager.cpp`**
+To make the manager aware of your new classes, you must manually register them in the source code:
+
+1. **Include Header:** Add the include at the top of `potential_fields/src/ros/pfield_manager.cpp`.
+   ```cpp
+   #include "robot_plugins/my_robot_plugin.hpp"
+   ```
+2. **Instantiate:** Add a condition in the constructor (around line 150) to check for your plugin name.
+   ```cpp
+   else if (this->motionPluginType == "my_robot") {
+     // Retrieve any specific parameters if needed
+     this->motionPlugin = std::make_unique<MyRobotPlugin>();
+   }
+   ```
+
+
+## Using C++ Library without ROS
 There is a [README.md](potential_fields_library/README.md) in the `potential_fields_library` folder that contains information about the independent C++ library with regards to:
 - Building library with colcon or cmake
 - Creating an instance of `PotentialField` and using its functions
@@ -227,6 +306,11 @@ There is a [README.md](potential_fields_library/README.md) in the `potential_fie
 
 For information about the mathematical formulation of potential fields used in this package, see [MATH.md](MATH.md). This README provides an overview of the package structure, instructions for building and launching the package, and details about usage.
 
+# Contributing
+See [CONTRIBUTING.md](CONTRIBUTING.md) for details on how to contribute to this repository. There's a bunch of [open issues](https://github.com/argallab/potential_fields/issues) that detail possible improvements, features, and bug fixes that you can help with! Of course, feel free to open new issues or reach out to me if you have any questions.
+
 ---
 
-Copyright Notice Sharwin Patil 2025
+Copyright Notice [Sharwin Patil](https://www.sharwinpatil.info/) 2025
+
+Contact me at: _`sharwinpatil@u.northwestern.edu`_
