@@ -59,6 +59,8 @@ namespace pfield {
       else {
         return Eigen::Vector3d(this->meshScale.x() / 2.0, this->meshScale.y() / 2.0, this->meshScale.z() / 2.0);
       }
+    case ObstacleType::ELLIPSOID:
+      return Eigen::Vector3d(this->geometry.semi_x, this->geometry.semi_y, this->geometry.semi_z);
     default:
       throw std::invalid_argument("Unknown obstacle type");
     }
@@ -171,6 +173,39 @@ namespace pfield {
       normal = rotateVector(this->orientation, normalLocal);
       break;
     }
+    case ObstacleType::ELLIPSOID: {
+      const double a = this->geometry.semi_x;
+      const double b = this->geometry.semi_y;
+      const double c = this->geometry.semi_z;
+      if (a < NEAR_ZERO_THRESHOLD || b < NEAR_ZERO_THRESHOLD || c < NEAR_ZERO_THRESHOLD) {
+        throw std::runtime_error("Ellipsoid obstacle has zero or near-zero semi-axis");
+      }
+      // Implicit function f(p) = (px/a)^2 + (py/b)^2 + (pz/c)^2 - 1
+      // f < 0 => inside, f > 0 => outside
+      const double f = (localPoint.x() * localPoint.x()) / (a * a)
+        + (localPoint.y() * localPoint.y()) / (b * b)
+        + (localPoint.z() * localPoint.z()) / (c * c)
+        - 1.0;
+      // Gradient of f (also the outward normal direction in local frame)
+      const Eigen::Vector3d grad(
+        2.0 * localPoint.x() / (a * a),
+        2.0 * localPoint.y() / (b * b),
+        2.0 * localPoint.z() / (c * c)
+      );
+      const double gradNorm = grad.norm();
+      // First-order signed distance approximation: d ≈ f / ||∇f||
+      // This is smooth and exact on the surface (f=0) and accurate near it
+      if (gradNorm > NEAR_ZERO_THRESHOLD) {
+        signedDistance = f / gradNorm;
+        normal = rotateVector(this->orientation, grad / gradNorm);
+      }
+      else {
+        // Point is exactly at the ellipsoid center; set arbitrary outward normal
+        signedDistance = -std::min({a, b, c});
+        normal = rotateVector(this->orientation, Eigen::Vector3d::UnitX());
+      }
+      break;
+    }
     case ObstacleType::MESH: {
       if (!this->meshCollisionData) {
         throw std::runtime_error("Mesh collision data not available for obstacle");
@@ -260,6 +295,15 @@ namespace pfield {
       shape = std::make_shared<coal::Cylinder>(
         static_cast<coal::CoalScalar>(this->geometry.radius),
         static_cast<coal::CoalScalar>(this->geometry.height)
+      );
+      break;
+    }
+
+    case ObstacleType::ELLIPSOID: {
+      shape = std::make_shared<coal::Ellipsoid>(
+        static_cast<coal::CoalScalar>(this->geometry.semi_x),
+        static_cast<coal::CoalScalar>(this->geometry.semi_y),
+        static_cast<coal::CoalScalar>(this->geometry.semi_z)
       );
       break;
     }

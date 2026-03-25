@@ -44,7 +44,8 @@ namespace pfield {
     SPHERE, // [center, radius]
     BOX, // [center, length, width, height]
     CYLINDER, // [center, radius, height]
-    MESH // [center, scale_x, scale_y, scale_z]
+    MESH, // [center, scale_x, scale_y, scale_z]
+    ELLIPSOID // [center, semi_x, semi_y, semi_z] — smooth analytic SDF, used for robot link approximation
   };
 
   enum class ObstacleGroup {
@@ -63,6 +64,8 @@ namespace pfield {
       return "Cylinder";
     case ObstacleType::MESH:
       return "Mesh";
+    case ObstacleType::ELLIPSOID:
+      return "Ellipsoid";
     default:
       throw std::invalid_argument("Unknown obstacle type");
     }
@@ -80,6 +83,9 @@ namespace pfield {
     }
     else if (typeStr == "Mesh") {
       return ObstacleType::MESH;
+    }
+    else if (typeStr == "Ellipsoid") {
+      return ObstacleType::ELLIPSOID;
     }
     else {
       throw std::invalid_argument("Unknown obstacle type string: " + typeStr);
@@ -119,14 +125,22 @@ namespace pfield {
     double length = 0.0; // Length for box, unused for sphere and cylinder
     double width = 0.0; // Width for box, unused for sphere and cylinder
     double height = 0.0; // Height for cylinder and box, unused for sphere
+    double semi_x = 0.0; // Semi-axis along X for ellipsoid, unused for other types
+    double semi_y = 0.0; // Semi-axis along Y for ellipsoid, unused for other types
+    double semi_z = 0.0; // Semi-axis along Z for ellipsoid, unused for other types
 
     ObstacleGeometry() = default;
+    // Existing 4-arg constructor — unchanged, semi-axes default to 0
     ObstacleGeometry(double radius, double length, double width, double height)
       : radius(radius), length(length), width(width), height(height) {}
+    // Ellipsoid constructor
+    ObstacleGeometry(double semi_x, double semi_y, double semi_z, bool /*ellipsoid_tag*/)
+      : semi_x(semi_x), semi_y(semi_y), semi_z(semi_z) {}
 
     bool operator==(const ObstacleGeometry& other) const {
       return radius == other.radius && length == other.length &&
-        width == other.width && height == other.height;
+        width == other.width && height == other.height &&
+        semi_x == other.semi_x && semi_y == other.semi_y && semi_z == other.semi_z;
     }
     bool operator!=(const ObstacleGeometry& other) const {
       return !(*this == other);
@@ -142,6 +156,8 @@ namespace pfield {
         return {radius, height};
       case ObstacleType::MESH:
         return {length, width, height};
+      case ObstacleType::ELLIPSOID:
+        return {semi_x, semi_y, semi_z};
       default:
         throw std::invalid_argument("Unknown obstacle type");
       }
