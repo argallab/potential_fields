@@ -7,3 +7,5 @@ install/
 .venv/
 __pycache__/
 data/
+
+CLAUDE.md
