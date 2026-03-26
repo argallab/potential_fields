@@ -874,6 +874,14 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<pfield:
       }
       break;
     }
+    case pfield::ObstacleType::ELLIPSOID: {
+      // RViz SPHERE with non-uniform scale renders as an ellipsoid (scale = diameter per axis)
+      obstacleMarker.type = Marker::SPHERE;
+      obstacleMarker.scale.x = obstacle.getGeometry().semi_x * 2.0;
+      obstacleMarker.scale.y = obstacle.getGeometry().semi_y * 2.0;
+      obstacleMarker.scale.z = obstacle.getGeometry().semi_z * 2.0;
+      break;
+    }
     }
     if (obstacle.getGroup() == pfield::ObstacleGroup::ROBOT) {
       // Robot obstacles in green
@@ -975,6 +983,14 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<pfield:
         influenceMarker.scale.y = baseDims.y() + 2.0 * influenceDistance;
         influenceMarker.scale.z = baseDims.z() + 2.0 * influenceDistance;
       }
+      break;
+    }
+    case pfield::ObstacleType::ELLIPSOID: {
+      // Inflated ellipsoid: each semi-axis grows by influenceDistance
+      influenceMarker.type = Marker::SPHERE;
+      influenceMarker.scale.x = 2.0 * (obstacle.getGeometry().semi_x + influenceDistance);
+      influenceMarker.scale.y = 2.0 * (obstacle.getGeometry().semi_y + influenceDistance);
+      influenceMarker.scale.z = 2.0 * (obstacle.getGeometry().semi_z + influenceDistance);
       break;
     }
     }

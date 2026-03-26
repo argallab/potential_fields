@@ -14,6 +14,7 @@
 
 #include "pfield/pf_kinematics.hpp"
 #include "pfield/pfield_common.hpp"
+#include "pfield/mesh_collision.hpp"
 #include <pinocchio/fwd.hpp>
 #include <pinocchio/algorithm/frames.hpp>
 #include <pinocchio/algorithm/joint-configuration.hpp>
@@ -210,8 +211,6 @@ namespace pfield {
     double length = 0.0;
     double width = 0.0;
     double height = 0.0;
-    bool isMesh = false;
-    std::string meshResource;
 
     auto* geometry = collisionObject.geometry.get();
     if (urdf::Box* b = dynamic_cast<urdf::Box*>(geometry)) {
@@ -230,26 +229,55 @@ namespace pfield {
       height = c->length;
     }
     else if (urdf::Mesh* m = dynamic_cast<urdf::Mesh*>(geometry)) {
-      obstacleType = ObstacleType::MESH;
-      length = m->scale.x;
-      width = m->scale.y;
-      height = m->scale.z;
-      isMesh = true;
-      meshResource = m->filename;
+      // Robot link mesh geometry: approximate with an ellipsoid for smooth, continuous SDF.
+      // Semi-axes are derived from the mesh AABB half-extents scaled by the URDF mesh scale.
+      const double sx = m->scale.x > 0.0 ? m->scale.x : 1.0;
+      const double sy = m->scale.y > 0.0 ? m->scale.y : 1.0;
+      const double sz = m->scale.z > 0.0 ? m->scale.z : 1.0;
+
+      // Attempt to load the mesh and derive semi-axes from its actual AABB
+      double semi_x = 0.0, semi_y = 0.0, semi_z = 0.0;
+      bool aabbFromMesh = false;
+      try {
+        auto meshData = loadMesh(m->filename);
+        if (meshData) {
+          const Eigen::Vector3d halfExtents = 0.5 * (meshData->aabbMax - meshData->aabbMin).cwiseAbs();
+          semi_x = halfExtents.x() * sx;
+          semi_y = halfExtents.y() * sy;
+          semi_z = halfExtents.z() * sz;
+          aabbFromMesh = true;
+        }
+      }
+      catch (const std::exception&) {
+        // Mesh load failed; fall through to scale-based fallback
+      }
+
+      if (!aabbFromMesh) {
+        // Fallback: treat URDF scale as full-extent diameter → semi-axes = scale / 2
+        semi_x = sx / 2.0;
+        semi_y = sy / 2.0;
+        semi_z = sz / 2.0;
+      }
+
+      // Ensure no degenerate zero semi-axis (clamp to a small positive value)
+      const double minSemi = 1e-3;
+      semi_x = std::max(semi_x, minSemi);
+      semi_y = std::max(semi_y, minSemi);
+      semi_z = std::max(semi_z, minSemi);
+
+      ObstacleGeometry ellipsoidGeom(semi_x, semi_y, semi_z, /*ellipsoid_tag=*/true);
+      return PotentialFieldObstacle(
+        frameID, position, orientation, ObstacleType::ELLIPSOID, ObstacleGroup::ROBOT,
+        ellipsoidGeom
+      );
     }
     else {
       throw std::runtime_error("obstacleFromCollisionObject: Unsupported geometry type in collision object");
     }
     ObstacleGeometry obstacleGeom(radius, length, width, height);
-
-    // For mesh obstacles, pass mesh resource and scale to constructor
-    PotentialFieldObstacle obstacle(
-      frameID, position, orientation, obstacleType, ObstacleGroup::ROBOT,
-      obstacleGeom,
-      isMesh ? meshResource : std::string(),
-      isMesh ? Eigen::Vector3d(length, width, height) : Eigen::Vector3d::Ones()
+    return PotentialFieldObstacle(
+      frameID, position, orientation, obstacleType, ObstacleGroup::ROBOT, obstacleGeom
     );
-    return obstacle;
   }
 
   std::vector<PotentialFieldObstacle> PFKinematics::updateObstaclesFromJointAngles(const std::vector<double>& jointAngles) {
