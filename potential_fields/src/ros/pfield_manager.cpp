@@ -793,6 +793,11 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<pfield:
   deleteInf.ns = "environment_influence_zones";
   markerArray.markers.push_back(deleteInf);
 
+  Marker deleteCtrl;
+  deleteCtrl.action = Marker::DELETEALL;
+  deleteCtrl.ns = "robot_control_points";
+  markerArray.markers.push_back(deleteCtrl);
+
   std::vector<pfield::PotentialFieldObstacle> envObstacles = pf->getEnvObstacles();
   std::vector<pfield::PotentialFieldObstacle> robotObstacles = pf->getRobotObstacles();
   // Combine both environment and robot obstacles for visualization
@@ -1197,6 +1202,86 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<pfield:
     ghostMarker.lifetime = rclcpp::Duration(0, 0);
 
     markerArray.markers.push_back(ghostMarker);
+  }
+
+  // --- Control point spheres ---
+  // Mirror the buildControlPoints logic from pfield.cpp so the floating control
+  // points used by the WBV repulsion are visible in RViz as small yellow spheres.
+  int cpID = 0;
+  const double CP_RADIUS = 0.015; // sphere diameter = 3 cm
+  for (const auto& link : robotObstacles) {
+    const pfield::ObstacleGeometry& g = link.getGeometry();
+    const Eigen::Vector3d& pos = link.getPosition();
+    const Eigen::Quaterniond& ori = link.getOrientation();
+
+    std::vector<Eigen::Vector3d> cpPoints;
+    switch (link.getType()) {
+    case pfield::ObstacleType::CAPSULE: {
+      const Eigen::Vector3d capsuleAxisWorld = ori * (g.ellipsoid_axes * Eigen::Vector3d::UnitZ());
+      const double halfShaft = g.height / 2.0;
+      const Eigen::Vector3d center = pos + ori * g.centroid_offset;
+      cpPoints = {
+        center + halfShaft * capsuleAxisWorld,
+        center - halfShaft * capsuleAxisWorld,
+        center,
+      };
+      break;
+    }
+    case pfield::ObstacleType::BOX: {
+      const Eigen::Vector3d center = pos + ori * g.centroid_offset;
+      const double hx = g.length / 2.0;
+      const double hy = g.width  / 2.0;
+      const double hz = g.height / 2.0;
+      const Eigen::Vector3d ax = ori * g.ellipsoid_axes.col(0);
+      const Eigen::Vector3d ay = ori * g.ellipsoid_axes.col(1);
+      const Eigen::Vector3d az = ori * g.ellipsoid_axes.col(2);
+      for (int sx : {-1, 1})
+        for (int sy : {-1, 1})
+          for (int sz : {-1, 1})
+            cpPoints.push_back(center + sx*hx*ax + sy*hy*ay + sz*hz*az);
+      break;
+    }
+    case pfield::ObstacleType::SPHERE:
+      cpPoints = {pos};
+      break;
+    case pfield::ObstacleType::CYLINDER: {
+      const double halfH = g.height / 2.0;
+      const Eigen::Vector3d axisWorld = ori * Eigen::Vector3d::UnitZ();
+      cpPoints = {
+        pos + halfH * axisWorld,
+        pos - halfH * axisWorld,
+        pos,
+      };
+      break;
+    }
+    default:
+      cpPoints = {pos};
+      break;
+    }
+
+    for (const auto& cp : cpPoints) {
+      Marker cpMarker;
+      cpMarker.header.frame_id = this->fixedFrame;
+      cpMarker.header.stamp = this->now();
+      cpMarker.frame_locked = true;
+      cpMarker.ns = "robot_control_points";
+      cpMarker.id = cpID++;
+      cpMarker.action = Marker::ADD;
+      cpMarker.type = Marker::SPHERE;
+      cpMarker.pose.position.x = cp.x();
+      cpMarker.pose.position.y = cp.y();
+      cpMarker.pose.position.z = cp.z();
+      cpMarker.pose.orientation.w = 1.0;
+      cpMarker.scale.x = CP_RADIUS * 2.0;
+      cpMarker.scale.y = CP_RADIUS * 2.0;
+      cpMarker.scale.z = CP_RADIUS * 2.0;
+      cpMarker.color.r = 1.0f;
+      cpMarker.color.g = 1.0f;
+      cpMarker.color.b = 0.0f;
+      cpMarker.color.a = 1.0f;
+      cpMarker.lifetime = rclcpp::Duration(0, 0);
+      markerArray.markers.push_back(cpMarker);
+    }
   }
 
   return markerArray;
