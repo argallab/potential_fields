@@ -845,6 +845,29 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<pfield:
       obstacleMarker.scale.x = obstacle.getGeometry().length;
       obstacleMarker.scale.y = obstacle.getGeometry().width;
       obstacleMarker.scale.z = obstacle.getGeometry().height;
+      // If the box was OBB-fitted from a mesh, shift the marker center to the OBB centroid
+      // and compose the PCA rotation with the obstacle orientation.
+      {
+        const Eigen::Vector3d& centroidOffset = obstacle.getGeometry().centroid_offset;
+        const Eigen::Matrix3d& obbAxes = obstacle.getGeometry().ellipsoid_axes;
+        if (centroidOffset.norm() > 1e-6) {
+          // centroid_offset is in the mesh-local (obstacle) frame; rotate to world
+          const Eigen::Vector3d worldCenter = obstacle.getPosition()
+            + obstacle.getOrientation() * centroidOffset;
+          obstacleMarker.pose.position.x = worldCenter.x();
+          obstacleMarker.pose.position.y = worldCenter.y();
+          obstacleMarker.pose.position.z = worldCenter.z();
+        }
+        if (!obbAxes.isIdentity(1e-6)) {
+          const Eigen::Quaterniond obstacleQ(obstacle.getOrientation());
+          const Eigen::Quaterniond obbQ(obbAxes);
+          const Eigen::Quaterniond markerQ = obstacleQ * obbQ;
+          obstacleMarker.pose.orientation.x = markerQ.x();
+          obstacleMarker.pose.orientation.y = markerQ.y();
+          obstacleMarker.pose.orientation.z = markerQ.z();
+          obstacleMarker.pose.orientation.w = markerQ.w();
+        }
+      }
       break;
     }
     case pfield::ObstacleType::CYLINDER: {
@@ -875,11 +898,63 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<pfield:
       break;
     }
     case pfield::ObstacleType::ELLIPSOID: {
-      // RViz SPHERE with non-uniform scale renders as an ellipsoid (scale = diameter per axis)
+      // RViz SPHERE with non-uniform scale renders as an ellipsoid (scale = diameter per axis).
+      // Compose the obstacle orientation with the PCA rotation so the marker aligns with the
+      // ellipsoid's principal axes in the world frame.
       obstacleMarker.type = Marker::SPHERE;
       obstacleMarker.scale.x = obstacle.getGeometry().semi_x * 2.0;
       obstacleMarker.scale.y = obstacle.getGeometry().semi_y * 2.0;
       obstacleMarker.scale.z = obstacle.getGeometry().semi_z * 2.0;
+      {
+        const Eigen::Quaterniond obstacleQ(obstacle.getOrientation());
+        const Eigen::Quaterniond pcaQ(obstacle.getGeometry().ellipsoid_axes);
+        const Eigen::Quaterniond markerQ = obstacleQ * pcaQ;
+        obstacleMarker.pose.orientation.x = markerQ.x();
+        obstacleMarker.pose.orientation.y = markerQ.y();
+        obstacleMarker.pose.orientation.z = markerQ.z();
+        obstacleMarker.pose.orientation.w = markerQ.w();
+      }
+      break;
+    }
+    case pfield::ObstacleType::CAPSULE: {
+      // RViz has no capsule primitive. Render as a cylinder for the shaft — endcap spheres are
+      // emitted as separate markers below, after this switch block.
+      const double r = obstacle.getGeometry().radius;
+      const double shaft = obstacle.getGeometry().height;
+      const Eigen::Vector3d& centroidOffset = obstacle.getGeometry().centroid_offset;
+      const Eigen::Matrix3d& capsuleAxes = obstacle.getGeometry().ellipsoid_axes;
+      // Shift marker position to OBB centroid
+      if (centroidOffset.norm() > 1e-6) {
+        const Eigen::Vector3d worldCenter = obstacle.getPosition()
+          + obstacle.getOrientation() * centroidOffset;
+        obstacleMarker.pose.position.x = worldCenter.x();
+        obstacleMarker.pose.position.y = worldCenter.y();
+        obstacleMarker.pose.position.z = worldCenter.z();
+      }
+      // Compose obstacle orientation with capsule PCA rotation
+      {
+        const Eigen::Quaterniond obstacleQ(obstacle.getOrientation());
+        const Eigen::Quaterniond capsuleQ(capsuleAxes);
+        const Eigen::Quaterniond markerQ = obstacleQ * capsuleQ;
+        obstacleMarker.pose.orientation.x = markerQ.x();
+        obstacleMarker.pose.orientation.y = markerQ.y();
+        obstacleMarker.pose.orientation.z = markerQ.z();
+        obstacleMarker.pose.orientation.w = markerQ.w();
+      }
+      // Guard against zero-scale warning in RViz: if the shaft is zero or near-zero,
+      // render as a sphere (the capsule degenerates to a sphere).
+      if (shaft < 1e-4) {
+        obstacleMarker.type = Marker::SPHERE;
+        obstacleMarker.scale.x = r * 2.0;
+        obstacleMarker.scale.y = r * 2.0;
+        obstacleMarker.scale.z = r * 2.0;
+      }
+      else {
+        obstacleMarker.type = Marker::CYLINDER;
+        obstacleMarker.scale.x = r * 2.0;
+        obstacleMarker.scale.y = r * 2.0;
+        obstacleMarker.scale.z = shaft;
+      }
       break;
     }
     }
@@ -898,6 +973,42 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<pfield:
     obstacleMarker.color.a = 1.0f; // Opaque
     obstacleMarker.lifetime = rclcpp::Duration(0, 0); // No lifetime
     markerArray.markers.push_back(obstacleMarker);
+
+    // For capsule obstacles, emit two additional sphere markers for the hemispherical endcaps.
+    if (obstacle.getType() == pfield::ObstacleType::CAPSULE) {
+      const double r = obstacle.getGeometry().radius;
+      const double halfShaft = obstacle.getGeometry().height / 2.0;
+      const Eigen::Vector3d& centroidOffset = obstacle.getGeometry().centroid_offset;
+      const Eigen::Matrix3d& capsuleAxes = obstacle.getGeometry().ellipsoid_axes;
+      const Eigen::Quaterniond obstacleQ(obstacle.getOrientation());
+      const Eigen::Quaterniond capsuleQ(capsuleAxes);
+      const Eigen::Quaterniond markerQ = obstacleQ * capsuleQ;
+      // Capsule axis = column 2 of capsuleAxes, in world frame = markerQ * Z
+      const Eigen::Vector3d capsuleAxisWorld = markerQ * Eigen::Vector3d::UnitZ();
+      const Eigen::Vector3d center = obstacle.getPosition() + obstacleQ * centroidOffset;
+
+      for (int cap = 0; cap < 2; ++cap) {
+        const double sign = (cap == 0) ? 1.0 : -1.0;
+        const Eigen::Vector3d capCenter = center + sign * halfShaft * capsuleAxisWorld;
+        Marker capMarker;
+        capMarker.header = obstacleMarker.header;
+        capMarker.ns = obstacleMarker.ns;
+        capMarker.id = hashID + 10000 + cap; // offset to avoid ID collision
+        capMarker.action = Marker::ADD;
+        capMarker.type = Marker::SPHERE;
+        capMarker.pose.position.x = capCenter.x();
+        capMarker.pose.position.y = capCenter.y();
+        capMarker.pose.position.z = capCenter.z();
+        capMarker.pose.orientation = obstacleMarker.pose.orientation;
+        capMarker.scale.x = r * 2.0;
+        capMarker.scale.y = r * 2.0;
+        capMarker.scale.z = r * 2.0;
+        capMarker.color = obstacleMarker.color;
+        capMarker.lifetime = rclcpp::Duration(0, 0);
+        markerArray.markers.push_back(capMarker);
+      }
+    }
+
     if (obstacle.getGroup() == pfield::ObstacleGroup::ROBOT) {
       // Skip influence zone visualization for robot obstacles
       continue;
@@ -939,6 +1050,19 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<pfield:
       influenceMarker.scale.x = obstacle.getGeometry().length + 2.0 * influenceDistance;
       influenceMarker.scale.y = obstacle.getGeometry().width + 2.0 * influenceDistance;
       influenceMarker.scale.z = obstacle.getGeometry().height + 2.0 * influenceDistance;
+      // Apply OBB orientation if present
+      {
+        const Eigen::Matrix3d& obbAxes = obstacle.getGeometry().ellipsoid_axes;
+        if (!obbAxes.isIdentity(1e-6)) {
+          const Eigen::Quaterniond obstacleQ(obstacle.getOrientation());
+          const Eigen::Quaterniond obbQ(obbAxes);
+          const Eigen::Quaterniond markerQ = obstacleQ * obbQ;
+          influenceMarker.pose.orientation.x = markerQ.x();
+          influenceMarker.pose.orientation.y = markerQ.y();
+          influenceMarker.pose.orientation.z = markerQ.z();
+          influenceMarker.pose.orientation.w = markerQ.w();
+        }
+      }
       break;
     }
     case pfield::ObstacleType::CYLINDER: {
@@ -986,15 +1110,93 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<pfield:
       break;
     }
     case pfield::ObstacleType::ELLIPSOID: {
-      // Inflated ellipsoid: each semi-axis grows by influenceDistance
+      // Inflated ellipsoid: each semi-axis grows by influenceDistance.
+      // Apply PCA orientation so the marker matches the ellipsoid's principal axes.
       influenceMarker.type = Marker::SPHERE;
       influenceMarker.scale.x = 2.0 * (obstacle.getGeometry().semi_x + influenceDistance);
       influenceMarker.scale.y = 2.0 * (obstacle.getGeometry().semi_y + influenceDistance);
       influenceMarker.scale.z = 2.0 * (obstacle.getGeometry().semi_z + influenceDistance);
+      {
+        const Eigen::Quaterniond obstacleQ(obstacle.getOrientation());
+        const Eigen::Quaterniond pcaQ(obstacle.getGeometry().ellipsoid_axes);
+        const Eigen::Quaterniond markerQ = obstacleQ * pcaQ;
+        influenceMarker.pose.orientation.x = markerQ.x();
+        influenceMarker.pose.orientation.y = markerQ.y();
+        influenceMarker.pose.orientation.z = markerQ.z();
+        influenceMarker.pose.orientation.w = markerQ.w();
+      }
+      break;
+    }
+    case pfield::ObstacleType::CAPSULE: {
+      // Inflated capsule: radius + influenceDistance, shaft unchanged.
+      const double r = obstacle.getGeometry().radius + influenceDistance;
+      const double shaft = obstacle.getGeometry().height;
+      const Eigen::Quaterniond obstacleQ(obstacle.getOrientation());
+      const Eigen::Quaterniond capsuleQ(obstacle.getGeometry().ellipsoid_axes);
+      const Eigen::Quaterniond markerQ = obstacleQ * capsuleQ;
+      const Eigen::Vector3d worldCenter = obstacle.getPosition()
+        + obstacleQ * obstacle.getGeometry().centroid_offset;
+      influenceMarker.pose.position.x = worldCenter.x();
+      influenceMarker.pose.position.y = worldCenter.y();
+      influenceMarker.pose.position.z = worldCenter.z();
+      influenceMarker.pose.orientation.x = markerQ.x();
+      influenceMarker.pose.orientation.y = markerQ.y();
+      influenceMarker.pose.orientation.z = markerQ.z();
+      influenceMarker.pose.orientation.w = markerQ.w();
+      influenceMarker.type = Marker::CYLINDER;
+      influenceMarker.scale.x = r * 2.0;
+      influenceMarker.scale.y = r * 2.0;
+      influenceMarker.scale.z = shaft;
       break;
     }
     }
     markerArray.markers.push_back(influenceMarker);
+  }
+
+  // --- Ghost mesh overlays ---
+  // For every CAPSULE robot obstacle that was fitted from a mesh, emit a semi-transparent
+  // MESH_RESOURCE marker in the "robot_mesh_ghost" namespace. This lets the user compare the
+  // capsule approximation against the original mesh geometry in RViz.
+  int ghostID = 0;
+  for (const auto& obstacle : robotObstacles) {
+    if (obstacle.getType() != pfield::ObstacleType::CAPSULE) { continue; }
+    const std::string& meshURI = obstacle.getGeometry().source_mesh_resource;
+    if (meshURI.empty()) { continue; }
+
+    Marker ghostMarker;
+    ghostMarker.header.frame_id = this->fixedFrame;
+    ghostMarker.header.stamp = this->now();
+    ghostMarker.frame_locked = true;
+    ghostMarker.ns = "robot_mesh_ghost";
+    ghostMarker.id = ghostID++;
+    ghostMarker.action = Marker::ADD;
+    ghostMarker.type = Marker::MESH_RESOURCE;
+    ghostMarker.mesh_resource = meshURI;
+    ghostMarker.mesh_use_embedded_materials = false;
+
+    const auto pos = obstacle.getPosition();
+    const auto ori = obstacle.getOrientation();
+    ghostMarker.pose.position.x = pos.x();
+    ghostMarker.pose.position.y = pos.y();
+    ghostMarker.pose.position.z = pos.z();
+    ghostMarker.pose.orientation.x = ori.x();
+    ghostMarker.pose.orientation.y = ori.y();
+    ghostMarker.pose.orientation.z = ori.z();
+    ghostMarker.pose.orientation.w = ori.w();
+
+    const Eigen::Vector3d& s = obstacle.getGeometry().source_mesh_scale;
+    ghostMarker.scale.x = s.x();
+    ghostMarker.scale.y = s.y();
+    ghostMarker.scale.z = s.z();
+
+    // Semi-transparent white so the ellipsoid (green) is visible through the mesh
+    ghostMarker.color.r = 0.9f;
+    ghostMarker.color.g = 0.9f;
+    ghostMarker.color.b = 0.9f;
+    ghostMarker.color.a = 0.35f;
+    ghostMarker.lifetime = rclcpp::Duration(0, 0);
+
+    markerArray.markers.push_back(ghostMarker);
   }
 
   return markerArray;

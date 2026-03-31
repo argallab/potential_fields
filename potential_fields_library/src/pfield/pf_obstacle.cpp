@@ -61,6 +61,13 @@ namespace pfield {
       }
     case ObstacleType::ELLIPSOID:
       return Eigen::Vector3d(this->geometry.semi_x, this->geometry.semi_y, this->geometry.semi_z);
+    case ObstacleType::CAPSULE:
+      // Bounding box of a capsule: radial extent = radius in X/Y, total half-length = height/2 + radius in Z
+      return Eigen::Vector3d(
+        this->geometry.radius,
+        this->geometry.radius,
+        this->geometry.height / 2.0 + this->geometry.radius
+      );
     default:
       throw std::invalid_argument("Unknown obstacle type");
     }
@@ -81,27 +88,33 @@ namespace pfield {
       break;
     }
     case ObstacleType::BOX: {
+      // Transform into OBB principal-axis frame (centroid-relative, then PCA-rotated).
+      // For ordinary axis-aligned boxes, ellipsoid_axes = Identity and centroid_offset = Zero,
+      // so this reduces to the original behaviour.
+      const Eigen::Vector3d pOBB = this->geometry.ellipsoid_axes.transpose()
+        * (localPoint - this->geometry.centroid_offset);
       Eigen::Vector3d halfDims = this->halfDimensions();
-      Eigen::Vector3d boundedLocalPoint = localPoint.cwiseMax(-halfDims).cwiseMin(halfDims); // clamp to box
-      Eigen::Vector3d distanceToBoundedPoint = localPoint - boundedLocalPoint;
+      Eigen::Vector3d boundedLocalPoint = pOBB.cwiseMax(-halfDims).cwiseMin(halfDims);
+      Eigen::Vector3d distanceToBoundedPoint = pOBB - boundedLocalPoint;
       const double distanceToSurface = distanceToBoundedPoint.norm();
-      Eigen::Vector3d normalLocal;
+      Eigen::Vector3d normalOBB;
       if (distanceToSurface > NEAR_ZERO_THRESHOLD) {
-        // Outside box: normal points from closest point on box to localPoint
-        normalLocal = distanceToBoundedPoint / distanceToSurface;
+        // Outside box: normal points from closest point on box to pOBB
+        normalOBB = distanceToBoundedPoint / distanceToSurface;
         signedDistance = distanceToSurface;
       }
       else {
         // Inside box: find closest face
-        Eigen::Vector3d distancesToFaces = halfDims - localPoint.cwiseAbs();
+        Eigen::Vector3d distancesToFaces = halfDims - pOBB.cwiseAbs();
         int axisIndex;
         distancesToFaces.minCoeff(&axisIndex);
-        normalLocal = Eigen::Vector3d::Zero();
-        normalLocal[axisIndex] = (localPoint[axisIndex] >= 0.0) ? 1.0 : -1.0;
+        normalOBB = Eigen::Vector3d::Zero();
+        normalOBB[axisIndex] = (pOBB[axisIndex] >= 0.0) ? 1.0 : -1.0;
         signedDistance = -distancesToFaces[axisIndex];
       }
-      // Rotate the output normal back to world frame
-      normal = rotateVector(this->orientation, normalLocal);
+      // Rotate normal: OBB frame → obstacle frame → world frame
+      const Eigen::Vector3d normalObstacle = this->geometry.ellipsoid_axes * normalOBB;
+      normal = rotateVector(this->orientation, normalObstacle);
       break;
     }
     case ObstacleType::CYLINDER: {
@@ -180,30 +193,61 @@ namespace pfield {
       if (a < NEAR_ZERO_THRESHOLD || b < NEAR_ZERO_THRESHOLD || c < NEAR_ZERO_THRESHOLD) {
         throw std::runtime_error("Ellipsoid obstacle has zero or near-zero semi-axis");
       }
+      // Shift to ellipsoid center (mesh centroid in obstacle-local frame) then rotate
+      // into the PCA principal-axis frame so the SDF axes align with the ellipsoid axes.
+      const Eigen::Vector3d pLocal = this->geometry.ellipsoid_axes.transpose()
+        * (localPoint - this->geometry.centroid_offset);
       // Implicit function f(p) = (px/a)^2 + (py/b)^2 + (pz/c)^2 - 1
       // f < 0 => inside, f > 0 => outside
-      const double f = (localPoint.x() * localPoint.x()) / (a * a)
-        + (localPoint.y() * localPoint.y()) / (b * b)
-        + (localPoint.z() * localPoint.z()) / (c * c)
+      const double f = (pLocal.x() * pLocal.x()) / (a * a)
+        + (pLocal.y() * pLocal.y()) / (b * b)
+        + (pLocal.z() * pLocal.z()) / (c * c)
         - 1.0;
-      // Gradient of f (also the outward normal direction in local frame)
-      const Eigen::Vector3d grad(
-        2.0 * localPoint.x() / (a * a),
-        2.0 * localPoint.y() / (b * b),
-        2.0 * localPoint.z() / (c * c)
+      // Gradient of f in PCA frame (outward normal direction)
+      const Eigen::Vector3d gradPCA(
+        2.0 * pLocal.x() / (a * a),
+        2.0 * pLocal.y() / (b * b),
+        2.0 * pLocal.z() / (c * c)
       );
-      const double gradNorm = grad.norm();
+      const double gradNorm = gradPCA.norm();
       // First-order signed distance approximation: d ≈ f / ||∇f||
-      // This is smooth and exact on the surface (f=0) and accurate near it
+      // Smooth and exact on the surface (f=0), accurate near it
       if (gradNorm > NEAR_ZERO_THRESHOLD) {
         signedDistance = f / gradNorm;
-        normal = rotateVector(this->orientation, grad / gradNorm);
+        // Rotate gradient back: PCA frame → obstacle frame → world frame
+        const Eigen::Vector3d gradObstacle = this->geometry.ellipsoid_axes * (gradPCA / gradNorm);
+        normal = rotateVector(this->orientation, gradObstacle);
       }
       else {
         // Point is exactly at the ellipsoid center; set arbitrary outward normal
         signedDistance = -std::min({a, b, c});
         normal = rotateVector(this->orientation, Eigen::Vector3d::UnitX());
       }
+      break;
+    }
+    case ObstacleType::CAPSULE: {
+      // Capsule: cylinder of radius `radius` and shaft length `height`, with hemispherical endcaps.
+      // The axis runs along the Z axis of the obstacle frame; endcap centers at ±height/2.
+      // Like the OBB, capsules fitted from mesh use ellipsoid_axes (orientation) and centroid_offset.
+      const Eigen::Vector3d pCap = this->geometry.ellipsoid_axes.transpose()
+        * (localPoint - this->geometry.centroid_offset);
+      const double halfShaft = this->geometry.height / 2.0;
+      // Project onto the capsule axis (Z): clamp to the shaft segment
+      const double zClamped = std::clamp(pCap.z(), -halfShaft, halfShaft);
+      // Vector from the nearest point on the axis segment to the query point
+      const Eigen::Vector3d toPoint(pCap.x(), pCap.y(), pCap.z() - zClamped);
+      const double dist = toPoint.norm();
+      signedDistance = dist - this->geometry.radius;
+      Eigen::Vector3d normalCap;
+      if (dist > NEAR_ZERO_THRESHOLD) {
+        normalCap = toPoint / dist;
+      }
+      else {
+        // Query point is on the capsule axis — push outward in X
+        normalCap = Eigen::Vector3d::UnitX();
+      }
+      // Rotate back: capsule frame → obstacle frame → world frame
+      normal = rotateVector(this->orientation, this->geometry.ellipsoid_axes * normalCap);
       break;
     }
     case ObstacleType::MESH: {
@@ -288,6 +332,27 @@ namespace pfield {
         static_cast<coal::CoalScalar>(this->geometry.width),
         static_cast<coal::CoalScalar>(this->geometry.height)
       );
+      // For OBB-fitted boxes (PCA from mesh), shift the Coal transform to the OBB center
+      // and compose the OBB rotation with the obstacle orientation.
+      if (this->geometry.centroid_offset.norm() > 1e-6 ||
+          !this->geometry.ellipsoid_axes.isIdentity(1e-6)) {
+        const Eigen::Vector3d worldCenter = this->position
+          + this->orientation * this->geometry.centroid_offset;
+        const Eigen::Quaterniond markerQ = this->orientation
+          * Eigen::Quaterniond(this->geometry.ellipsoid_axes);
+        transform.setTranslation(coal::Vec3s(
+          static_cast<coal::CoalScalar>(worldCenter.x()),
+          static_cast<coal::CoalScalar>(worldCenter.y()),
+          static_cast<coal::CoalScalar>(worldCenter.z())
+        ));
+        coal::Quatf obbQuat(
+          static_cast<coal::CoalScalar>(markerQ.w()),
+          static_cast<coal::CoalScalar>(markerQ.x()),
+          static_cast<coal::CoalScalar>(markerQ.y()),
+          static_cast<coal::CoalScalar>(markerQ.z())
+        );
+        transform.setQuatRotation(obbQuat);
+      }
       break;
     }
 
@@ -305,6 +370,35 @@ namespace pfield {
         static_cast<coal::CoalScalar>(this->geometry.semi_y),
         static_cast<coal::CoalScalar>(this->geometry.semi_z)
       );
+      break;
+    }
+
+    case ObstacleType::CAPSULE: {
+      // coal::Capsule(radius, lz): lz is the shaft length; endcaps add radius at each end.
+      shape = std::make_shared<coal::Capsule>(
+        static_cast<coal::CoalScalar>(this->geometry.radius),
+        static_cast<coal::CoalScalar>(this->geometry.height)
+      );
+      // Apply OBB orientation and centroid offset (same pattern as OBB-fitted BOX)
+      if (this->geometry.centroid_offset.norm() > 1e-6 ||
+          !this->geometry.ellipsoid_axes.isIdentity(1e-6)) {
+        const Eigen::Vector3d worldCenter = this->position
+          + this->orientation * this->geometry.centroid_offset;
+        const Eigen::Quaterniond markerQ = this->orientation
+          * Eigen::Quaterniond(this->geometry.ellipsoid_axes);
+        transform.setTranslation(coal::Vec3s(
+          static_cast<coal::CoalScalar>(worldCenter.x()),
+          static_cast<coal::CoalScalar>(worldCenter.y()),
+          static_cast<coal::CoalScalar>(worldCenter.z())
+        ));
+        coal::Quatf capsuleQuat(
+          static_cast<coal::CoalScalar>(markerQ.w()),
+          static_cast<coal::CoalScalar>(markerQ.x()),
+          static_cast<coal::CoalScalar>(markerQ.y()),
+          static_cast<coal::CoalScalar>(markerQ.z())
+        );
+        transform.setQuatRotation(capsuleQuat);
+      }
       break;
     }
 
@@ -344,19 +438,32 @@ namespace pfield {
   void PotentialFieldObstacle::updateCoalCollisionObjectPose() const {
     if (!this->coalCollisionObject) { return; }
     coal::Transform3s transform = coal::Transform3s::Identity();
+
+    Eigen::Vector3d worldPos = this->position;
+    Eigen::Quaterniond worldOri = this->orientation;
+
+    // For OBB-fitted BOX obstacles, the Coal object is centred at the OBB centroid
+    // with the OBB rotation baked in — replicate that here on every pose update.
+    if ((this->type == ObstacleType::BOX || this->type == ObstacleType::CAPSULE) &&
+        (this->geometry.centroid_offset.norm() > 1e-6 ||
+         !this->geometry.ellipsoid_axes.isIdentity(1e-6))) {
+      worldPos = this->position + this->orientation * this->geometry.centroid_offset;
+      worldOri = this->orientation * Eigen::Quaterniond(this->geometry.ellipsoid_axes);
+    }
+
     transform.setTranslation(
       Eigen::Vector3d(
-        static_cast<coal::CoalScalar>(this->position.x()),
-        static_cast<coal::CoalScalar>(this->position.y()),
-        static_cast<coal::CoalScalar>(this->position.z())
+        static_cast<coal::CoalScalar>(worldPos.x()),
+        static_cast<coal::CoalScalar>(worldPos.y()),
+        static_cast<coal::CoalScalar>(worldPos.z())
       )
     );
     transform.setQuatRotation(
       coal::Quatf(
-        static_cast<coal::CoalScalar>(this->orientation.w()),
-        static_cast<coal::CoalScalar>(this->orientation.x()),
-        static_cast<coal::CoalScalar>(this->orientation.y()),
-        static_cast<coal::CoalScalar>(this->orientation.z())
+        static_cast<coal::CoalScalar>(worldOri.w()),
+        static_cast<coal::CoalScalar>(worldOri.x()),
+        static_cast<coal::CoalScalar>(worldOri.y()),
+        static_cast<coal::CoalScalar>(worldOri.z())
       )
     );
     this->coalCollisionObject->setTransform(transform);

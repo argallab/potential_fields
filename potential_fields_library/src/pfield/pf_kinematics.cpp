@@ -15,11 +15,12 @@
 #include "pfield/pf_kinematics.hpp"
 #include "pfield/pfield_common.hpp"
 #include "pfield/mesh_collision.hpp"
+#include <coal/BV/OBB.h>
 #include <pinocchio/fwd.hpp>
 #include <pinocchio/algorithm/frames.hpp>
 #include <pinocchio/algorithm/joint-configuration.hpp>
 #include <pinocchio/algorithm/kinematics.hpp>
-#include <Eigen/Geometry>
+#include <Eigen/Dense>
 
 namespace pfield {
 
@@ -229,46 +230,95 @@ namespace pfield {
       height = c->length;
     }
     else if (urdf::Mesh* m = dynamic_cast<urdf::Mesh*>(geometry)) {
-      // Robot link mesh geometry: approximate with an ellipsoid for smooth, continuous SDF.
-      // Semi-axes are derived from the mesh AABB half-extents scaled by the URDF mesh scale.
+      // Fit a minimum-volume oriented bounding box (OBB) to the mesh using PCA:
+      //   Pass 1 — PCA on all scaled vertices to find the principal-axis orientation.
+      //   Pass 2 — Refit full extents as 2 * max |projection| onto each PCA axis.
+      // ellipsoid_axes stores the OBB rotation; centroid_offset stores the OBB center.
+      // For SDF and Coal, we use a standard BOX (length/width/height = full extents).
       const double sx = m->scale.x > 0.0 ? m->scale.x : 1.0;
       const double sy = m->scale.y > 0.0 ? m->scale.y : 1.0;
       const double sz = m->scale.z > 0.0 ? m->scale.z : 1.0;
+      const Eigen::Vector3d scale(sx, sy, sz);
 
-      // Attempt to load the mesh and derive semi-axes from its actual AABB
-      double semi_x = 0.0, semi_y = 0.0, semi_z = 0.0;
-      bool aabbFromMesh = false;
+      double half_x = 0.0, half_y = 0.0, half_z = 0.0;
+      Eigen::Matrix3d obbAxes = Eigen::Matrix3d::Identity();
+      Eigen::Vector3d centroid = Eigen::Vector3d::Zero();
+      bool fitted = false;
+
       try {
         auto meshData = loadMesh(m->filename);
-        if (meshData) {
-          const Eigen::Vector3d halfExtents = 0.5 * (meshData->aabbMax - meshData->aabbMin).cwiseAbs();
-          semi_x = halfExtents.x() * sx;
-          semi_y = halfExtents.y() * sy;
-          semi_z = halfExtents.z() * sz;
-          aabbFromMesh = true;
+        if (meshData && !meshData->vertices.empty()) {
+          const size_t nVerts = meshData->vertices.size();
+
+          // Pass 1a: centroid of scaled vertices
+          for (const auto& v : meshData->vertices) {
+            centroid += v.cwiseProduct(scale);
+          }
+          centroid /= static_cast<double>(nVerts);
+
+          // Pass 1b: covariance matrix → PCA axes (dominant axis first)
+          Eigen::Matrix3d cov = Eigen::Matrix3d::Zero();
+          for (const auto& v : meshData->vertices) {
+            const Eigen::Vector3d vc = v.cwiseProduct(scale) - centroid;
+            cov += vc * vc.transpose();
+          }
+          cov /= static_cast<double>(nVerts);
+          Eigen::SelfAdjointEigenSolver<Eigen::Matrix3d> solver(cov);
+          obbAxes = solver.eigenvectors().rowwise().reverse();
+
+          // Pass 2: half-extents = max |projection| onto each PCA axis
+          for (const auto& v : meshData->vertices) {
+            const Eigen::Vector3d proj = obbAxes.transpose() * (v.cwiseProduct(scale) - centroid);
+            half_x = std::max(half_x, std::abs(proj.x()));
+            half_y = std::max(half_y, std::abs(proj.y()));
+            half_z = std::max(half_z, std::abs(proj.z()));
+          }
+          fitted = true;
         }
       }
       catch (const std::exception&) {
         // Mesh load failed; fall through to scale-based fallback
       }
 
-      if (!aabbFromMesh) {
-        // Fallback: treat URDF scale as full-extent diameter → semi-axes = scale / 2
-        semi_x = sx / 2.0;
-        semi_y = sy / 2.0;
-        semi_z = sz / 2.0;
+      if (!fitted) {
+        half_x = sx / 2.0;
+        half_y = sy / 2.0;
+        half_z = sz / 2.0;
       }
 
-      // Ensure no degenerate zero semi-axis (clamp to a small positive value)
-      const double minSemi = 1e-3;
-      semi_x = std::max(semi_x, minSemi);
-      semi_y = std::max(semi_y, minSemi);
-      semi_z = std::max(semi_z, minSemi);
+      const double minHalf = 1e-3;
+      half_x = std::max(half_x, minHalf);
+      half_y = std::max(half_y, minHalf);
+      half_z = std::max(half_z, minHalf);
 
-      ObstacleGeometry ellipsoidGeom(semi_x, semi_y, semi_z, /*ellipsoid_tag=*/true);
+      // Capsule fitting:
+      //   PCA axis 0 (half_x) = dominant axis → becomes capsule Z axis.
+      //   radius = max of the two transverse semi-extents (half_y, half_z).
+      //   shaft length = max(0, 2*half_x - 2*radius) so endcaps don't overshoot.
+      // The rotation matrix obbAxes maps capsule-Z (axis 0) to the mesh principal axis.
+      // We need capsule-Z = column 0 of obbAxes, so we build a rotation that maps
+      // world-Z to obbAxes[:,0] — which is just using obbAxes as-is since column 0
+      // already IS the dominant axis direction, and our SDF uses the Z axis in capsule frame.
+      // We swap columns so that column 2 (capsule Z) = the dominant PCA axis.
+      Eigen::Matrix3d capsuleAxes;
+      capsuleAxes.col(0) = obbAxes.col(1);  // minor axis → capsule X
+      capsuleAxes.col(1) = obbAxes.col(2);  // minor axis → capsule Y
+      capsuleAxes.col(2) = obbAxes.col(0);  // dominant axis → capsule Z (SDF axis)
+      // Ensure right-handed
+      if (capsuleAxes.determinant() < 0.0) { capsuleAxes.col(0) = -capsuleAxes.col(0); }
+
+      const double capsuleRadius = std::max(half_y, half_z);
+      const double capsuleShaft = std::max(0.0, 2.0 * half_x - 2.0 * capsuleRadius);
+
+      // 4-arg ctor: (radius, length, width, height) — use radius + height for capsule
+      ObstacleGeometry capsuleGeom(capsuleRadius, 0.0 /*length unused*/, 0.0 /*width unused*/, capsuleShaft);
+      capsuleGeom.ellipsoid_axes = capsuleAxes;
+      capsuleGeom.centroid_offset = centroid;
+      capsuleGeom.source_mesh_resource = m->filename;
+      capsuleGeom.source_mesh_scale = scale;
       return PotentialFieldObstacle(
-        frameID, position, orientation, ObstacleType::ELLIPSOID, ObstacleGroup::ROBOT,
-        ellipsoidGeom
+        frameID, position, orientation, ObstacleType::CAPSULE, ObstacleGroup::ROBOT,
+        capsuleGeom
       );
     }
     else {

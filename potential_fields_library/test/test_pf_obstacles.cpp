@@ -204,6 +204,72 @@ TEST(PFObstacleEllipsoid, TypeToStringRoundTrip) {
   EXPECT_EQ(pfield::stringToObstacleType("Ellipsoid"), pfield::ObstacleType::ELLIPSOID);
 }
 
+TEST(PFObstacleEllipsoid, PCARotated_PointOutside) {
+  // Ellipsoid with semi-axes (0.5, 0.2, 0.1) rotated 90° around Z.
+  // After rotation, the long axis (0.5) aligns with world Y instead of X.
+  // A point at (0, 1.0, 0) in obstacle frame is along the rotated long axis — outside.
+  Eigen::Matrix3d pcaAxes;
+  // 90° rotation around Z: X→Y, Y→-X
+  pcaAxes << 0.0, -1.0, 0.0,
+             1.0,  0.0, 0.0,
+             0.0,  0.0, 1.0;
+
+  pfield::ObstacleGeometry geom(0.5, 0.2, 0.1, pcaAxes, Eigen::Vector3d::Zero());
+  pfield::PotentialFieldObstacle ellipsoid(
+    "pca_ellipsoid", Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity(),
+    pfield::ObstacleType::ELLIPSOID, pfield::ObstacleGroup::ROBOT, geom
+  );
+
+  double dist;
+  Eigen::Vector3d normal;
+  // Point at world (0, 1.0, 0): in PCA frame this is (1.0, 0, 0), along the 0.5 semi-axis → outside
+  ellipsoid.computeSignedDistanceAndNormal(Eigen::Vector3d(0.0, 1.0, 0.0), dist, normal);
+  EXPECT_GT(dist, 0.0);
+}
+
+TEST(PFObstacleEllipsoid, PCARotated_PointInside) {
+  // Same rotated ellipsoid. A point at (0.1, 0, 0) is along the rotated short axis (0.2 in Y→X).
+  // In PCA frame: pcaAxes^T * (0.1, 0, 0) = (0, 0.1, 0), which is along the 0.2 semi-axis → inside.
+  Eigen::Matrix3d pcaAxes;
+  pcaAxes << 0.0, -1.0, 0.0,
+             1.0,  0.0, 0.0,
+             0.0,  0.0, 1.0;
+
+  pfield::ObstacleGeometry geom(0.5, 0.2, 0.1, pcaAxes, Eigen::Vector3d::Zero());
+  pfield::PotentialFieldObstacle ellipsoid(
+    "pca_ellipsoid", Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity(),
+    pfield::ObstacleType::ELLIPSOID, pfield::ObstacleGroup::ROBOT, geom
+  );
+
+  double dist;
+  Eigen::Vector3d normal;
+  ellipsoid.computeSignedDistanceAndNormal(Eigen::Vector3d(0.1, 0.0, 0.0), dist, normal);
+  EXPECT_LT(dist, 0.0);
+}
+
+TEST(PFObstacleEllipsoid, CentroidOffset_ShiftsCenter) {
+  // Ellipsoid centered at (1.0, 0, 0) in the obstacle frame (centroid_offset = (1.0, 0, 0)).
+  // A point at (1.0, 0, 0) in obstacle frame should be at the center → inside.
+  // A point at (0, 0, 0) in obstacle frame is (−1, 0, 0) relative to center → outside (semi_x=0.1).
+  pfield::ObstacleGeometry geom(0.1, 0.1, 0.1, Eigen::Matrix3d::Identity(),
+    Eigen::Vector3d(1.0, 0.0, 0.0));
+  pfield::PotentialFieldObstacle ellipsoid(
+    "offset_ellipsoid", Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity(),
+    pfield::ObstacleType::ELLIPSOID, pfield::ObstacleGroup::ROBOT, geom
+  );
+
+  double dist;
+  Eigen::Vector3d normal;
+
+  // Point at (1.0, 0, 0): at the ellipsoid center → inside
+  ellipsoid.computeSignedDistanceAndNormal(Eigen::Vector3d(1.0, 0.0, 0.0), dist, normal);
+  EXPECT_LT(dist, 0.0);
+
+  // Point at (0.0, 0.0, 0.0): 1.0 from center, semi_x=0.1 → far outside
+  ellipsoid.computeSignedDistanceAndNormal(Eigen::Vector3d(0.0, 0.0, 0.0), dist, normal);
+  EXPECT_GT(dist, 0.0);
+}
+
 TEST(PFObstacleCoal, ToCoalCollisionObject_WithRotation) {
   // Create obstacle with non-identity rotation
   Eigen::Quaterniond rotation(Eigen::AngleAxisd(M_PI / 4, Eigen::Vector3d::UnitZ()));

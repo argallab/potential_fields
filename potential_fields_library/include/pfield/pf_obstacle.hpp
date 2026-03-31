@@ -45,7 +45,8 @@ namespace pfield {
     BOX, // [center, length, width, height]
     CYLINDER, // [center, radius, height]
     MESH, // [center, scale_x, scale_y, scale_z]
-    ELLIPSOID // [center, semi_x, semi_y, semi_z] — smooth analytic SDF, used for robot link approximation
+    ELLIPSOID, // [center, semi_x, semi_y, semi_z] — smooth analytic SDF, used for robot link approximation
+    CAPSULE // [center, radius, height] — cylinder shaft (height) with hemispherical endcaps (radius); total length = height + 2*radius
   };
 
   enum class ObstacleGroup {
@@ -66,6 +67,8 @@ namespace pfield {
       return "Mesh";
     case ObstacleType::ELLIPSOID:
       return "Ellipsoid";
+    case ObstacleType::CAPSULE:
+      return "Capsule";
     default:
       throw std::invalid_argument("Unknown obstacle type");
     }
@@ -86,6 +89,9 @@ namespace pfield {
     }
     else if (typeStr == "Ellipsoid") {
       return ObstacleType::ELLIPSOID;
+    }
+    else if (typeStr == "Capsule") {
+      return ObstacleType::CAPSULE;
     }
     else {
       throw std::invalid_argument("Unknown obstacle type string: " + typeStr);
@@ -128,19 +134,35 @@ namespace pfield {
     double semi_x = 0.0; // Semi-axis along X for ellipsoid, unused for other types
     double semi_y = 0.0; // Semi-axis along Y for ellipsoid, unused for other types
     double semi_z = 0.0; // Semi-axis along Z for ellipsoid, unused for other types
+    // Rotation from obstacle frame to ellipsoid principal-axis frame (from PCA).
+    // Identity for axis-aligned ellipsoids; non-identity when PCA axes differ from mesh origin axes.
+    Eigen::Matrix3d ellipsoid_axes = Eigen::Matrix3d::Identity();
+    // Offset from the collision-origin frame to the ellipsoid center (mesh centroid in mesh-local frame).
+    Eigen::Vector3d centroid_offset = Eigen::Vector3d::Zero();
+    // Original mesh URI and scale for ELLIPSOID obstacles fitted from a mesh, used for ghost visualization.
+    // Empty for non-mesh-derived ellipsoids.
+    std::string source_mesh_resource;
+    Eigen::Vector3d source_mesh_scale = Eigen::Vector3d::Ones();
 
     ObstacleGeometry() = default;
     // Existing 4-arg constructor — unchanged, semi-axes default to 0
     ObstacleGeometry(double radius, double length, double width, double height)
       : radius(radius), length(length), width(width), height(height) {}
-    // Ellipsoid constructor
+    // Ellipsoid constructor (axis-aligned, centered at origin)
     ObstacleGeometry(double semi_x, double semi_y, double semi_z, bool /*ellipsoid_tag*/)
       : semi_x(semi_x), semi_y(semi_y), semi_z(semi_z) {}
+    // Ellipsoid constructor with PCA axes and centroid offset
+    ObstacleGeometry(double semi_x, double semi_y, double semi_z,
+      const Eigen::Matrix3d& axes, const Eigen::Vector3d& centroid)
+      : semi_x(semi_x), semi_y(semi_y), semi_z(semi_z),
+        ellipsoid_axes(axes), centroid_offset(centroid) {}
 
     bool operator==(const ObstacleGeometry& other) const {
       return radius == other.radius && length == other.length &&
         width == other.width && height == other.height &&
-        semi_x == other.semi_x && semi_y == other.semi_y && semi_z == other.semi_z;
+        semi_x == other.semi_x && semi_y == other.semi_y && semi_z == other.semi_z &&
+        centroid_offset == other.centroid_offset &&
+        ellipsoid_axes == other.ellipsoid_axes;
     }
     bool operator!=(const ObstacleGeometry& other) const {
       return !(*this == other);
@@ -158,6 +180,8 @@ namespace pfield {
         return {length, width, height};
       case ObstacleType::ELLIPSOID:
         return {semi_x, semi_y, semi_z};
+      case ObstacleType::CAPSULE:
+        return {radius, height};
       default:
         throw std::invalid_argument("Unknown obstacle type");
       }
