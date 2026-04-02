@@ -27,6 +27,7 @@ add_library(${PROJECT_NAME} SHARED
   src/pfield/pfield.cpp
   src/pfield/pf_kinematics.cpp
   src/pfield/pf_obstacle.cpp
+  src/pfield/pf_obstacle_geometry.cpp
   src/pfield/mesh_collision.cpp
   src/pfield/spatial_vector.cpp
   src/solvers/weighted_ik.cpp
