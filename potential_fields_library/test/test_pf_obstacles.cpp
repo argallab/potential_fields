@@ -15,6 +15,7 @@
 #include <gtest/gtest.h>
 #include <eigen3/Eigen/Dense>
 #include "pfield/pf_obstacle.hpp"
+#include "pfield/pf_obstacle_geometry.hpp"
 
 // ============================================================================
 // Tests for toCoalCollisionObject()
@@ -26,9 +27,8 @@ TEST(PFObstacleCoal, ToCoalCollisionObject_Sphere) {
     "test_sphere",
     Eigen::Vector3d(1.0, 2.0, 3.0),
     Eigen::Quaterniond::Identity(),
-    pfield::ObstacleType::SPHERE,
     pfield::ObstacleGroup::STATIC,
-    pfield::ObstacleGeometry(0.5, 0.0, 0.0, 0.0)  // radius = 0.5
+    std::make_unique<pfield::SphereGeometry>(0.5)
   );
 
   // Convert to COAL collision object
@@ -57,9 +57,8 @@ TEST(PFObstacleCoal, ToCoalCollisionObject_Box) {
     "test_box",
     Eigen::Vector3d(0.0, 0.0, 0.0),
     Eigen::Quaterniond::Identity(),
-    pfield::ObstacleType::BOX,
     pfield::ObstacleGroup::STATIC,
-    pfield::ObstacleGeometry(0.0, 2.0, 1.0, 0.5)  // length=2, width=1, height=0.5
+    std::make_unique<pfield::BoxGeometry>(2.0, 1.0, 0.5)
   );
 
   auto coalObj = box.toCoalCollisionObject();
@@ -73,9 +72,8 @@ TEST(PFObstacleCoal, ToCoalCollisionObject_Cylinder) {
     "test_cylinder",
     Eigen::Vector3d(-1.0, -2.0, -3.0),
     Eigen::Quaterniond::Identity(),
-    pfield::ObstacleType::CYLINDER,
     pfield::ObstacleGroup::STATIC,
-    pfield::ObstacleGeometry(0.3, 0.0, 0.0, 1.2)  // radius=0.3, height=1.2
+    std::make_unique<pfield::CylinderGeometry>(0.3, 1.2)
   );
 
   auto coalObj = cylinder.toCoalCollisionObject();
@@ -94,14 +92,12 @@ TEST(PFObstacleCoal, ToCoalCollisionObject_Cylinder) {
 
 // Helper to build an axis-aligned ellipsoid at the origin
 static pfield::PotentialFieldObstacle makeEllipsoid(double sx, double sy, double sz) {
-  pfield::ObstacleGeometry geom(sx, sy, sz, /*ellipsoid_tag=*/true);
   return pfield::PotentialFieldObstacle(
     "test_ellipsoid",
     Eigen::Vector3d::Zero(),
     Eigen::Quaterniond::Identity(),
-    pfield::ObstacleType::ELLIPSOID,
     pfield::ObstacleGroup::ROBOT,
-    geom
+    std::make_unique<pfield::EllipsoidGeometry>(sx, sy, sz)
   );
 }
 
@@ -211,13 +207,13 @@ TEST(PFObstacleEllipsoid, PCARotated_PointOutside) {
   Eigen::Matrix3d pcaAxes;
   // 90° rotation around Z: X→Y, Y→-X
   pcaAxes << 0.0, -1.0, 0.0,
-             1.0,  0.0, 0.0,
-             0.0,  0.0, 1.0;
+    1.0, 0.0, 0.0,
+    0.0, 0.0, 1.0;
 
-  pfield::ObstacleGeometry geom(0.5, 0.2, 0.1, pcaAxes, Eigen::Vector3d::Zero());
   pfield::PotentialFieldObstacle ellipsoid(
     "pca_ellipsoid", Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity(),
-    pfield::ObstacleType::ELLIPSOID, pfield::ObstacleGroup::ROBOT, geom
+    pfield::ObstacleGroup::ROBOT,
+    std::make_unique<pfield::EllipsoidGeometry>(0.5, 0.2, 0.1, pcaAxes, Eigen::Vector3d::Zero())
   );
 
   double dist;
@@ -232,13 +228,13 @@ TEST(PFObstacleEllipsoid, PCARotated_PointInside) {
   // In PCA frame: pcaAxes^T * (0.1, 0, 0) = (0, 0.1, 0), which is along the 0.2 semi-axis → inside.
   Eigen::Matrix3d pcaAxes;
   pcaAxes << 0.0, -1.0, 0.0,
-             1.0,  0.0, 0.0,
-             0.0,  0.0, 1.0;
+    1.0, 0.0, 0.0,
+    0.0, 0.0, 1.0;
 
-  pfield::ObstacleGeometry geom(0.5, 0.2, 0.1, pcaAxes, Eigen::Vector3d::Zero());
   pfield::PotentialFieldObstacle ellipsoid(
     "pca_ellipsoid", Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity(),
-    pfield::ObstacleType::ELLIPSOID, pfield::ObstacleGroup::ROBOT, geom
+    pfield::ObstacleGroup::ROBOT,
+    std::make_unique<pfield::EllipsoidGeometry>(0.5, 0.2, 0.1, pcaAxes, Eigen::Vector3d::Zero())
   );
 
   double dist;
@@ -251,11 +247,11 @@ TEST(PFObstacleEllipsoid, CentroidOffset_ShiftsCenter) {
   // Ellipsoid centered at (1.0, 0, 0) in the obstacle frame (centroid_offset = (1.0, 0, 0)).
   // A point at (1.0, 0, 0) in obstacle frame should be at the center → inside.
   // A point at (0, 0, 0) in obstacle frame is (−1, 0, 0) relative to center → outside (semi_x=0.1).
-  pfield::ObstacleGeometry geom(0.1, 0.1, 0.1, Eigen::Matrix3d::Identity(),
-    Eigen::Vector3d(1.0, 0.0, 0.0));
   pfield::PotentialFieldObstacle ellipsoid(
     "offset_ellipsoid", Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity(),
-    pfield::ObstacleType::ELLIPSOID, pfield::ObstacleGroup::ROBOT, geom
+    pfield::ObstacleGroup::ROBOT,
+    std::make_unique<pfield::EllipsoidGeometry>(
+      0.1, 0.1, 0.1, Eigen::Matrix3d::Identity(), Eigen::Vector3d(1.0, 0.0, 0.0))
   );
 
   double dist;
@@ -278,9 +274,8 @@ TEST(PFObstacleCoal, ToCoalCollisionObject_WithRotation) {
     "rotated_sphere",
     Eigen::Vector3d::Zero(),
     rotation,
-    pfield::ObstacleType::SPHERE,
     pfield::ObstacleGroup::STATIC,
-    pfield::ObstacleGeometry(1.0, 0.0, 0.0, 0.0)
+    std::make_unique<pfield::SphereGeometry>(1.0)
   );
 
   auto coalObj = sphere.toCoalCollisionObject();
