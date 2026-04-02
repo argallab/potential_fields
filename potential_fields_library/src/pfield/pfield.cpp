@@ -14,6 +14,7 @@
 
 #include "pfield/pfield.hpp"
 #include "pfield/pf_obstacle.hpp"
+#include "pfield/pf_obstacle_geometry.hpp"
 #include "pfield/spatial_vector.hpp"
 #include <algorithm>
 #include <limits>
@@ -735,74 +736,6 @@ namespace pfield {
     // and picking the one with the smallest clearance per obstacle pair. This is smooth because
     // all sample points move continuously with the joint configuration.
     //
-    // Control point sets per type:
-    //   CAPSULE  — endcap centers (± halfShaft along capsule axis) + shaft midpoint (= link origin
-    //              after centroid offset). surfaceRadius = capsule radius for all three.
-    //   BOX      — 8 corners of the OBB. surfaceRadius = 0 (corners are on the surface).
-    //   SPHERE   — link center. surfaceRadius = radius.
-    //   CYLINDER — two endcap centers + shaft midpoint. surfaceRadius = radius.
-    //   default  — link center. surfaceRadius = halfDimensions().norm().
-    //
-    // Each entry is {worldPoint, surfaceRadius}.
-    using ControlPoint = std::pair<Eigen::Vector3d, double>;
-    auto buildControlPoints = [](const PotentialFieldObstacle& link)
-      -> std::vector<ControlPoint>
-    {
-      const ObstacleGeometry& g = link.getGeometry();
-      const Eigen::Vector3d& pos = link.getPosition();
-      const Eigen::Quaterniond& ori = link.getOrientation();
-
-      switch (link.getType()) {
-      case ObstacleType::CAPSULE: {
-        // Capsule axis = column 2 of ellipsoid_axes (capsule Z), in world frame
-        const Eigen::Vector3d capsuleAxisWorld =
-          ori * (g.ellipsoid_axes * Eigen::Vector3d::UnitZ());
-        const double halfShaft = g.height / 2.0;
-        // OBB centroid in world frame
-        const Eigen::Vector3d center = pos + ori * g.centroid_offset;
-        return {
-          {center + halfShaft * capsuleAxisWorld, g.radius},   // top endcap center
-          {center - halfShaft * capsuleAxisWorld, g.radius},   // bottom endcap center
-          {center,                                g.radius},   // shaft midpoint
-        };
-      }
-      case ObstacleType::BOX: {
-        // 8 corners of the OBB; corners are on the surface so surfaceRadius = 0
-        const Eigen::Vector3d center = pos + ori * g.centroid_offset;
-        const double hx = g.length / 2.0;
-        const double hy = g.width  / 2.0;
-        const double hz = g.height / 2.0;
-        const Eigen::Matrix3d& axes = g.ellipsoid_axes;
-        const Eigen::Vector3d ax = ori * axes.col(0);
-        const Eigen::Vector3d ay = ori * axes.col(1);
-        const Eigen::Vector3d az = ori * axes.col(2);
-        std::vector<ControlPoint> pts;
-        pts.reserve(8);
-        for (int sx : {-1, 1})
-          for (int sy : {-1, 1})
-            for (int sz : {-1, 1})
-              pts.push_back({center + sx*hx*ax + sy*hy*ay + sz*hz*az, 0.0});
-        return pts;
-      }
-      case ObstacleType::SPHERE: {
-        return {{pos, g.radius}};
-      }
-      case ObstacleType::CYLINDER: {
-        const double halfH = g.height / 2.0;
-        const Eigen::Vector3d axisWorld = ori * Eigen::Vector3d::UnitZ();
-        return {
-          {pos + halfH * axisWorld, g.radius},
-          {pos - halfH * axisWorld, g.radius},
-          {pos,                     g.radius},
-        };
-      }
-      default: {
-        const double r = link.halfDimensions().norm();
-        return {{pos, r}};
-      }
-      }
-    };
-
     // Extract link name from frameID ("linkName::collisionName" → "linkName")
     auto extractLinkName = [](const std::string& frameID) -> std::string {
       const size_t sep = frameID.find("::");
@@ -814,7 +747,7 @@ namespace pfield {
       double linkMinDist = std::numeric_limits<double>::infinity();
 
       const std::string linkName = extractLinkName(link.getFrameID());
-      const std::vector<ControlPoint> controlPoints = buildControlPoints(link);
+      const std::vector<ControlPoint> controlPoints = PotentialField::buildControlPoints(link);
 
       for (const auto& obs : envObstacles) {
         // Find the control point that gives the tightest (minimum) clearance to this obstacle.
@@ -1320,10 +1253,11 @@ namespace pfield {
           if (row < mat.size() && col < mat[row].size()) {
             const auto& v = mat[row][col];
             csvFile << "," << v.x() << "," << v.y() << "," << v.z();
-          } else {
+          }
+          else {
             csvFile << "," << std::numeric_limits<double>::quiet_NaN()
-                    << "," << std::numeric_limits<double>::quiet_NaN()
-                    << "," << std::numeric_limits<double>::quiet_NaN();
+              << "," << std::numeric_limits<double>::quiet_NaN()
+              << "," << std::numeric_limits<double>::quiet_NaN();
           }
         };
 
@@ -1362,6 +1296,63 @@ namespace pfield {
 
     csvFile.close();
     return true;
+  }
+
+  std::vector<PotentialField::ControlPoint> PotentialField::buildControlPoints(
+    const PotentialFieldObstacle& link) {
+    const Eigen::Vector3d& pos = link.getPosition();
+    const Eigen::Quaterniond& ori = link.getOrientation();
+
+    switch (link.getType()) {
+    case ObstacleType::CAPSULE: {
+      const auto& g = static_cast<const CapsuleGeometry&>(link.getGeometry());
+      // Capsule axis = column 2 of axes (capsule Z), in world frame
+      const Eigen::Vector3d capsuleAxisWorld = ori * (g.axes * Eigen::Vector3d::UnitZ());
+      const double halfShaft = g.height / 2.0;
+      const Eigen::Vector3d center = pos + ori * g.centroidOffset;
+      return {
+        {center + halfShaft * capsuleAxisWorld, g.radius},   // top endcap center
+        {center - halfShaft * capsuleAxisWorld, g.radius},   // bottom endcap center
+        {center,                                g.radius},   // shaft midpoint
+      };
+    }
+    case ObstacleType::BOX: {
+      // 8 corners of the OBB; corners are on the surface so surfaceRadius = 0
+      const auto& g = static_cast<const BoxGeometry&>(link.getGeometry());
+      const Eigen::Vector3d center = pos + ori * g.centroidOffset;
+      const double hx = g.length / 2.0;
+      const double hy = g.width / 2.0;
+      const double hz = g.height / 2.0;
+      const Eigen::Vector3d ax = ori * g.axes.col(0);
+      const Eigen::Vector3d ay = ori * g.axes.col(1);
+      const Eigen::Vector3d az = ori * g.axes.col(2);
+      std::vector<ControlPoint> pts;
+      pts.reserve(8);
+      for (int sx : {-1, 1})
+        for (int sy : {-1, 1})
+          for (int sz : {-1, 1})
+            pts.push_back({center + sx * hx * ax + sy * hy * ay + sz * hz * az, 0.0});
+      return pts;
+    }
+    case ObstacleType::SPHERE: {
+      const auto& g = static_cast<const SphereGeometry&>(link.getGeometry());
+      return {{pos, g.radius}};
+    }
+    case ObstacleType::CYLINDER: {
+      const auto& g = static_cast<const CylinderGeometry&>(link.getGeometry());
+      const double halfH = g.height / 2.0;
+      const Eigen::Vector3d axisWorld = ori * Eigen::Vector3d::UnitZ();
+      return {
+        {pos + halfH * axisWorld, g.radius},
+        {pos - halfH * axisWorld, g.radius},
+        {pos,                     g.radius},
+      };
+    }
+    default: {
+      const double r = link.halfDimensions().norm();
+      return {{pos, r}};
+    }
+    }
   }
 
 } // namespace pfield
