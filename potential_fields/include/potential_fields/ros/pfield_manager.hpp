@@ -153,6 +153,40 @@ private:
   MarkerArray createObstacleMarkers(std::shared_ptr<pfield::PotentialField> pf);
 
   /**
+   * @brief Build obstacle shape markers and their semi-transparent influence-zone overlays
+   *        for all environment and robot obstacles.
+   *
+   * @param obstacles Combined list of environment and robot obstacles.
+   * @param influenceDistance Repulsive influence radius [m].
+   * @return MarkerArray Markers in namespaces "robot_obstacles", "environment_obstacles",
+   *         and "environment_influence_zones".
+   */
+  MarkerArray createObstaclesWithInfluenceZoneMarkerArray(
+    const std::vector<pfield::PotentialFieldObstacle>& obstacles,
+    double influenceDistance);
+
+  /**
+   * @brief Build semi-transparent ghost mesh markers for CAPSULE robot obstacles that
+   *        were fitted from a mesh, so the original mesh is visible alongside the capsule
+   *        approximation in RViz.
+   *
+   * @param robotObstacles Robot link obstacles.
+   * @return MarkerArray Markers in namespace "robot_mesh_ghost".
+   */
+  MarkerArray createGhostMeshOverlayMarkerArray(
+    const std::vector<pfield::PotentialFieldObstacle>& robotObstacles);
+
+  /**
+   * @brief Build small sphere markers at each robot link control point used by the
+   *        whole-body velocity repulsion, for visualization in RViz.
+   *
+   * @param robotObstacles Robot link obstacles.
+   * @return MarkerArray Markers in namespace "robot_control_points".
+   */
+  MarkerArray createRobotLinkControlPointsMarkerArray(
+    const std::vector<pfield::PotentialFieldObstacle>& robotObstacles);
+
+  /**
    * @brief Create a marker for the goal position in the potential field
    *
    * @param pf The potential field instance

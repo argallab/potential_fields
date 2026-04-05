@@ -16,6 +16,7 @@
 #include <eigen3/Eigen/Dense>
 #include "pfield/pfield.hpp"
 #include "pfield/pf_obstacle.hpp"
+#include "pfield/pf_obstacle_geometry.hpp"
 #include "pfield/spatial_vector.hpp"
 // Use the simple IK from the NullIKSolver for planPathFromTaskSpaceWrench tests
 #include "mocks/null_ik_solver.hpp"
@@ -26,9 +27,8 @@ TEST(PotentialFieldTest, AddAndRemoveObstacles) {
     "o1",
     Eigen::Vector3d(1.0f, 1.0f, 1.0f),
     Eigen::Quaterniond::Identity(),
-    pfield::ObstacleType::SPHERE,
     pfield::ObstacleGroup::STATIC,
-    pfield::ObstacleGeometry{1.0f, 0.0f, 0.0f, 0.0f}
+    std::make_unique<pfield::SphereGeometry>(1.0)
   );
   pf.addObstacle(o1);
   EXPECT_EQ(pf.getEnvObstacles().size(), 1);
@@ -38,9 +38,8 @@ TEST(PotentialFieldTest, AddAndRemoveObstacles) {
     "o1",
     Eigen::Vector3d(2.0f, 2.0f, 2.0f),
     Eigen::Quaterniond::Identity(),
-    pfield::ObstacleType::SPHERE,
     pfield::ObstacleGroup::STATIC,
-    pfield::ObstacleGeometry{1.5f, 0.0f, 0.0f, 0.0f}
+    std::make_unique<pfield::SphereGeometry>(1.5)
   );
   pf.addObstacle(o1b);
   EXPECT_EQ(pf.getEnvObstacles().size(), 1);
@@ -48,7 +47,7 @@ TEST(PotentialFieldTest, AddAndRemoveObstacles) {
   EXPECT_EQ(pf.getEnvObstacles()[0].getPosition().x(), 2.0f);
   EXPECT_EQ(pf.getEnvObstacles()[0].getPosition().y(), 2.0f);
   EXPECT_EQ(pf.getEnvObstacles()[0].getPosition().z(), 2.0f);
-  EXPECT_EQ(pf.getEnvObstacles()[0].getGeometry().radius, 1.5f);
+  EXPECT_EQ(static_cast<const pfield::SphereGeometry&>(pf.getEnvObstacles()[0].getGeometry()).radius, 1.5);
 
 
   // Add another and remove
@@ -56,9 +55,8 @@ TEST(PotentialFieldTest, AddAndRemoveObstacles) {
     "o2",
     Eigen::Vector3d(-1.0, -1.0, 0.0),
     Eigen::Quaterniond::Identity(),
-    pfield::ObstacleType::BOX,
     pfield::ObstacleGroup::STATIC,
-    pfield::ObstacleGeometry{1.0, 2.0, 8.0, 1.0}
+    std::make_unique<pfield::BoxGeometry>(2.0, 8.0, 1.0)
   ));
   EXPECT_EQ(pf.getEnvObstacles().size(), 2);
   EXPECT_TRUE(pf.removeObstacle("o2"));
@@ -72,17 +70,15 @@ TEST(PotentialFieldTest, ClearObstacles) {
     "o1",
     Eigen::Vector3d::Zero(),
     Eigen::Quaterniond::Identity(),
-    pfield::ObstacleType::SPHERE,
     pfield::ObstacleGroup::STATIC,
-    pfield::ObstacleGeometry{2.0, 0.0, 0.0, 0.0}
+    std::make_unique<pfield::SphereGeometry>(2.0)
   ));
   pf.addObstacle(pfield::PotentialFieldObstacle(
     "o2",
     Eigen::Vector3d::Zero(),
     Eigen::Quaterniond::Identity(),
-    pfield::ObstacleType::SPHERE,
     pfield::ObstacleGroup::STATIC,
-    pfield::ObstacleGeometry{2.0, 0.0, 0.0, 0.0}
+    std::make_unique<pfield::SphereGeometry>(2.0)
   ));
   pf.clearObstacles();
   EXPECT_TRUE(pf.getEnvObstacles().empty());
@@ -134,25 +130,22 @@ TEST(PotentialFieldTest, RepulsiveFieldPushesAwayFromObstacle) {
     "o0",
     goalSV.getPosition(),
     Eigen::Quaterniond::Identity(),
-    pfield::ObstacleType::SPHERE,
     pfield::ObstacleGroup::STATIC,
-    pfield::ObstacleGeometry{2.0, 0.0, 0.0, 0.0}
+    std::make_unique<pfield::SphereGeometry>(2.0)
   );
   auto boxObst = pfield::PotentialFieldObstacle(
     "o1",
     goalSV.getPosition(),
     Eigen::Quaterniond::Identity(),
-    pfield::ObstacleType::BOX,
     pfield::ObstacleGroup::STATIC,
-    pfield::ObstacleGeometry{2.0, 2.0, 2.0, 0.0}
+    std::make_unique<pfield::BoxGeometry>(2.0, 2.0, 2.0)
   );
   auto cylinderObst = pfield::PotentialFieldObstacle(
     "o2",
     goalSV.getPosition(),
     Eigen::Quaterniond::Identity(),
-    pfield::ObstacleType::CYLINDER,
     pfield::ObstacleGroup::STATIC,
-    pfield::ObstacleGeometry{1.0, 0.0, 0.0, 2.0}
+    std::make_unique<pfield::CylinderGeometry>(1.0, 2.0)
   );
   pf.addObstacle(sphereObst);
   pfield::SpatialVector query(Eigen::Vector3d(1.0, 0.0, 0.0));
@@ -176,10 +169,10 @@ TEST(PotentialFieldTest, RepulsiveFieldPushesAwayFromObstacle) {
 
 TEST(PotentialFieldTest, BoxWithinObstacleAxisAligned) {
   Eigen::Vector3d center(1, 2, 3);
-  pfield::ObstacleGeometry geom{0.0, 2.0, 4.0, 6.0};  // length=2, width=4, height=6
   pfield::PotentialFieldObstacle box(
     "o1", center, Eigen::Quaterniond::Identity(),
-    pfield::ObstacleType::BOX, pfield::ObstacleGroup::STATIC, geom);
+    pfield::ObstacleGroup::STATIC,
+    std::make_unique<pfield::BoxGeometry>(2.0, 4.0, 6.0));
   // Points exactly on faces and inside
   EXPECT_TRUE(box.withinObstacle(Eigen::Vector3d(2.0, 2, 3)));  // +x face
   EXPECT_TRUE(box.withinObstacle(Eigen::Vector3d(0.0, 2, 3)));  // -x face
@@ -190,10 +183,10 @@ TEST(PotentialFieldTest, BoxWithinObstacleAxisAligned) {
 
 TEST(PotentialFieldTest, BoxWithinInfluenceZoneAxisAligned) {
   Eigen::Vector3d center(0, 0, 0);
-  pfield::ObstacleGeometry geom{0.0, 1.0, 1.0, 1.0};
   pfield::PotentialFieldObstacle box(
     "o1", center, Eigen::Quaterniond::Identity(),
-    pfield::ObstacleType::BOX, pfield::ObstacleGroup::STATIC, geom);
+    pfield::ObstacleGroup::STATIC,
+    std::make_unique<pfield::BoxGeometry>(1.0, 1.0, 1.0));
   // half-dims = (1,1,1)/2 * scale = (1,1,1)
   EXPECT_TRUE(box.withinInfluenceZone(Eigen::Vector3d(1.0, 0.5, 0.0), 2.0));
   // New semantics: absolute influence distance from surface. Pick a point farther than 2.0m from the box surface
@@ -204,10 +197,10 @@ TEST(PotentialFieldTest, BoxWithinObstacleRotated) {
   Eigen::Vector3d center(0, 0, 0);
   // rotate box 45 about Z
   Eigen::AngleAxisd rot(M_PI / 4, Eigen::Vector3d::UnitZ());
-  pfield::ObstacleGeometry geom{0.0, 2.0, 2.0, 2.0};
   pfield::PotentialFieldObstacle box(
     "o1", center, Eigen::Quaterniond(rot),
-    pfield::ObstacleType::BOX, pfield::ObstacleGroup::STATIC, geom);
+    pfield::ObstacleGroup::STATIC,
+    std::make_unique<pfield::BoxGeometry>(2.0, 2.0, 2.0));
   // In world frame, a local-axis-aligned point (1,0,0) maps to (cos45,sin45,0)
   Eigen::Vector3d query = rot * Eigen::Vector3d(1.0, 0, 0);
   EXPECT_TRUE(box.withinObstacle(query));
@@ -222,14 +215,14 @@ TEST(PotentialFieldTest, RotatedBoxOutsideInfluenceHasNoRepulsion) {
   // Define a unit box (length=width=height=2) rotated 45 degrees about Z
   Eigen::Vector3d center(0, 0, 0);
   Eigen::AngleAxisd rot(M_PI / 4, Eigen::Vector3d::UnitZ());
-  pfield::ObstacleGeometry geom{0.0, 2.0, 2.0, 2.0};
   pfield::PotentialFieldObstacle box(
     "obb_rot", center, Eigen::Quaterniond(rot),
-    pfield::ObstacleType::BOX, pfield::ObstacleGroup::STATIC, geom);
+    pfield::ObstacleGroup::STATIC,
+    std::make_unique<pfield::BoxGeometry>(2.0, 2.0, 2.0));
 
   // Influence distance measured from the box surface
   const double Q = 2.0;         // influence distance
-  const double half_len = geom.length * 0.5; // = 1.0
+  const double half_len = 2.0 * 0.5; // = 1.0 (box length / 2)
   const double eps = 0.05;      // small margin just outside the boundary
 
   // Choose a local point along +X beyond (half_len + Q) and rotate to world
@@ -252,10 +245,10 @@ TEST(PotentialFieldTest, RotatedBoxOutsideInfluenceHasNoRepulsion) {
 
 TEST(PotentialFieldTest, CylinderWithinObstacleAxisAligned) {
   Eigen::Vector3d center(5, -5, 0);
-  pfield::ObstacleGeometry geom{3.0, 0.0, 0.0, 4.0};  // radius=3, height=4
   pfield::PotentialFieldObstacle cyl(
     "o1", center, Eigen::Quaterniond::Identity(),
-    pfield::ObstacleType::CYLINDER, pfield::ObstacleGroup::STATIC, geom);
+    pfield::ObstacleGroup::STATIC,
+    std::make_unique<pfield::CylinderGeometry>(3.0, 4.0));
   // radial and z within half-height=2
   EXPECT_TRUE(cyl.withinObstacle(Eigen::Vector3d(8, -5, 1.0)));
   EXPECT_FALSE(cyl.withinObstacle(Eigen::Vector3d(9, -5, 1.0)));   // outside radius
@@ -264,10 +257,10 @@ TEST(PotentialFieldTest, CylinderWithinObstacleAxisAligned) {
 
 TEST(PotentialFieldTest, CylinderWithinInfluenceZoneAxisAligned) {
   Eigen::Vector3d center(0, 0, 0);
-  pfield::ObstacleGeometry geom{1.0, 0.0, 0.0, 2.0};
   pfield::PotentialFieldObstacle cyl(
     "o1", center, Eigen::Quaterniond::Identity(),
-    pfield::ObstacleType::CYLINDER, pfield::ObstacleGroup::STATIC, geom);
+    pfield::ObstacleGroup::STATIC,
+    std::make_unique<pfield::CylinderGeometry>(1.0, 2.0));
   // effective radius=3, half-height=3
   EXPECT_TRUE(cyl.withinInfluenceZone(Eigen::Vector3d(2.9, 0, 0), 3.0));
   // Far enough that distance to side surface > 3.0 (surface distance = 4.1 - 1.0 = 3.1)
@@ -278,10 +271,10 @@ TEST(PotentialFieldTest, CylinderWithinObstacleRotated) {
   Eigen::Vector3d center(0, 0, 0);
   // rotate cylinder so its axis tilts 90 into Y
   Eigen::AngleAxisd tilt(M_PI / 2, Eigen::Vector3d::UnitX());
-  pfield::ObstacleGeometry geom{2.0, 0.0, 0.0, 4.0};  // radius=2, height=4
   pfield::PotentialFieldObstacle cyl(
     "o1", center, Eigen::Quaterniond(tilt),
-    pfield::ObstacleType::CYLINDER, pfield::ObstacleGroup::STATIC, geom);
+    pfield::ObstacleGroup::STATIC,
+    std::make_unique<pfield::CylinderGeometry>(2.0, 4.0));
   // In local frame this point is on the +Z face; after tilt it's along +Y
   Eigen::Vector3d worldPoint = tilt * Eigen::Vector3d(0, 0, 2.0);
   EXPECT_TRUE(cyl.withinObstacle(worldPoint));
@@ -305,12 +298,12 @@ TEST(PotentialFieldTest, RepulsionAtSurfaceBoundary) {
     "o1",
     Eigen::Vector3d::Zero(),
     Eigen::Quaterniond::Identity(),
-    pfield::ObstacleType::SPHERE,
     pfield::ObstacleGroup::STATIC,
-    pfield::ObstacleGeometry{1.0, 0.0, 0.0, 0.0}
+    std::make_unique<pfield::SphereGeometry>(1.0)
   );
   pf.addObstacle(obs);
-  const double influenceZoneRadius = pf.getInfluenceDistance() + obs.getGeometry().radius;
+  const double obsRadius = static_cast<const pfield::SphereGeometry&>(obs.getGeometry()).radius;
+  const double influenceZoneRadius = pf.getInfluenceDistance() + obsRadius;
   pfield::SpatialVector onBoundary(Eigen::Vector3d(influenceZoneRadius, 0.0, 0.0));  // At influence radius
   pfield::SpatialVector outsideBoundary(Eigen::Vector3d(influenceZoneRadius + 0.1, 0.0, 0.0));  // Outside influence radius
   pfield::SpatialVector insideBoundary(Eigen::Vector3d(influenceZoneRadius - 0.1, 0.0, 0.0));  // Inside influence radius
@@ -329,9 +322,8 @@ TEST(PotentialFieldTest, RepulsionMonotonicity) {
     "o1",
     Eigen::Vector3d::Zero(),
     Eigen::Quaterniond::Identity(),
-    pfield::ObstacleType::SPHERE,
     pfield::ObstacleGroup::STATIC,
-    pfield::ObstacleGeometry{0.5, 0.0, 0.0, 0.0}
+    std::make_unique<pfield::SphereGeometry>(0.5)
   );
   pf.setInfluenceDistance(4.0);
   pf.setRepulsiveGain(2.0);
@@ -351,17 +343,15 @@ TEST(PotentialFieldTest, SymmetricObstaclesCancelAxes) {
     "o1",
     Eigen::Vector3d(-1, 0, 0),
     Eigen::Quaterniond::Identity(),
-    pfield::ObstacleType::SPHERE,
     pfield::ObstacleGroup::STATIC,
-    pfield::ObstacleGeometry{0.5, 0.0, 0.0, 0.0}
+    std::make_unique<pfield::SphereGeometry>(0.5)
   ));
   pf.addObstacle(pfield::PotentialFieldObstacle(
     "o2",
     Eigen::Vector3d(1, 0, 0),
     Eigen::Quaterniond::Identity(),
-    pfield::ObstacleType::SPHERE,
     pfield::ObstacleGroup::STATIC,
-    pfield::ObstacleGeometry{0.5, 0.0, 0.0, 0.0}
+    std::make_unique<pfield::SphereGeometry>(0.5)
   ));
   pf.setInfluenceDistance(6.0);
   pf.setRepulsiveGain(5.0);
@@ -724,9 +714,8 @@ TEST(PotentialFieldDynamicThresholdTest, MinObstacleClearanceAtAndAlongSegment) 
     "sphere1",
     Eigen::Vector3d::Zero(),
     Eigen::Quaterniond::Identity(),
-    pfield::ObstacleType::SPHERE,
     pfield::ObstacleGroup::STATIC,
-    pfield::ObstacleGeometry{1.0, 0.0, 0.0, 0.0}
+    std::make_unique<pfield::SphereGeometry>(1.0)
   ));
 
   // Point outside: distance to surface = 3 - 1 = 2
@@ -776,9 +765,8 @@ TEST(PotentialFieldDynamicThresholdTest, ClampedByInfluenceInClutter) {
     "clutter",
     goal.getPosition(),
     Eigen::Quaterniond::Identity(),
-    pfield::ObstacleType::SPHERE,
     pfield::ObstacleGroup::STATIC,
-    pfield::ObstacleGeometry{0.9, 0.0, 0.0, 0.0}
+    std::make_unique<pfield::SphereGeometry>(0.9)
   ));
   pfield::SpatialVector query(Eigen::Vector3d(5.0, 0.0, 0.0));
   const double dstar = pf.computeDynamicQuadraticThreshold(query);
@@ -831,9 +819,8 @@ TEST(PotentialFieldTest, EvaluateWholeBodyJointVelocitiesBasic) {
     "test_obstacle",
     Eigen::Vector3d(1.0, 0.5, 0.0),
     Eigen::Quaterniond::Identity(),
-    pfield::ObstacleType::SPHERE,
     pfield::ObstacleGroup::STATIC,
-    pfield::ObstacleGeometry{0.3, 0.0, 0.0, 0.0}
+    std::make_unique<pfield::SphereGeometry>(0.3)
   ));
 
   // Evaluate joint velocities
