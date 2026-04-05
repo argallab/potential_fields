@@ -41,11 +41,11 @@ namespace pfield {
       const std::vector<double>& jointPositions,
       Eigen::Matrix<double, 6, Eigen::Dynamic>& J) = 0;
 
-    virtual std::vector<double> getHomeConfiguration() const = 0;
+    [[nodiscard]] virtual std::vector<double> getHomeConfiguration() const = 0;
 
-    virtual std::vector<std::string> getJointNames() const = 0;
+    [[nodiscard]] virtual std::vector<std::string> getJointNames() const = 0;
 
-    virtual std::string getName() const { return this->name; }
+    [[nodiscard]] virtual std::string getName() const { return this->name; }
 
   protected:
     std::string name;

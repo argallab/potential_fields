@@ -230,15 +230,15 @@ namespace pfield {
     }
     bool operator!=(const PotentialFieldObstacle& other) const { return !(*this == other); }
 
-    std::string getFrameID() const { return this->frameID; }
-    ObstacleGroup getGroup() const { return this->group; }
-    Eigen::Vector3d getPosition() const { return this->position; }
-    Eigen::Quaterniond getOrientation() const { return this->orientation; }
-    ObstacleType getType() const { return this->geometry->getType(); }
-    const ObstacleGeometry& getGeometry() const { return *this->geometry; }
-    const std::string& getMeshResource() const { return this->meshResource; }
-    Eigen::Vector3d getMeshScale() const { return this->meshScale; }
-    std::shared_ptr<coal::CollisionObject> getCoalCollisionObject() const { return this->coalCollisionObject; }
+    [[nodiscard]] std::string getFrameID() const { return this->frameID; }
+    [[nodiscard]] ObstacleGroup getGroup() const { return this->group; }
+    [[nodiscard]] Eigen::Vector3d getPosition() const { return this->position; }
+    [[nodiscard]] Eigen::Quaterniond getOrientation() const { return this->orientation; }
+    [[nodiscard]] ObstacleType getType() const { return this->geometry->getType(); }
+    [[nodiscard]] const ObstacleGeometry& getGeometry() const { return *this->geometry; }
+    [[nodiscard]] const std::string& getMeshResource() const { return this->meshResource; }
+    [[nodiscard]] Eigen::Vector3d getMeshScale() const { return this->meshScale; }
+    [[nodiscard]] std::shared_ptr<coal::CollisionObject> getCoalCollisionObject() const { return this->coalCollisionObject; }
 
     void setPose(const Eigen::Vector3d newPosition, const Eigen::Quaterniond newOrientation) {
       this->position = newPosition;
@@ -343,7 +343,7 @@ namespace pfield {
     }
   };
 
-  static int inline createHashID(const PotentialFieldObstacle& obstacle) {
+  inline int createHashID(const PotentialFieldObstacle& obstacle) {
     PotentialFieldObstacleHash hasher;
     return static_cast<int>(hasher(obstacle) & 0x7FFFFFFF);  // keep positive
   }

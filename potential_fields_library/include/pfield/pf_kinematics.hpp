@@ -35,10 +35,11 @@
 
 namespace pfield {
 
+  /// An entry in the per-link collision catalog built from the URDF.
   struct CollisionCatalogEntry {
-    std::string id;         // unique obstacle id (link::name or link::colN)
-    std::string linkName;  // link this collision belongs to
-    urdf::CollisionSharedPtr col; // collision element
+    std::string id;                  ///< Unique obstacle ID (e.g. "link1::col0").
+    std::string linkName;            ///< Name of the URDF link this collision belongs to.
+    urdf::CollisionSharedPtr col;    ///< URDF collision element (geometry + origin).
   };
 
   class PFKinematics {
@@ -92,11 +93,11 @@ namespace pfield {
 
     std::vector<PotentialFieldObstacle> updateObstaclesFromJointAngles(const std::vector<double>& jointAngles);
 
-    bool areCachesInitialized() const { return this->cachesReady; }
-    const std::vector<std::string>& cachedJointNames() const { return this->jointNamesCache; }
-    const std::vector<std::string>& cachedLinkNames() const { return this->linkNamesCache; }
-    size_t getNumJoints() const { return this->numJoints; }
-    size_t getNumLinks() const { return this->numLinks; }
+    [[nodiscard]] bool areCachesInitialized() const { return this->cachesReady; }
+    [[nodiscard]] const std::vector<std::string>& cachedJointNames() const { return this->jointNamesCache; }
+    [[nodiscard]] const std::vector<std::string>& cachedLinkNames() const { return this->linkNamesCache; }
+    [[nodiscard]] size_t getNumJoints() const { return this->numJoints; }
+    [[nodiscard]] size_t getNumLinks() const { return this->numLinks; }
 
     /**
      * @brief Estimate a conservative bounding-sphere radius of the robot from its URDF
