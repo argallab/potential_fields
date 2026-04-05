@@ -76,6 +76,9 @@ namespace pfield_manager_types {
   using JointTrajectoryPointMsg = trajectory_msgs::msg::JointTrajectoryPoint;
 }  // namespace pfield_manager_types
 
+// Bring aliases into scope for this header and its includers.
+using namespace pfield_manager_types;  // NOLINT(build/namespaces)
+
 class PotentialFieldManager : public rclcpp::Node {
 public:
   PotentialFieldManager();

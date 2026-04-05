@@ -53,8 +53,6 @@
 
 #include "ros/pfield_manager.hpp"
 
-// Bring the node's message/service type aliases into scope for this TU.
-using namespace pfield_manager_types;  // NOLINT(build/namespaces)
 
 /// @brief Converts an HSV color to RGB format.
 /// @param hue        Hue [0, 360) degrees.
@@ -345,7 +343,7 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
   // Create service to compute the autonomy vector at a given pose
   this->autonomyVectorService = this->create_service<ComputeAutonomyVectorSrv>(
     "pfield/compute_autonomy_vector",
-    std::bind(&PotentialFieldManager::handleComputeAutonomyVectorSrv, this, std::placeholders::_1, std::placeholders::_2)
+    std::bind(&PotentialFieldManager::handleComputeAutonomyVector, this, std::placeholders::_1, std::placeholders::_2)
   );
 
   // Create the PlanPath service
@@ -398,7 +396,7 @@ void PotentialFieldManager::integrateQueryPoseFromField() {
   this->prevQueryTwist = twist;
 }
 
-void PotentialFieldManager::handleComputeAutonomyVectorSrv(
+void PotentialFieldManager::handleComputeAutonomyVector(
   const ComputeAutonomyVectorSrv::Request::SharedPtr request, ComputeAutonomyVectorSrv::Response::SharedPtr response) {
   // Compute the autonomy vector at the given pose
   pfield::SpatialVector queryPose(
@@ -540,7 +538,7 @@ void PotentialFieldManager::handlePlanPath(const PlanPathSrv::Request::SharedPtr
     }
     else {
       // Default to Task Space Wrench
-      if (!request->planning_method.empty() && request->planning_method != PlanPath::Request::PLANNING_METHOD_TASK_SPACE) {
+      if (!request->planning_method.empty() && request->planning_method != PlanPathSrv::Request::PLANNING_METHOD_TASK_SPACE) {
         RCLCPP_WARN(this->get_logger(), "Unknown planning method '%s'", request->planning_method.c_str());
       }
       RCLCPP_INFO(this->get_logger(), "Defaulting to Task-Space Wrench Planning");
@@ -727,8 +725,8 @@ MarkerArrayMsg PotentialFieldManager::createQueryPoseMarker() {
   qpSphere.frame_locked = true;
   qpSphere.ns = "query_pose";
   qpSphere.id = 0;
-  qpSphere.type = Marker::SPHERE;
-  qpSphere.action = Marker::ADD;
+  qpSphere.type = MarkerMsg::SPHERE;
+  qpSphere.action = MarkerMsg::ADD;
   qpSphere.pose.position.x = qp.getPosition().x();
   qpSphere.pose.position.y = qp.getPosition().y();
   qpSphere.pose.position.z = qp.getPosition().z();
@@ -753,8 +751,8 @@ MarkerArrayMsg PotentialFieldManager::createQueryPoseMarker() {
     axis.header.stamp = this->now();
     axis.ns = "query_pose";
     axis.id = i + 1;
-    axis.type = Marker::ARROW;
-    axis.action = Marker::ADD;
+    axis.type = MarkerMsg::ARROW;
+    axis.action = MarkerMsg::ADD;
     axis.frame_locked = true;
     axis.pose.position.x = qp.getPosition().x();
     axis.pose.position.y = qp.getPosition().y();
@@ -799,8 +797,8 @@ MarkerArrayMsg PotentialFieldManager::createThresholdMarkers(std::shared_ptr<pfi
   thresholdMarker.header.stamp = this->now();
   thresholdMarker.ns = "dstar_threshold";
   thresholdMarker.id = 0;
-  thresholdMarker.type = Marker::SPHERE;
-  thresholdMarker.action = Marker::ADD;
+  thresholdMarker.type = MarkerMsg::SPHERE;
+  thresholdMarker.action = MarkerMsg::ADD;
   thresholdMarker.pose.position.x = goalPose.getPosition().x();
   thresholdMarker.pose.position.y = goalPose.getPosition().y();
   thresholdMarker.pose.position.z = goalPose.getPosition().z();
@@ -830,7 +828,7 @@ MarkerArrayMsg PotentialFieldManager::createObstacleMarkers(std::shared_ptr<pfie
   for (const auto& ns : {"robot_obstacles", "environment_obstacles",
     "environment_influence_zones", "robot_control_points"}) {
     MarkerMsg del;
-    del.action = Marker::DELETEALL;
+    del.action = MarkerMsg::DELETEALL;
     del.ns = ns;
     markerArray.markers.push_back(del);
   }
@@ -842,23 +840,23 @@ MarkerArrayMsg PotentialFieldManager::createObstacleMarkers(std::shared_ptr<pfie
   allObstacles.insert(allObstacles.cend(), envObstacles.begin(), envObstacles.end());
   allObstacles.insert(allObstacles.cend(), robotObstacles.begin(), robotObstacles.end());
 
-  const MarkerArrayMsg obstacleMarkers = this->createObstaclesWithInfluenceZoneMarkerArrayMsg(
+  const MarkerArrayMsg obstacleMarkers = this->createObstaclesWithInfluenceZoneMarkerArray(
     allObstacles, pf->getInfluenceDistance());
   markerArray.markers.insert(markerArray.markers.cend(),
     obstacleMarkers.markers.begin(), obstacleMarkers.markers.end());
 
-  const MarkerArrayMsg ghostMarkers = this->createGhostMeshOverlayMarkerArrayMsg(robotObstacles);
+  const MarkerArrayMsg ghostMarkers = this->createGhostMeshOverlayMarkerArray(robotObstacles);
   markerArray.markers.insert(markerArray.markers.cend(),
     ghostMarkers.markers.begin(), ghostMarkers.markers.end());
 
-  const MarkerArrayMsg cpMarkers = this->createRobotLinkControlPointsMarkerArrayMsg(robotObstacles);
+  const MarkerArrayMsg cpMarkers = this->createRobotLinkControlPointsMarkerArray(robotObstacles);
   markerArray.markers.insert(markerArray.markers.cend(),
     cpMarkers.markers.begin(), cpMarkers.markers.end());
 
   return markerArray;
 }
 
-MarkerArrayMsg PotentialFieldManager::createObstaclesWithInfluenceZoneMarkerArrayMsg(
+MarkerArrayMsg PotentialFieldManager::createObstaclesWithInfluenceZoneMarkerArray(
   const std::vector<pfield::PotentialFieldObstacle>& obstacles,
   double influenceDistance) {
   MarkerArrayMsg markerArray;
@@ -883,7 +881,7 @@ MarkerArrayMsg PotentialFieldManager::createObstaclesWithInfluenceZoneMarkerArra
       obstacleMarker.ns = "environment_obstacles";
     }
     obstacleMarker.id = hashID;
-    obstacleMarker.action = Marker::ADD;
+    obstacleMarker.action = MarkerMsg::ADD;
     auto position = obstacle.getPosition();
     auto orientation = obstacle.getOrientation();
     obstacleMarker.pose.position.x = position.x();
@@ -897,7 +895,7 @@ MarkerArrayMsg PotentialFieldManager::createObstaclesWithInfluenceZoneMarkerArra
     case pfield::ObstacleType::SPHERE: {
       // Scale is the Diameter of the Sphere
       const auto& sg = static_cast<const pfield::SphereGeometry&>(obstacle.getGeometry());
-      obstacleMarker.type = Marker::SPHERE;
+      obstacleMarker.type = MarkerMsg::SPHERE;
       obstacleMarker.scale.x = sg.radius * 2.0f;
       obstacleMarker.scale.y = sg.radius * 2.0f;
       obstacleMarker.scale.z = sg.radius * 2.0f;
@@ -905,7 +903,7 @@ MarkerArrayMsg PotentialFieldManager::createObstaclesWithInfluenceZoneMarkerArra
     }
     case pfield::ObstacleType::BOX: {
       const auto& bg = static_cast<const pfield::BoxGeometry&>(obstacle.getGeometry());
-      obstacleMarker.type = Marker::CUBE;
+      obstacleMarker.type = MarkerMsg::CUBE;
       obstacleMarker.scale.x = bg.length;
       obstacleMarker.scale.y = bg.width;
       obstacleMarker.scale.z = bg.height;
@@ -930,7 +928,7 @@ MarkerArrayMsg PotentialFieldManager::createObstaclesWithInfluenceZoneMarkerArra
     }
     case pfield::ObstacleType::CYLINDER: {
       const auto& cg = static_cast<const pfield::CylinderGeometry&>(obstacle.getGeometry());
-      obstacleMarker.type = Marker::CYLINDER;
+      obstacleMarker.type = MarkerMsg::CYLINDER;
       obstacleMarker.scale.x = cg.radius * 2.0f;  // Diameter
       obstacleMarker.scale.y = cg.radius * 2.0f;  // Diameter
       obstacleMarker.scale.z = cg.height;          // Height
@@ -938,7 +936,7 @@ MarkerArrayMsg PotentialFieldManager::createObstaclesWithInfluenceZoneMarkerArra
     }
     case pfield::ObstacleType::MESH: {
       if (!obstacle.getMeshResource().empty()) {
-        obstacleMarker.type = Marker::MESH_RESOURCE;
+        obstacleMarker.type = MarkerMsg::MESH_RESOURCE;
         obstacleMarker.mesh_resource = obstacle.getMeshResource();
         obstacleMarker.mesh_use_embedded_materials = true;
         Eigen::Vector3d scale = obstacle.getMeshScale();
@@ -948,7 +946,7 @@ MarkerArrayMsg PotentialFieldManager::createObstaclesWithInfluenceZoneMarkerArra
       }
       else {
         // Fallback to inflated AABB cube
-        obstacleMarker.type = Marker::CUBE;
+        obstacleMarker.type = MarkerMsg::CUBE;
         const Eigen::Vector3d halfDims = obstacle.halfDimensions();
         obstacleMarker.scale.x = halfDims.x() * 2.0;
         obstacleMarker.scale.y = halfDims.y() * 2.0;
@@ -961,7 +959,7 @@ MarkerArrayMsg PotentialFieldManager::createObstaclesWithInfluenceZoneMarkerArra
       // Compose the obstacle orientation with the PCA rotation so the marker aligns with the
       // ellipsoid's principal axes in the world frame.
       const auto& eg = static_cast<const pfield::EllipsoidGeometry&>(obstacle.getGeometry());
-      obstacleMarker.type = Marker::SPHERE;
+      obstacleMarker.type = MarkerMsg::SPHERE;
       obstacleMarker.scale.x = eg.semiX * 2.0;
       obstacleMarker.scale.y = eg.semiY * 2.0;
       obstacleMarker.scale.z = eg.semiZ * 2.0;
@@ -1005,13 +1003,13 @@ MarkerArrayMsg PotentialFieldManager::createObstaclesWithInfluenceZoneMarkerArra
       // Guard against zero-scale warning in RViz: if the shaft is zero or near-zero,
       // render as a sphere (the capsule degenerates to a sphere).
       if (shaft < 1e-4) {
-        obstacleMarker.type = Marker::SPHERE;
+        obstacleMarker.type = MarkerMsg::SPHERE;
         obstacleMarker.scale.x = r * 2.0;
         obstacleMarker.scale.y = r * 2.0;
         obstacleMarker.scale.z = r * 2.0;
       }
       else {
-        obstacleMarker.type = Marker::CYLINDER;
+        obstacleMarker.type = MarkerMsg::CYLINDER;
         obstacleMarker.scale.x = r * 2.0;
         obstacleMarker.scale.y = r * 2.0;
         obstacleMarker.scale.z = shaft;
@@ -1061,8 +1059,8 @@ MarkerArrayMsg PotentialFieldManager::createObstaclesWithInfluenceZoneMarkerArra
         capMarker.header = obstacleMarker.header;
         capMarker.ns = obstacleMarker.ns;
         capMarker.id = hashID + 10000 + cap; // offset to avoid ID collision
-        capMarker.action = Marker::ADD;
-        capMarker.type = Marker::SPHERE;
+        capMarker.action = MarkerMsg::ADD;
+        capMarker.type = MarkerMsg::SPHERE;
         capMarker.pose.position.x = capCenter.x();
         capMarker.pose.position.y = capCenter.y();
         capMarker.pose.position.z = capCenter.z();
@@ -1087,7 +1085,7 @@ MarkerArrayMsg PotentialFieldManager::createObstaclesWithInfluenceZoneMarkerArra
     influenceMarker.frame_locked = true;
     influenceMarker.ns = "environment_influence_zones";
     influenceMarker.id = hashID; // mirror id for influence volume
-    influenceMarker.action = Marker::ADD;
+    influenceMarker.action = MarkerMsg::ADD;
     influenceMarker.pose.position.x = position.x();
     influenceMarker.pose.position.y = position.y();
     influenceMarker.pose.position.z = position.z();
@@ -1104,7 +1102,7 @@ MarkerArrayMsg PotentialFieldManager::createObstaclesWithInfluenceZoneMarkerArra
     case pfield::ObstacleType::SPHERE: {
       // Inflated sphere diameter = 2 * (radius + influenceDistance).
       const auto& sg2 = static_cast<const pfield::SphereGeometry&>(obstacle.getGeometry());
-      influenceMarker.type = Marker::SPHERE;
+      influenceMarker.type = MarkerMsg::SPHERE;
       const double influenceZoneDiameter = 2.0 * (sg2.radius + influenceDistance);
       influenceMarker.scale.x = influenceZoneDiameter;
       influenceMarker.scale.y = influenceZoneDiameter;
@@ -1114,7 +1112,7 @@ MarkerArrayMsg PotentialFieldManager::createObstaclesWithInfluenceZoneMarkerArra
     case pfield::ObstacleType::BOX: {
       // Inflated box dimensions = base dims + 2 * influenceDistance along each axis.
       const auto& bg2 = static_cast<const pfield::BoxGeometry&>(obstacle.getGeometry());
-      influenceMarker.type = Marker::CUBE;
+      influenceMarker.type = MarkerMsg::CUBE;
       influenceMarker.scale.x = bg2.length + 2.0 * influenceDistance;
       influenceMarker.scale.y = bg2.width + 2.0 * influenceDistance;
       influenceMarker.scale.z = bg2.height + 2.0 * influenceDistance;
@@ -1133,7 +1131,7 @@ MarkerArrayMsg PotentialFieldManager::createObstaclesWithInfluenceZoneMarkerArra
     case pfield::ObstacleType::CYLINDER: {
       // Inflated cylinder: diameter = 2 * (radius + d), height = height + 2 * d.
       const auto& cg2 = static_cast<const pfield::CylinderGeometry&>(obstacle.getGeometry());
-      influenceMarker.type = Marker::CYLINDER;
+      influenceMarker.type = MarkerMsg::CYLINDER;
       influenceMarker.scale.x = 2.0 * (cg2.radius + influenceDistance);
       influenceMarker.scale.y = 2.0 * (cg2.radius + influenceDistance);
       influenceMarker.scale.z = cg2.height + 2.0 * influenceDistance;
@@ -1144,7 +1142,7 @@ MarkerArrayMsg PotentialFieldManager::createObstaclesWithInfluenceZoneMarkerArra
       // We approximate a Minkowski sum by scaling the mesh per-axis so its AABB grows by +2d.
       // This preserves the silhouette and is a better visual cue than a plain inflated AABB cube.
       if (!obstacle.getMeshResource().empty()) {
-        influenceMarker.type = Marker::MESH_RESOURCE;
+        influenceMarker.type = MarkerMsg::MESH_RESOURCE;
         influenceMarker.mesh_resource = obstacle.getMeshResource();
         influenceMarker.mesh_use_embedded_materials = false; // keep our semi-transparent color
         // Base axis-aligned dimensions for the mesh in obstacle frame
@@ -1165,7 +1163,7 @@ MarkerArrayMsg PotentialFieldManager::createObstaclesWithInfluenceZoneMarkerArra
       }
       else {
         // Fallback: render an inflated AABB cube if no mesh resource provided
-        influenceMarker.type = Marker::CUBE;
+        influenceMarker.type = MarkerMsg::CUBE;
         const Eigen::Vector3d baseHalf = obstacle.halfDimensions();
         const Eigen::Vector3d baseDims = 2.0 * baseHalf; // L, W, H
         influenceMarker.scale.x = baseDims.x() + 2.0 * influenceDistance;
@@ -1178,7 +1176,7 @@ MarkerArrayMsg PotentialFieldManager::createObstaclesWithInfluenceZoneMarkerArra
       // Inflated ellipsoid: each semi-axis grows by influenceDistance.
       // Apply PCA orientation so the marker matches the ellipsoid's principal axes.
       const auto& eg2 = static_cast<const pfield::EllipsoidGeometry&>(obstacle.getGeometry());
-      influenceMarker.type = Marker::SPHERE;
+      influenceMarker.type = MarkerMsg::SPHERE;
       influenceMarker.scale.x = 2.0 * (eg2.semiX + influenceDistance);
       influenceMarker.scale.y = 2.0 * (eg2.semiY + influenceDistance);
       influenceMarker.scale.z = 2.0 * (eg2.semiZ + influenceDistance);
@@ -1210,7 +1208,7 @@ MarkerArrayMsg PotentialFieldManager::createObstaclesWithInfluenceZoneMarkerArra
       influenceMarker.pose.orientation.y = markerQ.y();
       influenceMarker.pose.orientation.z = markerQ.z();
       influenceMarker.pose.orientation.w = markerQ.w();
-      influenceMarker.type = Marker::CYLINDER;
+      influenceMarker.type = MarkerMsg::CYLINDER;
       influenceMarker.scale.x = r * 2.0;
       influenceMarker.scale.y = r * 2.0;
       influenceMarker.scale.z = shaft;
@@ -1223,7 +1221,7 @@ MarkerArrayMsg PotentialFieldManager::createObstaclesWithInfluenceZoneMarkerArra
   return markerArray;
 }
 
-MarkerArrayMsg PotentialFieldManager::createGhostMeshOverlayMarkerArrayMsg(
+MarkerArrayMsg PotentialFieldManager::createGhostMeshOverlayMarkerArray(
   const std::vector<pfield::PotentialFieldObstacle>& robotObstacles) {
   MarkerArrayMsg markerArray;
   int ghostID = 0;
@@ -1240,8 +1238,8 @@ MarkerArrayMsg PotentialFieldManager::createGhostMeshOverlayMarkerArrayMsg(
     ghostMarker.frame_locked = true;
     ghostMarker.ns = "robot_mesh_ghost";
     ghostMarker.id = ghostID++;
-    ghostMarker.action = Marker::ADD;
-    ghostMarker.type = Marker::MESH_RESOURCE;
+    ghostMarker.action = MarkerMsg::ADD;
+    ghostMarker.type = MarkerMsg::MESH_RESOURCE;
     ghostMarker.mesh_resource = meshURI;
     ghostMarker.mesh_use_embedded_materials = false;
 
@@ -1273,7 +1271,7 @@ MarkerArrayMsg PotentialFieldManager::createGhostMeshOverlayMarkerArrayMsg(
   return markerArray;
 }
 
-MarkerArrayMsg PotentialFieldManager::createRobotLinkControlPointsMarkerArrayMsg(
+MarkerArrayMsg PotentialFieldManager::createRobotLinkControlPointsMarkerArray(
   const std::vector<pfield::PotentialFieldObstacle>& robotObstacles) {
   MarkerArrayMsg markerArray;
   const double CP_RADIUS = 0.015; // sphere diameter = 3 cm
@@ -1295,8 +1293,8 @@ MarkerArrayMsg PotentialFieldManager::createRobotLinkControlPointsMarkerArrayMsg
       cpMarker.frame_locked = true;
       cpMarker.ns = "robot_control_points";
       cpMarker.id = linkIDBase + slotIndex++;
-      cpMarker.action = Marker::ADD;
-      cpMarker.type = Marker::SPHERE;
+      cpMarker.action = MarkerMsg::ADD;
+      cpMarker.type = MarkerMsg::SPHERE;
       cpMarker.pose.position.x = cp.x();
       cpMarker.pose.position.y = cp.y();
       cpMarker.pose.position.z = cp.z();
@@ -1326,8 +1324,8 @@ MarkerArrayMsg PotentialFieldManager::createGoalMarker(std::shared_ptr<pfield::P
   goalMarker.frame_locked = true;
   goalMarker.ns = "goal";
   goalMarker.id = 0;
-  goalMarker.type = Marker::SPHERE;
-  goalMarker.action = Marker::ADD;
+  goalMarker.type = MarkerMsg::SPHERE;
+  goalMarker.action = MarkerMsg::ADD;
   pfield::SpatialVector goalPose = pf->getGoalPose();
   goalMarker.pose.position.x = goalPose.getPosition().x();
   goalMarker.pose.position.y = goalPose.getPosition().y();
@@ -1344,7 +1342,7 @@ MarkerArrayMsg PotentialFieldManager::createGoalMarker(std::shared_ptr<pfield::P
   goalMarker.color.b = 0.0f;
   goalMarker.color.a = 1.0f; // Opaque
   goalMarker.lifetime = rclcpp::Duration(0, 0); // No lifetime
-  std::vector<Marker> goalAxes;
+  std::vector<MarkerMsg> goalAxes;
   goalAxes.reserve(3);
   for (int i = 0; i < 3; i++) {
     MarkerMsg axis;
@@ -1352,8 +1350,8 @@ MarkerArrayMsg PotentialFieldManager::createGoalMarker(std::shared_ptr<pfield::P
     axis.header.stamp = this->now();
     axis.ns = "goal";
     axis.id = i + 1;
-    axis.type = Marker::ARROW;
-    axis.action = Marker::ADD;
+    axis.type = MarkerMsg::ARROW;
+    axis.action = MarkerMsg::ADD;
     axis.frame_locked = true;
     axis.pose.position.x = goalPose.getPosition().x();
     axis.pose.position.y = goalPose.getPosition().y();
@@ -1412,8 +1410,8 @@ MarkerArrayMsg PotentialFieldManager::createPotentialVectorMarkers(std::shared_p
         vectorMarker.header.stamp = this->now();
         vectorMarker.ns = "potential_vectors";
         vectorMarker.id = id++;
-        vectorMarker.type = Marker::ARROW;
-        vectorMarker.action = Marker::ADD;
+        vectorMarker.type = MarkerMsg::ARROW;
+        vectorMarker.action = MarkerMsg::ADD;
         vectorMarker.pose.position.x = position.getPosition().x();
         vectorMarker.pose.position.y = position.getPosition().y();
         vectorMarker.pose.position.z = position.getPosition().z();
