@@ -67,6 +67,42 @@ using PlanPath = potential_fields_interfaces::srv::PlanPath;
 using ComputeAutonomyVector = potential_fields_interfaces::srv::ComputeAutonomyVector;
 using JointState = sensor_msgs::msg::JointState;
 
+/**
+ * @brief Converts a HSV color to RGB format.
+ *
+ * @param hue The hue component of the color [0-360) [degrees]
+ * @param saturation The saturation component of the color (0-1)
+ * @param value The value component of the color (0-1)
+ * @return std::array<double, 3> An array containing the RGB values in the range [0-1]
+ */
+static std::array<double, 3> convertHSVToRGB(double hue, double saturation, double value) {
+  double c = value * saturation;
+  double x = c * (1 - fabs(fmod(hue / 60.0, 2) - 1));
+  double m = value - c;
+
+  double rPrime, gPrime, bPrime;
+  if (hue >= 0 && hue < 60) {
+    rPrime = c; gPrime = x; bPrime = 0;
+  }
+  else if (hue >= 60 && hue < 120) {
+    rPrime = x; gPrime = c; bPrime = 0;
+  }
+  else if (hue >= 120 && hue < 180) {
+    rPrime = 0; gPrime = c; bPrime = x;
+  }
+  else if (hue >= 180 && hue < 240) {
+    rPrime = 0; gPrime = x; bPrime = c;
+  }
+  else if (hue >= 240 && hue < 300) {
+    rPrime = x; gPrime = 0; bPrime = c;
+  }
+  else {
+    rPrime = c; gPrime = 0; bPrime = x;
+  }
+
+  return {rPrime + m, gPrime + m, bPrime + m};
+}
+
 class PotentialFieldManager : public rclcpp::Node {
 public:
   PotentialFieldManager();

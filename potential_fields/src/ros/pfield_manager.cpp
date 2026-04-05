@@ -1260,7 +1260,7 @@ MarkerArray PotentialFieldManager::createRobotLinkControlPointsMarkerArray(
     // Deterministic color per link: hash the frame_id to a hue in [0, 360)
     const std::size_t hashValue = std::hash<std::string>{}(link.getFrameID());
     const double hue = static_cast<double>(hashValue % 360);
-    const auto& [r, g, b] = pfield::convertHSVToRGB(hue, 0.9, 0.9);
+    const auto& [r, g, b] = convertHSVToRGB(hue, 0.9, 0.9);
     // Stable per-link ID base: keeps IDs consistent across frames so RViz doesn't
     // see duplicate ns+id pairs when DELETEALL and ADD markers coexist in one message.
     const int linkIDBase = static_cast<int>(hashValue & 0x7FFFFFFF);

@@ -134,34 +134,6 @@ namespace pfield {
     return jointVelocities;
   }
 
-  static std::array<double, 3> convertHSVToRGB(double hue, double saturation, double value) {
-    double c = value * saturation;
-    double x = c * (1 - fabs(fmod(hue / 60.0, 2) - 1));
-    double m = value - c;
-
-    double rPrime, gPrime, bPrime;
-    if (hue >= 0 && hue < 60) {
-      rPrime = c; gPrime = x; bPrime = 0;
-    }
-    else if (hue >= 60 && hue < 120) {
-      rPrime = x; gPrime = c; bPrime = 0;
-    }
-    else if (hue >= 120 && hue < 180) {
-      rPrime = 0; gPrime = c; bPrime = x;
-    }
-    else if (hue >= 180 && hue < 240) {
-      rPrime = 0; gPrime = x; bPrime = c;
-    }
-    else if (hue >= 240 && hue < 300) {
-      rPrime = x; gPrime = 0; bPrime = c;
-    }
-    else {
-      rPrime = c; gPrime = 0; bPrime = x;
-    }
-
-    return {rPrime + m, gPrime + m, bPrime + m};
-  }
-
   constexpr double DEFAULT_ATTRACTIVE_GAIN = 1.0; // Gain for attractive force [Ns/m]
   constexpr double DEFAULT_ROTATIONAL_ATTRACTIVE_GAIN = 0.7; // Gain for rotational attractive force [Ns/m]
   constexpr double DEFAULT_MAX_LINEAR_VELOCITY = 5.0; // [m/s]
