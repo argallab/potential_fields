@@ -14,6 +14,7 @@
 
 #ifndef PF_KINEMATICS_HPP
 #define PF_KINEMATICS_HPP
+#include <memory>
 #include <string>
 #include <vector>
 #include <unordered_map>
@@ -204,6 +205,19 @@ namespace pfield {
 
 
   private:
+    /**
+     * @brief Fits a CapsuleGeometry to a URDF mesh collision object via PCA.
+     *
+     * Loads the mesh, computes a PCA-aligned oriented bounding box (OBB) from
+     * the scaled vertices, then derives capsule parameters (radius, shaft length,
+     * axes, centroid) from the dominant PCA axis. Falls back to the mesh scale
+     * when the mesh file cannot be loaded.
+     *
+     * @param m  Pointer to the URDF mesh geometry (non-null).
+     * @return   A CapsuleGeometry owning the fitted parameters.
+     */
+    std::unique_ptr<CapsuleGeometry> capsuleGeometryFromMesh(const urdf::Mesh* m) const;
+
     pinocchio::Model model;
     pinocchio::Data data;
     urdf::ModelInterfaceSharedPtr robotModel;

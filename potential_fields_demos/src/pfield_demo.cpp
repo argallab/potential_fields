@@ -63,7 +63,7 @@ PFDemo::PFDemo() : Node("pfield_demo") {
     rclcpp::sleep_for(std::chrono::milliseconds(100));
   }
   RCLCPP_INFO(this->get_logger(), "Subscribers detected on the /pfield/obstacles topic. Publishing obstacles...");
-  // this->createAndPublishObstacles();
+  this->createAndPublishObstacles();
 
   // Initialize demo service
   this->runPlanPathDemoService = this->create_service<std_srvs::srv::Empty>(
@@ -122,7 +122,7 @@ void PFDemo::handleRunPlanPathDemo(
   pathPlanRequest->delta_time = 0.02; // 20 ms between waypoints
   pathPlanRequest->goal_tolerance = 0.01; // 10 mm tolerance
   pathPlanRequest->max_iterations = 25000; // Max iterations for planning
-  pathPlanRequest->planning_method = PlanPath::Request::PLANNING_METHOD_TASK_SPACE; // "task_space" or "whole_body"
+  pathPlanRequest->planning_method = PlanPath::Request::PLANNING_METHOD_WHOLE_BODY; // "task_space" or "whole_body"
   const double dt = pathPlanRequest->delta_time;
 
   // Publish the goal pose
@@ -205,14 +205,30 @@ void PFDemo::createAndPublishObstacles() {
   // box.height = 0.6;
   // allObstacles.obstacles.push_back(box);
 
-  // Real Cylinder in the way
+  // // Real Cylinder in the way
+  // potential_fields_interfaces::msg::Obstacle cyl;
+  // cyl.frame_id = "pitcher";
+  // cyl.type = "Cylinder";
+  // cyl.group = "Static";
+  // cyl.radius = 0.18 / 2.0;
+  // cyl.height = 0.3;
+  // cyl.pose.position.x = 0.62;
+  // cyl.pose.position.y = 0.00;
+  // cyl.pose.position.z = (cyl.height / 2.0);
+  // cyl.pose.orientation.x = 0.0;
+  // cyl.pose.orientation.y = 0.0;
+  // cyl.pose.orientation.z = 0.0;
+  // cyl.pose.orientation.w = 1.0;
+  // allObstacles.obstacles.push_back(cyl);
+
+  // Fake Cylinder
   potential_fields_interfaces::msg::Obstacle cyl;
   cyl.frame_id = "pitcher";
   cyl.type = "Cylinder";
   cyl.group = "Static";
   cyl.radius = 0.18 / 2.0;
   cyl.height = 0.3;
-  cyl.pose.position.x = 0.62;
+  cyl.pose.position.x = 0.51;
   cyl.pose.position.y = 0.00;
   cyl.pose.position.z = (cyl.height / 2.0);
   cyl.pose.orientation.x = 0.0;

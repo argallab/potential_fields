@@ -58,6 +58,7 @@
 
 #include <ament_index_cpp/get_package_share_directory.hpp>
 #include "pfield/mesh_collision.hpp"
+#include "pfield/pf_obstacle_geometry.hpp"
 
 PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager") {
   RCLCPP_INFO(this->get_logger(), "PotentialFieldManager Initialized");
@@ -241,13 +242,38 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
     [this](const ObstacleArray::SharedPtr msg) {
     const auto& obstacles = msg->obstacles;
     for (const auto& obst : obstacles) {
+      // Build the typed geometry from the message's flat parameters
+      std::unique_ptr<pfield::ObstacleGeometry> geom;
+      const pfield::ObstacleType obstType = pfield::stringToObstacleType(obst.type);
+      switch (obstType) {
+      case pfield::ObstacleType::SPHERE:
+        geom = std::make_unique<pfield::SphereGeometry>(obst.radius);
+        break;
+      case pfield::ObstacleType::BOX:
+        geom = std::make_unique<pfield::BoxGeometry>(obst.length, obst.width, obst.height);
+        break;
+      case pfield::ObstacleType::CYLINDER:
+        geom = std::make_unique<pfield::CylinderGeometry>(obst.radius, obst.height);
+        break;
+      case pfield::ObstacleType::ELLIPSOID:
+        geom = std::make_unique<pfield::EllipsoidGeometry>(obst.radius, obst.length, obst.width);
+        break;
+      case pfield::ObstacleType::CAPSULE:
+        geom = std::make_unique<pfield::CapsuleGeometry>(obst.radius, obst.height);
+        break;
+      case pfield::ObstacleType::MESH:
+        geom = std::make_unique<pfield::MeshGeometry>(nullptr);
+        break;
+      default:
+        RCLCPP_WARN(this->get_logger(), "Unknown obstacle type: %s", obst.type.c_str());
+        continue;
+      }
       pfield::PotentialFieldObstacle obstacle(
         obst.frame_id,
         Eigen::Vector3d(obst.pose.position.x, obst.pose.position.y, obst.pose.position.z),
         Eigen::Quaterniond(obst.pose.orientation.w, obst.pose.orientation.x, obst.pose.orientation.y, obst.pose.orientation.z),
-        pfield::stringToObstacleType(obst.type),
         pfield::stringToObstacleGroup(obst.group),
-        pfield::ObstacleGeometry{obst.radius, obst.length, obst.width, obst.height},
+        std::move(geom),
         obst.mesh_resource,
         Eigen::Vector3d(obst.scale_x, obst.scale_y, obst.scale_z)
       );
@@ -778,28 +804,41 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<pfield:
   MarkerArray markerArray;
 
   // Clear previous markers to prevent trails
-  Marker deleteRobot;
-  deleteRobot.action = Marker::DELETEALL;
-  deleteRobot.ns = "robot_obstacles";
-  markerArray.markers.push_back(deleteRobot);
+  for (const auto& ns : {"robot_obstacles", "environment_obstacles",
+    "environment_influence_zones", "robot_control_points"}) {
+    Marker del;
+    del.action = Marker::DELETEALL;
+    del.ns = ns;
+    markerArray.markers.push_back(del);
+  }
 
-  Marker deleteEnv;
-  deleteEnv.action = Marker::DELETEALL;
-  deleteEnv.ns = "environment_obstacles";
-  markerArray.markers.push_back(deleteEnv);
+  const std::vector<pfield::PotentialFieldObstacle> envObstacles = pf->getEnvObstacles();
+  const std::vector<pfield::PotentialFieldObstacle> robotObstacles = pf->getRobotObstacles();
 
-  Marker deleteInf;
-  deleteInf.action = Marker::DELETEALL;
-  deleteInf.ns = "environment_influence_zones";
-  markerArray.markers.push_back(deleteInf);
+  std::vector<pfield::PotentialFieldObstacle> allObstacles;
+  allObstacles.insert(allObstacles.cend(), envObstacles.begin(), envObstacles.end());
+  allObstacles.insert(allObstacles.cend(), robotObstacles.begin(), robotObstacles.end());
 
-  std::vector<pfield::PotentialFieldObstacle> envObstacles = pf->getEnvObstacles();
-  std::vector<pfield::PotentialFieldObstacle> robotObstacles = pf->getRobotObstacles();
-  // Combine both environment and robot obstacles for visualization
-  std::vector<pfield::PotentialFieldObstacle> obstacles;
-  obstacles.insert(obstacles.end(), envObstacles.begin(), envObstacles.end());
-  obstacles.insert(obstacles.end(), robotObstacles.begin(), robotObstacles.end());
+  const MarkerArray obstacleMarkers = this->createObstaclesWithInfluenceZoneMarkerArray(
+    allObstacles, pf->getInfluenceDistance());
+  markerArray.markers.insert(markerArray.markers.cend(),
+    obstacleMarkers.markers.begin(), obstacleMarkers.markers.end());
 
+  const MarkerArray ghostMarkers = this->createGhostMeshOverlayMarkerArray(robotObstacles);
+  markerArray.markers.insert(markerArray.markers.cend(),
+    ghostMarkers.markers.begin(), ghostMarkers.markers.end());
+
+  const MarkerArray cpMarkers = this->createRobotLinkControlPointsMarkerArray(robotObstacles);
+  markerArray.markers.insert(markerArray.markers.cend(),
+    cpMarkers.markers.begin(), cpMarkers.markers.end());
+
+  return markerArray;
+}
+
+MarkerArray PotentialFieldManager::createObstaclesWithInfluenceZoneMarkerArray(
+  const std::vector<pfield::PotentialFieldObstacle>& obstacles,
+  double influenceDistance) {
+  MarkerArray markerArray;
   std::unordered_set<int> usedIDs;
 
   for (const auto& obstacle : obstacles) {
@@ -834,24 +873,44 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<pfield:
     switch (obstacle.getType()) {
     case pfield::ObstacleType::SPHERE: {
       // Scale is the Diameter of the Sphere
+      const auto& sg = static_cast<const pfield::SphereGeometry&>(obstacle.getGeometry());
       obstacleMarker.type = Marker::SPHERE;
-      obstacleMarker.scale.x = obstacle.getGeometry().radius * 2.0f;
-      obstacleMarker.scale.y = obstacle.getGeometry().radius * 2.0f;
-      obstacleMarker.scale.z = obstacle.getGeometry().radius * 2.0f;
+      obstacleMarker.scale.x = sg.radius * 2.0f;
+      obstacleMarker.scale.y = sg.radius * 2.0f;
+      obstacleMarker.scale.z = sg.radius * 2.0f;
       break;
     }
     case pfield::ObstacleType::BOX: {
+      const auto& bg = static_cast<const pfield::BoxGeometry&>(obstacle.getGeometry());
       obstacleMarker.type = Marker::CUBE;
-      obstacleMarker.scale.x = obstacle.getGeometry().length;
-      obstacleMarker.scale.y = obstacle.getGeometry().width;
-      obstacleMarker.scale.z = obstacle.getGeometry().height;
+      obstacleMarker.scale.x = bg.length;
+      obstacleMarker.scale.y = bg.width;
+      obstacleMarker.scale.z = bg.height;
+      // If the box was OBB-fitted from a mesh, shift the marker center to the OBB centroid
+      // and compose the PCA rotation with the obstacle orientation.
+      if (bg.centroidOffset.norm() > 1e-6) {
+        const Eigen::Vector3d worldCenter = obstacle.getPosition() + obstacle.getOrientation() * bg.centroidOffset;
+        obstacleMarker.pose.position.x = worldCenter.x();
+        obstacleMarker.pose.position.y = worldCenter.y();
+        obstacleMarker.pose.position.z = worldCenter.z();
+      }
+      if (!bg.axes.isIdentity(1e-6)) {
+        const Eigen::Quaterniond obstacleQ(obstacle.getOrientation());
+        const Eigen::Quaterniond obbQ(bg.axes);
+        const Eigen::Quaterniond markerQ = obstacleQ * obbQ;
+        obstacleMarker.pose.orientation.x = markerQ.x();
+        obstacleMarker.pose.orientation.y = markerQ.y();
+        obstacleMarker.pose.orientation.z = markerQ.z();
+        obstacleMarker.pose.orientation.w = markerQ.w();
+      }
       break;
     }
     case pfield::ObstacleType::CYLINDER: {
+      const auto& cg = static_cast<const pfield::CylinderGeometry&>(obstacle.getGeometry());
       obstacleMarker.type = Marker::CYLINDER;
-      obstacleMarker.scale.x = obstacle.getGeometry().radius * 2.0f; // Diameter
-      obstacleMarker.scale.y = obstacle.getGeometry().radius * 2.0f; // Diameter
-      obstacleMarker.scale.z = obstacle.getGeometry().height; // Height
+      obstacleMarker.scale.x = cg.radius * 2.0f;  // Diameter
+      obstacleMarker.scale.y = cg.radius * 2.0f;  // Diameter
+      obstacleMarker.scale.z = cg.height;          // Height
       break;
     }
     case pfield::ObstacleType::MESH: {
@@ -859,18 +918,80 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<pfield:
         obstacleMarker.type = Marker::MESH_RESOURCE;
         obstacleMarker.mesh_resource = obstacle.getMeshResource();
         obstacleMarker.mesh_use_embedded_materials = true;
-        // Use the meshScale for visualization; if geometry dims are provided and non-zero, multiply scale accordingly
         Eigen::Vector3d scale = obstacle.getMeshScale();
         obstacleMarker.scale.x = scale.x();
         obstacleMarker.scale.y = scale.y();
         obstacleMarker.scale.z = scale.z();
       }
       else {
-        // Fallback to box approximation
+        // Fallback to inflated AABB cube
         obstacleMarker.type = Marker::CUBE;
-        obstacleMarker.scale.x = obstacle.getGeometry().length;
-        obstacleMarker.scale.y = obstacle.getGeometry().width;
-        obstacleMarker.scale.z = obstacle.getGeometry().height;
+        const Eigen::Vector3d halfDims = obstacle.halfDimensions();
+        obstacleMarker.scale.x = halfDims.x() * 2.0;
+        obstacleMarker.scale.y = halfDims.y() * 2.0;
+        obstacleMarker.scale.z = halfDims.z() * 2.0;
+      }
+      break;
+    }
+    case pfield::ObstacleType::ELLIPSOID: {
+      // RViz SPHERE with non-uniform scale renders as an ellipsoid (scale = diameter per axis).
+      // Compose the obstacle orientation with the PCA rotation so the marker aligns with the
+      // ellipsoid's principal axes in the world frame.
+      const auto& eg = static_cast<const pfield::EllipsoidGeometry&>(obstacle.getGeometry());
+      obstacleMarker.type = Marker::SPHERE;
+      obstacleMarker.scale.x = eg.semiX * 2.0;
+      obstacleMarker.scale.y = eg.semiY * 2.0;
+      obstacleMarker.scale.z = eg.semiZ * 2.0;
+      {
+        const Eigen::Quaterniond obstacleQ(obstacle.getOrientation());
+        const Eigen::Quaterniond pcaQ(eg.axes);
+        const Eigen::Quaterniond markerQ = obstacleQ * pcaQ;
+        obstacleMarker.pose.orientation.x = markerQ.x();
+        obstacleMarker.pose.orientation.y = markerQ.y();
+        obstacleMarker.pose.orientation.z = markerQ.z();
+        obstacleMarker.pose.orientation.w = markerQ.w();
+      }
+      break;
+    }
+    case pfield::ObstacleType::CAPSULE: {
+      // RViz has no capsule primitive. Render as a cylinder for the shaft — endcap spheres are
+      // emitted as separate markers below, after this switch block.
+      const auto& capg = static_cast<const pfield::CapsuleGeometry&>(obstacle.getGeometry());
+      const double r = capg.radius;
+      const double shaft = capg.height;
+      const Eigen::Vector3d& centroidOffset = capg.centroidOffset;
+      const Eigen::Matrix3d& capsuleAxes = capg.axes;
+      // Shift marker position to OBB centroid
+      if (centroidOffset.norm() > 1e-6) {
+        const Eigen::Vector3d worldCenter = obstacle.getPosition()
+          + obstacle.getOrientation() * centroidOffset;
+        obstacleMarker.pose.position.x = worldCenter.x();
+        obstacleMarker.pose.position.y = worldCenter.y();
+        obstacleMarker.pose.position.z = worldCenter.z();
+      }
+      // Compose obstacle orientation with capsule PCA rotation
+      {
+        const Eigen::Quaterniond obstacleQ(obstacle.getOrientation());
+        const Eigen::Quaterniond capsuleQ(capsuleAxes);
+        const Eigen::Quaterniond markerQ = obstacleQ * capsuleQ;
+        obstacleMarker.pose.orientation.x = markerQ.x();
+        obstacleMarker.pose.orientation.y = markerQ.y();
+        obstacleMarker.pose.orientation.z = markerQ.z();
+        obstacleMarker.pose.orientation.w = markerQ.w();
+      }
+      // Guard against zero-scale warning in RViz: if the shaft is zero or near-zero,
+      // render as a sphere (the capsule degenerates to a sphere).
+      if (shaft < 1e-4) {
+        obstacleMarker.type = Marker::SPHERE;
+        obstacleMarker.scale.x = r * 2.0;
+        obstacleMarker.scale.y = r * 2.0;
+        obstacleMarker.scale.z = r * 2.0;
+      }
+      else {
+        obstacleMarker.type = Marker::CYLINDER;
+        obstacleMarker.scale.x = r * 2.0;
+        obstacleMarker.scale.y = r * 2.0;
+        obstacleMarker.scale.z = shaft;
       }
       break;
     }
@@ -887,9 +1008,51 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<pfield:
       obstacleMarker.color.g = 0.0f;
       obstacleMarker.color.b = 0.0f;
     }
-    obstacleMarker.color.a = 1.0f; // Opaque
+    if (obstacle.getGroup() == pfield::ObstacleGroup::ROBOT) {
+      obstacleMarker.color.a = 0.65f; // Transparent for robot obstacles
+    }
+    else {
+      obstacleMarker.color.a = 0.95f; // Opaque for environment obstacles
+    }
     obstacleMarker.lifetime = rclcpp::Duration(0, 0); // No lifetime
     markerArray.markers.push_back(obstacleMarker);
+
+    // For capsule obstacles, emit two additional sphere markers for the hemispherical endcaps.
+    if (obstacle.getType() == pfield::ObstacleType::CAPSULE) {
+      const auto& capg2 = static_cast<const pfield::CapsuleGeometry&>(obstacle.getGeometry());
+      const double r = capg2.radius;
+      const double halfShaft = capg2.height / 2.0;
+      const Eigen::Vector3d& centroidOffset = capg2.centroidOffset;
+      const Eigen::Matrix3d& capsuleAxes = capg2.axes;
+      const Eigen::Quaterniond obstacleQ(obstacle.getOrientation());
+      const Eigen::Quaterniond capsuleQ(capsuleAxes);
+      const Eigen::Quaterniond markerQ = obstacleQ * capsuleQ;
+      // Capsule axis = column 2 of capsuleAxes, in world frame = markerQ * Z
+      const Eigen::Vector3d capsuleAxisWorld = markerQ * Eigen::Vector3d::UnitZ();
+      const Eigen::Vector3d center = obstacle.getPosition() + obstacleQ * centroidOffset;
+
+      for (int cap = 0; cap < 2; ++cap) {
+        const double sign = (cap == 0) ? 1.0 : -1.0;
+        const Eigen::Vector3d capCenter = center + sign * halfShaft * capsuleAxisWorld;
+        Marker capMarker;
+        capMarker.header = obstacleMarker.header;
+        capMarker.ns = obstacleMarker.ns;
+        capMarker.id = hashID + 10000 + cap; // offset to avoid ID collision
+        capMarker.action = Marker::ADD;
+        capMarker.type = Marker::SPHERE;
+        capMarker.pose.position.x = capCenter.x();
+        capMarker.pose.position.y = capCenter.y();
+        capMarker.pose.position.z = capCenter.z();
+        capMarker.pose.orientation = obstacleMarker.pose.orientation;
+        capMarker.scale.x = r * 2.0;
+        capMarker.scale.y = r * 2.0;
+        capMarker.scale.z = r * 2.0;
+        capMarker.color = obstacleMarker.color;
+        capMarker.lifetime = rclcpp::Duration(0, 0);
+        markerArray.markers.push_back(capMarker);
+      }
+    }
+
     if (obstacle.getGroup() == pfield::ObstacleGroup::ROBOT) {
       // Skip influence zone visualization for robot obstacles
       continue;
@@ -914,12 +1077,12 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<pfield:
     influenceMarker.color.b = 0.0f;
     influenceMarker.color.a = 0.35f; // Semi-transparent
     influenceMarker.lifetime = rclcpp::Duration(0, 0); // No lifetime
-    const double influenceDistance = pf->getInfluenceDistance();
     switch (obstacle.getType()) {
     case pfield::ObstacleType::SPHERE: {
       // Inflated sphere diameter = 2 * (radius + influenceDistance).
+      const auto& sg2 = static_cast<const pfield::SphereGeometry&>(obstacle.getGeometry());
       influenceMarker.type = Marker::SPHERE;
-      const double influenceZoneDiameter = 2.0 * (obstacle.getGeometry().radius + influenceDistance);
+      const double influenceZoneDiameter = 2.0 * (sg2.radius + influenceDistance);
       influenceMarker.scale.x = influenceZoneDiameter;
       influenceMarker.scale.y = influenceZoneDiameter;
       influenceMarker.scale.z = influenceZoneDiameter;
@@ -927,19 +1090,30 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<pfield:
     }
     case pfield::ObstacleType::BOX: {
       // Inflated box dimensions = base dims + 2 * influenceDistance along each axis.
+      const auto& bg2 = static_cast<const pfield::BoxGeometry&>(obstacle.getGeometry());
       influenceMarker.type = Marker::CUBE;
-      influenceMarker.scale.x = obstacle.getGeometry().length + 2.0 * influenceDistance;
-      influenceMarker.scale.y = obstacle.getGeometry().width + 2.0 * influenceDistance;
-      influenceMarker.scale.z = obstacle.getGeometry().height + 2.0 * influenceDistance;
+      influenceMarker.scale.x = bg2.length + 2.0 * influenceDistance;
+      influenceMarker.scale.y = bg2.width + 2.0 * influenceDistance;
+      influenceMarker.scale.z = bg2.height + 2.0 * influenceDistance;
+      // Apply OBB orientation if present
+      if (!bg2.axes.isIdentity(1e-6)) {
+        const Eigen::Quaterniond obstacleQ(obstacle.getOrientation());
+        const Eigen::Quaterniond obbQ(bg2.axes);
+        const Eigen::Quaterniond markerQ = obstacleQ * obbQ;
+        influenceMarker.pose.orientation.x = markerQ.x();
+        influenceMarker.pose.orientation.y = markerQ.y();
+        influenceMarker.pose.orientation.z = markerQ.z();
+        influenceMarker.pose.orientation.w = markerQ.w();
+      }
       break;
     }
     case pfield::ObstacleType::CYLINDER: {
       // Inflated cylinder: diameter = 2 * (radius + d), height = height + 2 * d.
+      const auto& cg2 = static_cast<const pfield::CylinderGeometry&>(obstacle.getGeometry());
       influenceMarker.type = Marker::CYLINDER;
-      const double r = obstacle.getGeometry().radius;
-      influenceMarker.scale.x = 2.0 * (r + influenceDistance);
-      influenceMarker.scale.y = 2.0 * (r + influenceDistance);
-      influenceMarker.scale.z = obstacle.getGeometry().height + 2.0 * influenceDistance;
+      influenceMarker.scale.x = 2.0 * (cg2.radius + influenceDistance);
+      influenceMarker.scale.y = 2.0 * (cg2.radius + influenceDistance);
+      influenceMarker.scale.z = cg2.height + 2.0 * influenceDistance;
       break;
     }
     case pfield::ObstacleType::MESH: {
@@ -977,8 +1151,143 @@ MarkerArray PotentialFieldManager::createObstacleMarkers(std::shared_ptr<pfield:
       }
       break;
     }
+    case pfield::ObstacleType::ELLIPSOID: {
+      // Inflated ellipsoid: each semi-axis grows by influenceDistance.
+      // Apply PCA orientation so the marker matches the ellipsoid's principal axes.
+      const auto& eg2 = static_cast<const pfield::EllipsoidGeometry&>(obstacle.getGeometry());
+      influenceMarker.type = Marker::SPHERE;
+      influenceMarker.scale.x = 2.0 * (eg2.semiX + influenceDistance);
+      influenceMarker.scale.y = 2.0 * (eg2.semiY + influenceDistance);
+      influenceMarker.scale.z = 2.0 * (eg2.semiZ + influenceDistance);
+      {
+        const Eigen::Quaterniond obstacleQ(obstacle.getOrientation());
+        const Eigen::Quaterniond pcaQ(eg2.axes);
+        const Eigen::Quaterniond markerQ = obstacleQ * pcaQ;
+        influenceMarker.pose.orientation.x = markerQ.x();
+        influenceMarker.pose.orientation.y = markerQ.y();
+        influenceMarker.pose.orientation.z = markerQ.z();
+        influenceMarker.pose.orientation.w = markerQ.w();
+      }
+      break;
+    }
+    case pfield::ObstacleType::CAPSULE: {
+      // Inflated capsule: radius + influenceDistance, shaft unchanged.
+      const auto& capg3 = static_cast<const pfield::CapsuleGeometry&>(obstacle.getGeometry());
+      const double r = capg3.radius + influenceDistance;
+      const double shaft = capg3.height;
+      const Eigen::Quaterniond obstacleQ(obstacle.getOrientation());
+      const Eigen::Quaterniond capsuleQ(capg3.axes);
+      const Eigen::Quaterniond markerQ = obstacleQ * capsuleQ;
+      const Eigen::Vector3d worldCenter = obstacle.getPosition()
+        + obstacleQ * capg3.centroidOffset;
+      influenceMarker.pose.position.x = worldCenter.x();
+      influenceMarker.pose.position.y = worldCenter.y();
+      influenceMarker.pose.position.z = worldCenter.z();
+      influenceMarker.pose.orientation.x = markerQ.x();
+      influenceMarker.pose.orientation.y = markerQ.y();
+      influenceMarker.pose.orientation.z = markerQ.z();
+      influenceMarker.pose.orientation.w = markerQ.w();
+      influenceMarker.type = Marker::CYLINDER;
+      influenceMarker.scale.x = r * 2.0;
+      influenceMarker.scale.y = r * 2.0;
+      influenceMarker.scale.z = shaft;
+      break;
+    }
     }
     markerArray.markers.push_back(influenceMarker);
+  }
+
+  return markerArray;
+}
+
+MarkerArray PotentialFieldManager::createGhostMeshOverlayMarkerArray(
+  const std::vector<pfield::PotentialFieldObstacle>& robotObstacles) {
+  MarkerArray markerArray;
+  int ghostID = 0;
+
+  for (const auto& obstacle : robotObstacles) {
+    if (obstacle.getType() != pfield::ObstacleType::CAPSULE) { continue; }
+    const auto& ghostCapg = static_cast<const pfield::CapsuleGeometry&>(obstacle.getGeometry());
+    const std::string& meshURI = ghostCapg.sourceMeshResource;
+    if (meshURI.empty()) { continue; }
+
+    Marker ghostMarker;
+    ghostMarker.header.frame_id = this->fixedFrame;
+    ghostMarker.header.stamp = this->now();
+    ghostMarker.frame_locked = true;
+    ghostMarker.ns = "robot_mesh_ghost";
+    ghostMarker.id = ghostID++;
+    ghostMarker.action = Marker::ADD;
+    ghostMarker.type = Marker::MESH_RESOURCE;
+    ghostMarker.mesh_resource = meshURI;
+    ghostMarker.mesh_use_embedded_materials = false;
+
+    const auto pos = obstacle.getPosition();
+    const auto ori = obstacle.getOrientation();
+    ghostMarker.pose.position.x = pos.x();
+    ghostMarker.pose.position.y = pos.y();
+    ghostMarker.pose.position.z = pos.z();
+    ghostMarker.pose.orientation.x = ori.x();
+    ghostMarker.pose.orientation.y = ori.y();
+    ghostMarker.pose.orientation.z = ori.z();
+    ghostMarker.pose.orientation.w = ori.w();
+
+    const Eigen::Vector3d& s = ghostCapg.sourceMeshScale;
+    ghostMarker.scale.x = s.x();
+    ghostMarker.scale.y = s.y();
+    ghostMarker.scale.z = s.z();
+
+    // Semi-transparent white so the capsule (green) is visible through the mesh
+    ghostMarker.color.r = 0.9f;
+    ghostMarker.color.g = 0.9f;
+    ghostMarker.color.b = 0.9f;
+    ghostMarker.color.a = 0.35f;
+    ghostMarker.lifetime = rclcpp::Duration(0, 0);
+
+    markerArray.markers.push_back(ghostMarker);
+  }
+
+  return markerArray;
+}
+
+MarkerArray PotentialFieldManager::createRobotLinkControlPointsMarkerArray(
+  const std::vector<pfield::PotentialFieldObstacle>& robotObstacles) {
+  MarkerArray markerArray;
+  const double CP_RADIUS = 0.015; // sphere diameter = 3 cm
+
+  for (const auto& link : robotObstacles) {
+    const auto controlPoints = pfield::PotentialField::buildControlPoints(link);
+    // Deterministic color per link: hash the frame_id to a hue in [0, 360)
+    const std::size_t hashValue = std::hash<std::string>{}(link.getFrameID());
+    const double hue = static_cast<double>(hashValue % 360);
+    const auto& [r, g, b] = pfield::convertHSVToRGB(hue, 0.9, 0.9);
+    // Stable per-link ID base: keeps IDs consistent across frames so RViz doesn't
+    // see duplicate ns+id pairs when DELETEALL and ADD markers coexist in one message.
+    const int linkIDBase = static_cast<int>(hashValue & 0x7FFFFFFF);
+    int slotIndex = 0;
+    for (const auto& [cp, surfaceRadius] : controlPoints) {
+      Marker cpMarker;
+      cpMarker.header.frame_id = this->fixedFrame;
+      cpMarker.header.stamp = this->now();
+      cpMarker.frame_locked = true;
+      cpMarker.ns = "robot_control_points";
+      cpMarker.id = linkIDBase + slotIndex++;
+      cpMarker.action = Marker::ADD;
+      cpMarker.type = Marker::SPHERE;
+      cpMarker.pose.position.x = cp.x();
+      cpMarker.pose.position.y = cp.y();
+      cpMarker.pose.position.z = cp.z();
+      cpMarker.pose.orientation.w = 1.0;
+      cpMarker.scale.x = CP_RADIUS * 2.0;
+      cpMarker.scale.y = CP_RADIUS * 2.0;
+      cpMarker.scale.z = CP_RADIUS * 2.0;
+      cpMarker.color.r = r;
+      cpMarker.color.g = g;
+      cpMarker.color.b = b;
+      cpMarker.color.a = 1.0f;
+      cpMarker.lifetime = rclcpp::Duration(0, 0);
+      markerArray.markers.push_back(cpMarker);
+    }
   }
 
   return markerArray;
@@ -1153,15 +1462,15 @@ void PotentialFieldManager::exportFieldDataToCSV(std::shared_ptr<pfield::Potenti
   std::string obstacles_filename = "data/" + base_filename + "_obstacles.csv";
   std::ofstream obstacles_file(obstacles_filename);
   if (obstacles_file.is_open()) {
-    obstacles_file << "obstacle_x,obstacle_y,obstacle_z,type,influence,repulsive_gain,radius,length,width,height\n";
+    obstacles_file << "obstacle_x,obstacle_y,obstacle_z,type,influence,repulsive_gain,params\n";
     for (const auto& obstacle : pf->getEnvObstacles()) {
       const Eigen::Vector3d& position = obstacle.getPosition();
-      const pfield::ObstacleGeometry& g = obstacle.getGeometry();
+      const std::vector<double> params = obstacle.getGeometry().asVector();
       obstacles_file << position.x() << "," << position.y() << "," << position.z() << ","
         << pfield::obstacleTypeToString(obstacle.getType()) << "," << this->pField->getInfluenceDistance() << ","
-        << this->pField->getRepulsiveGain() << ","
-        << g.radius << "," << g.length << "," << g.width << "," << g.height
-        << "\n";
+        << this->pField->getRepulsiveGain();
+      for (double p : params) { obstacles_file << "," << p; }
+      obstacles_file << "\n";
     }
     obstacles_file.close();
   }

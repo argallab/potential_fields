@@ -21,6 +21,7 @@
 
 #include "pfield/pfield.hpp"
 #include "pfield/pf_obstacle.hpp"
+#include "pfield/pf_obstacle_geometry.hpp"
 #include "pfield/spatial_vector.hpp"
 
 class VisualizationProfilingTest : public ::testing::Test {
@@ -35,18 +36,16 @@ protected:
       "obs1",
       Eigen::Vector3d(0.3, 0.1, 0.3),
       Eigen::Quaterniond::Identity(),
-      pfield::ObstacleType::SPHERE,
       pfield::ObstacleGroup::STATIC,
-      pfield::ObstacleGeometry{0.1, 0.0, 0.0, 0.0}
+      std::make_unique<pfield::SphereGeometry>(0.1)
     ));
 
     pf->addObstacle(pfield::PotentialFieldObstacle(
       "obs2",
       Eigen::Vector3d(0.6, -0.2, 0.6),
       Eigen::Quaterniond::Identity(),
-      pfield::ObstacleType::BOX,
       pfield::ObstacleGroup::STATIC,
-      pfield::ObstacleGeometry{0.0, 0.2, 0.2, 0.2}
+      std::make_unique<pfield::BoxGeometry>(0.2, 0.2, 0.2)
     ));
 
     // Parameters matching PotentialFieldManager defaults
@@ -82,7 +81,7 @@ TEST_F(VisualizationProfilingTest, ProfileVectorFieldGeneration) {
         if (pf->isPointInsideObstacle(point)) { continue; }
 
         pfield::SpatialVector position{point};
-        pfield::TaskSpaceTwist velocity = pf->evaluateLimitedVelocityAtPose(position);
+        pf->evaluateLimitedVelocityAtPose(position);
         evaluatedCount++;
 
         // Simulate marker creation overhead (minimal)

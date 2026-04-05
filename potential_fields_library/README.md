@@ -92,7 +92,14 @@ int main() {
     pf.setGoalPose(goal);
 
     // Add Obstacle
-    auto obstacle = pfield::PotentialFieldObstacle::createSphere("obs1", Eigen::Vector3d(0.5, 0.0, 0.5), 0.2);
+    Eigen::Vector3d obsPosition(0.5, 0.0, 0.5);
+    ObstacleGeometry obsGeom;
+    obsGeom.radius = 0.2;
+    auto obstacle = pfield::PotentialFieldObstacle(
+        // FrameID, position, orientation, type, group, geometry
+        "obs1", obsPosition, Eigen::Quaterniond::Identity(),
+        pfield::ObstacleType::SPHERE, pfield::ObstacleGroup::STATIC, obsGeom
+    );
     pf.addObstacle(obstacle);
 
     // Query Field at a point

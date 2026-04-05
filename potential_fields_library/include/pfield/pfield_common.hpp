@@ -109,11 +109,11 @@ namespace pfield {
 
   /**
    * @brief Approximates joint velocities given current and previous joint angles and a time step
-   * 
+   *
    * @note This function uses finite differencing to estimate joint velocities which may be noisy and
    *       inaccurate for small dt values. This can likely be improved with filtering or by providing more
    *       historical velocity data to compute a better estimate.
-   * 
+   *
    * @param currentJointAngles The current joint angles [rad]
    * @param previousJointAngles The previous joint angles [rad]
    * @param dt The time difference between the current and previous joint angles [s]
@@ -132,6 +132,34 @@ namespace pfield {
       jointVelocities.push_back((currentJointAngles[i] - previousJointAngles[i]) / dt);
     }
     return jointVelocities;
+  }
+
+  static std::array<double, 3> convertHSVToRGB(double hue, double saturation, double value) {
+    double c = value * saturation;
+    double x = c * (1 - fabs(fmod(hue / 60.0, 2) - 1));
+    double m = value - c;
+
+    double rPrime, gPrime, bPrime;
+    if (hue >= 0 && hue < 60) {
+      rPrime = c; gPrime = x; bPrime = 0;
+    }
+    else if (hue >= 60 && hue < 120) {
+      rPrime = x; gPrime = c; bPrime = 0;
+    }
+    else if (hue >= 120 && hue < 180) {
+      rPrime = 0; gPrime = c; bPrime = x;
+    }
+    else if (hue >= 180 && hue < 240) {
+      rPrime = 0; gPrime = x; bPrime = c;
+    }
+    else if (hue >= 240 && hue < 300) {
+      rPrime = x; gPrime = 0; bPrime = c;
+    }
+    else {
+      rPrime = c; gPrime = 0; bPrime = x;
+    }
+
+    return {rPrime + m, gPrime + m, bPrime + m};
   }
 
   constexpr double DEFAULT_ATTRACTIVE_GAIN = 1.0; // Gain for attractive force [Ns/m]

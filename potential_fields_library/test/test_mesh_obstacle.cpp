@@ -17,6 +17,7 @@
 // We build a synthetic unit cube mesh programmatically to avoid external resources.
 
 #include "pfield/pf_obstacle.hpp"
+#include "pfield/pf_obstacle_geometry.hpp"
 #include "pfield/mesh_collision.hpp"
 
 #include <gtest/gtest.h>
@@ -303,8 +304,8 @@ TEST(PFObstacle, SignedDistanceAndNormal_Sphere) {
   pfield::PotentialFieldObstacle sphere(
     "world",
     Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity(),
-    pfield::ObstacleType::SPHERE, pfield::ObstacleGroup::STATIC,
-    pfield::ObstacleGeometry(/*radius*/1.0, /*L*/0.0, /*W*/0.0, /*H*/0.0));
+    pfield::ObstacleGroup::STATIC,
+    std::make_unique<pfield::SphereGeometry>(1.0));
 
   double sd; Eigen::Vector3d n;
   sphere.computeSignedDistanceAndNormal(Eigen::Vector3d(2.0, 0.0, 0.0), sd, n);
@@ -325,8 +326,8 @@ TEST(PFObstacle, SignedDistanceAndNormal_Box_AxisAligned) {
   pfield::PotentialFieldObstacle box(
     "world",
     Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity(),
-    pfield::ObstacleType::BOX, pfield::ObstacleGroup::STATIC,
-    pfield::ObstacleGeometry(/*r*/0.0, /*L*/2.0, /*W*/2.0, /*H*/2.0));
+    pfield::ObstacleGroup::STATIC,
+    std::make_unique<pfield::BoxGeometry>(2.0, 2.0, 2.0));
 
   double sd; Eigen::Vector3d n;
   // Outside along +X
@@ -349,8 +350,8 @@ TEST(PFObstacle, SignedDistanceAndNormal_Cylinder) {
   pfield::PotentialFieldObstacle cyl(
     "world",
     Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity(),
-    pfield::ObstacleType::CYLINDER, pfield::ObstacleGroup::STATIC,
-    pfield::ObstacleGeometry(/*r*/1.0, /*L*/0.0, /*W*/0.0, /*H*/2.0));
+    pfield::ObstacleGroup::STATIC,
+    std::make_unique<pfield::CylinderGeometry>(1.0, 2.0));
 
   double sd; Eigen::Vector3d n;
   // Outside on the side within height
@@ -380,8 +381,8 @@ TEST(PFObstacle, SignedDistanceAndNormal_MeshCube) {
   pfield::PotentialFieldObstacle meshObs(
     "world",
     Eigen::Vector3d::Zero(), Eigen::Quaterniond::Identity(),
-    pfield::ObstacleType::MESH, pfield::ObstacleGroup::STATIC,
-    pfield::ObstacleGeometry(/*r*/0.0, /*L*/1.0, /*W*/1.0, /*H*/1.0));
+    pfield::ObstacleGroup::STATIC,
+    std::make_unique<pfield::MeshGeometry>(nullptr));
   auto cubePtr = std::make_shared<pfield::MeshCollisionData>(buildUnitCubeMesh());
   // Assign the synthetic mesh directly (allowed by private->public hack at include)
   meshObs.setMeshCollisionData(cubePtr);
