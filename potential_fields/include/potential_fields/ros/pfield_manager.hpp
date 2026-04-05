@@ -54,62 +54,35 @@
 
 #include "rclcpp/rclcpp.hpp"
 
-using Marker = visualization_msgs::msg::Marker;
-using MarkerArray = visualization_msgs::msg::MarkerArray;
-using Pose = geometry_msgs::msg::Pose;
-using Point = geometry_msgs::msg::Point;
-using Quaternion = geometry_msgs::msg::Quaternion;
-using Path = nav_msgs::msg::Path;
-using TransformStamped = geometry_msgs::msg::TransformStamped;
-using Obstacle = potential_fields_interfaces::msg::Obstacle;
-using ObstacleArray = potential_fields_interfaces::msg::ObstacleArray;
-using PlanPath = potential_fields_interfaces::srv::PlanPath;
-using ComputeAutonomyVector = potential_fields_interfaces::srv::ComputeAutonomyVector;
-using JointState = sensor_msgs::msg::JointState;
-
-/**
- * @brief Converts a HSV color to RGB format.
- *
- * @param hue The hue component of the color [0-360) [degrees]
- * @param saturation The saturation component of the color (0-1)
- * @param value The value component of the color (0-1)
- * @return std::array<double, 3> An array containing the RGB values in the range [0-1]
- */
-static std::array<double, 3> convertHSVToRGB(double hue, double saturation, double value) {
-  double c = value * saturation;
-  double x = c * (1 - fabs(fmod(hue / 60.0, 2) - 1));
-  double m = value - c;
-
-  double rPrime, gPrime, bPrime;
-  if (hue >= 0 && hue < 60) {
-    rPrime = c; gPrime = x; bPrime = 0;
-  }
-  else if (hue >= 60 && hue < 120) {
-    rPrime = x; gPrime = c; bPrime = 0;
-  }
-  else if (hue >= 120 && hue < 180) {
-    rPrime = 0; gPrime = c; bPrime = x;
-  }
-  else if (hue >= 180 && hue < 240) {
-    rPrime = 0; gPrime = x; bPrime = c;
-  }
-  else if (hue >= 240 && hue < 300) {
-    rPrime = x; gPrime = 0; bPrime = c;
-  }
-  else {
-    rPrime = c; gPrime = 0; bPrime = x;
-  }
-
-  return {rPrime + m, gPrime + m, bPrime + m};
-}
+// Short aliases for ROS message/service types used throughout the node.
+// Scoped to pfield_manager_types to avoid polluting headers that include this file.
+namespace pfield_manager_types {
+  using MarkerMsg = visualization_msgs::msg::Marker;
+  using MarkerArrayMsg = visualization_msgs::msg::MarkerArray;
+  using PoseMsg = geometry_msgs::msg::Pose;
+  using PoseStampedMsg = geometry_msgs::msg::PoseStamped;
+  using PointMsg = geometry_msgs::msg::Point;
+  using QuaternionMsg = geometry_msgs::msg::Quaternion;
+  using TwistMsg = geometry_msgs::msg::Twist;
+  using TwistStampedMsg = geometry_msgs::msg::TwistStamped;
+  using PathMsg = nav_msgs::msg::Path;
+  using TransformStampedMsg = geometry_msgs::msg::TransformStamped;
+  using ObstacleMsg = potential_fields_interfaces::msg::Obstacle;
+  using ObstacleArrayMsg = potential_fields_interfaces::msg::ObstacleArray;
+  using PlanPathSrv = potential_fields_interfaces::srv::PlanPath;
+  using ComputeAutonomyVectorSrv = potential_fields_interfaces::srv::ComputeAutonomyVector;
+  using JointStateMsg = sensor_msgs::msg::JointState;
+  using JointTrajectoryMsg = trajectory_msgs::msg::JointTrajectory;
+  using JointTrajectoryPointMsg = trajectory_msgs::msg::JointTrajectoryPoint;
+}  // namespace pfield_manager_types
 
 class PotentialFieldManager : public rclcpp::Node {
 public:
   PotentialFieldManager();
   ~PotentialFieldManager() = default;
 
-  static Quaternion getQuaternionFromYaw(double yaw) {
-    Quaternion q;
+  [[nodiscard]] static QuaternionMsg getQuaternionFromYaw(double yaw) {
+    QuaternionMsg q;
     q.x = 0.0;
     q.y = 0.0;
     q.z = sin(yaw / 2.0);
@@ -151,42 +124,42 @@ private:
   const double TASK_SPACE_AXIS_HEAD_DIAMETER = 0.025; // Diameter of axis heads [m]
 
   rclcpp::TimerBase::SharedPtr timer; // Timer to periodically update the potential field
-  rclcpp::Publisher<MarkerArray>::SharedPtr pFieldMarkerPub; // Publisher for PF Markers
-  rclcpp::Publisher<JointState>::SharedPtr planningJointStatePub; // Publisher for planning joint states
-  rclcpp::Publisher<Path>::SharedPtr plannedEndEffectorPathPub; // Publisher for planned end-effector path
-  rclcpp::Subscription<Pose>::SharedPtr goalPoseSub; // Subscriber for the goal pose
-  rclcpp::Subscription<Pose>::SharedPtr queryPoseSub; // Subscriber for query poses
-  rclcpp::Subscription<ObstacleArray>::SharedPtr obstacleSub; // Subscriber for obstacles
-  rclcpp::Service<PlanPath>::SharedPtr pathPlanningService; // Now hosted here
-  rclcpp::Service<ComputeAutonomyVector>::SharedPtr autonomyVectorService; // Service to compute velocity vector at a given pose
+  rclcpp::Publisher<MarkerArrayMsg>::SharedPtr pFieldMarkerPub; // Publisher for PF Markers
+  rclcpp::Publisher<JointStateMsg>::SharedPtr planningJointStatePub; // Publisher for planning joint states
+  rclcpp::Publisher<PathMsg>::SharedPtr plannedEndEffectorPathPub; // Publisher for planned end-effector path
+  rclcpp::Subscription<PoseMsg>::SharedPtr goalPoseSub; // Subscriber for the goal pose
+  rclcpp::Subscription<PoseMsg>::SharedPtr queryPoseSub; // Subscriber for query poses
+  rclcpp::Subscription<ObstacleArrayMsg>::SharedPtr obstacleSub; // Subscriber for obstacles
+  rclcpp::Service<PlanPathSrv>::SharedPtr pathPlanningService; // Now hosted here
+  rclcpp::Service<ComputeAutonomyVectorSrv>::SharedPtr autonomyVectorService; // Service to compute velocity vector at a given pose
 
   void timerCallback();
 
   // Service callbacks
-  void handlePlanPath(const PlanPath::Request::SharedPtr request, PlanPath::Response::SharedPtr response);
+  void handlePlanPath(const PlanPathSrv::Request::SharedPtr request, PlanPathSrv::Response::SharedPtr response);
   void handleComputeAutonomyVector(
-    const ComputeAutonomyVector::Request::SharedPtr request, ComputeAutonomyVector::Response::SharedPtr response);
+    const ComputeAutonomyVectorSrv::Request::SharedPtr request, ComputeAutonomyVectorSrv::Response::SharedPtr response);
 
   /**
    * @brief Given a potential field, generate all visualization markers
    *        (goal, obstacles, obstacle influence zones, velocity vectors)
    *
    * @param pf The potential field instance
-   * @return MarkerArray The marker array containing all visualization markers
+   * @return MarkerArrayMsg The marker array containing all visualization markers
    */
-  MarkerArray visualizePF(std::shared_ptr<pfield::PotentialField> pf);
+  MarkerArrayMsg visualizePF(std::shared_ptr<pfield::PotentialField> pf);
 
-  MarkerArray createQueryPoseMarker();
+  MarkerArrayMsg createQueryPoseMarker();
 
-  MarkerArray createThresholdMarkers(std::shared_ptr<pfield::PotentialField> pf);
+  MarkerArrayMsg createThresholdMarkers(std::shared_ptr<pfield::PotentialField> pf);
 
   /**
    * @brief Get Obstacle and Obstacle Influence Zone markers from a potential field
    *
    * @param pf The potential field instance
-   * @return MarkerArray The marker array containing all obstacle markers
+   * @return MarkerArrayMsg The marker array containing all obstacle markers
    */
-  MarkerArray createObstacleMarkers(std::shared_ptr<pfield::PotentialField> pf);
+  MarkerArrayMsg createObstacleMarkers(std::shared_ptr<pfield::PotentialField> pf);
 
   /**
    * @brief Build obstacle shape markers and their semi-transparent influence-zone overlays
@@ -194,10 +167,10 @@ private:
    *
    * @param obstacles Combined list of environment and robot obstacles.
    * @param influenceDistance Repulsive influence radius [m].
-   * @return MarkerArray Markers in namespaces "robot_obstacles", "environment_obstacles",
+   * @return MarkerArrayMsg Markers in namespaces "robot_obstacles", "environment_obstacles",
    *         and "environment_influence_zones".
    */
-  MarkerArray createObstaclesWithInfluenceZoneMarkerArray(
+  MarkerArrayMsg createObstaclesWithInfluenceZoneMarkerArray(
     const std::vector<pfield::PotentialFieldObstacle>& obstacles,
     double influenceDistance);
 
@@ -207,28 +180,26 @@ private:
    *        approximation in RViz.
    *
    * @param robotObstacles Robot link obstacles.
-   * @return MarkerArray Markers in namespace "robot_mesh_ghost".
+   * @return MarkerArrayMsg Markers in namespace "robot_mesh_ghost".
    */
-  MarkerArray createGhostMeshOverlayMarkerArray(
-    const std::vector<pfield::PotentialFieldObstacle>& robotObstacles);
+  MarkerArrayMsg createGhostMeshOverlayMarkerArray(const std::vector<pfield::PotentialFieldObstacle>& robotObstacles);
 
   /**
    * @brief Build small sphere markers at each robot link control point used by the
    *        whole-body velocity repulsion, for visualization in RViz.
    *
    * @param robotObstacles Robot link obstacles.
-   * @return MarkerArray Markers in namespace "robot_control_points".
+   * @return MarkerArrayMsg Markers in namespace "robot_control_points".
    */
-  MarkerArray createRobotLinkControlPointsMarkerArray(
-    const std::vector<pfield::PotentialFieldObstacle>& robotObstacles);
+  MarkerArrayMsg createRobotLinkControlPointsMarkerArray(const std::vector<pfield::PotentialFieldObstacle>& robotObstacles);
 
   /**
    * @brief Create a marker for the goal position in the potential field
    *
    * @param pf The potential field instance
-   * @return MarkerArray The marker array containing the goal marker and orientation indicator
+   * @return MarkerArrayMsg The marker array containing the goal marker and orientation indicator
    */
-  MarkerArray createGoalMarker(std::shared_ptr<pfield::PotentialField> pf);
+  MarkerArrayMsg createGoalMarker(std::shared_ptr<pfield::PotentialField> pf);
 
   /**
    * @brief Create velocity vector markers for visualization in RViz
@@ -237,9 +208,9 @@ private:
    *       and the vector sizes are normalized but the color intensity represents the magnitude
    *
    * @param pf The potential field instance
-   * @return MarkerArray The marker array containing all velocity vector markers
+   * @return MarkerArrayMsg The marker array containing all velocity vector markers
    */
-  MarkerArray createPotentialVectorMarkers(std::shared_ptr<pfield::PotentialField> pf);
+  MarkerArrayMsg createPotentialVectorMarkers(std::shared_ptr<pfield::PotentialField> pf);
 
   /**
    * @brief Fuses the two twists using a weighted alpha parameter
@@ -249,21 +220,18 @@ private:
    * @param twist1 The first twist to fuse
    * @param twist2 The second twist to fuse
    * @param alpha The weight for the second twist [0.0, 1.0]
-   * @return geometry_msgs::msg::Twist The fused twist
+   * @return TwistMsg The fused twist
    */
-  geometry_msgs::msg::Twist fuseTwists(
-    const geometry_msgs::msg::Twist::SharedPtr twist1,
-    const geometry_msgs::msg::Twist::SharedPtr twist2,
-    const double alpha);
+  TwistMsg fuseTwists(const TwistMsg::SharedPtr twist1, const TwistMsg::SharedPtr twist2, const double alpha);
 
   /**
    * @brief Clamps the twist to the specified limits.
    *
    * @param twist The twist to clamp
    * @param limits A twist message where linear and angular components represent the maximum allowed values
-   * @return geometry_msgs::msg::Twist The clamped twist as a new message
+   * @return TwistMsg The clamped twist as a new message
    */
-  geometry_msgs::msg::Twist clampTwist(const geometry_msgs::msg::Twist& twist, const geometry_msgs::msg::Twist& limits);
+  TwistMsg clampTwist(const TwistMsg& twist, const TwistMsg& limits);
 
   /**
    * @brief Exports the potential field data to a CSV file for external analysis or visualization.
