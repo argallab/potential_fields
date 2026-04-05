@@ -256,7 +256,7 @@ PotentialFieldManager::PotentialFieldManager() : Node("potential_field_manager")
         geom = std::make_unique<pfield::CylinderGeometry>(obst.radius, obst.height);
         break;
       case pfield::ObstacleType::ELLIPSOID:
-        geom = std::make_unique<pfield::EllipsoidGeometry>(obst.radius, obst.length, obst.width);
+        geom = std::make_unique<pfield::EllipsoidGeometry>(obst.semi_x, obst.semi_y, obst.semi_z);
         break;
       case pfield::ObstacleType::CAPSULE:
         geom = std::make_unique<pfield::CapsuleGeometry>(obst.radius, obst.height);

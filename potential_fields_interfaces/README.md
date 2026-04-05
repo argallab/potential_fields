@@ -7,18 +7,21 @@ ROS 2 message and service definitions for the `potential_fields` package. All no
 ### `Obstacle.msg`
 Describes a single obstacle in the potential field environment.
 
-| Field | Type | Description |
-|-------|------|-------------|
-| `frame_id` | `string` | Unique identifier for this obstacle (e.g. `"wall_1"`, `"link2::col0"`) |
-| `type` | `string` | Shape type: `"Sphere"`, `"Box"`, `"Cylinder"`, or `"Mesh"` |
-| `group` | `string` | Obstacle class: `"Static"`, `"Dynamic"`, or `"Robot"` |
-| `pose` | `geometry_msgs/Pose` | World-frame center position and orientation |
-| `radius` | `float32` | Radius — used by `Sphere` and `Cylinder` |
-| `length` | `float32` | Length along X — used by `Box` |
-| `width` | `float32` | Width along Y — used by `Box` |
-| `height` | `float32` | Height along Z — used by `Box` and `Cylinder` |
-| `mesh_resource` | `string` | URI to mesh file — used by `Mesh` (e.g. `package://...`) |
-| `scale_x/y/z` | `float32` | Per-axis mesh scale — used by `Mesh` |
+| Field | Type | Used by | Description |
+|-------|------|---------|-------------|
+| `frame_id` | `string` | all | Unique identifier for this obstacle (e.g. `"wall_1"`) |
+| `type` | `string` | all | Shape: `"Sphere"`, `"Box"`, `"Cylinder"`, `"Ellipsoid"`, `"Capsule"`, or `"Mesh"` |
+| `group` | `string` | all | Class: `"Static"`, `"Dynamic"`, or `"Robot"` |
+| `pose` | `geometry_msgs/Pose` | all | World-frame center position and orientation |
+| `radius` | `float32` | Sphere, Cylinder, Capsule | Radius of the shape |
+| `height` | `float32` | Box, Cylinder, Capsule | Height / full extent along Z |
+| `length` | `float32` | Box | Full extent along X |
+| `width` | `float32` | Box | Full extent along Y |
+| `semi_x` | `float32` | Ellipsoid | Semi-axis along X |
+| `semi_y` | `float32` | Ellipsoid | Semi-axis along Y |
+| `semi_z` | `float32` | Ellipsoid | Semi-axis along Z |
+| `mesh_resource` | `string` | Mesh | URI to mesh file (e.g. `package://my_robot/meshes/link.dae`) |
+| `scale_x/y/z` | `float32` | Mesh | Per-axis mesh scale |
 
 ### `ObstacleArray.msg`
 A stamped array of `Obstacle` messages, published to `pfield/obstacles`.
@@ -28,36 +31,68 @@ A stamped array of `Obstacle` messages, published to `pfield/obstacles`.
 | `header` | `std_msgs/Header` | Timestamp and frame |
 | `obstacles` | `Obstacle[]` | List of obstacles |
 
-**CLI example — publish a cylinder and a box**
+**CLI examples — one per shape type**
 
 ```bash
+# Sphere (radius = 0.1 m)
 ros2 topic pub --once /pfield/obstacles potential_fields_interfaces/msg/ObstacleArray "{
   header: {frame_id: 'world'},
-  obstacles: [
-    {
-      frame_id: 'pitcher',
-      type: 'Cylinder',
-      group: 'Static',
-      pose: {
-        position: {x: 0.51, y: 0.0, z: 0.15},
-        orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
-      },
-      radius: 0.09,
-      height: 0.3
-    },
-    {
-      frame_id: 'table',
-      type: 'Box',
-      group: 'Static',
-      pose: {
-        position: {x: 0.66, y: 0.0, z: 0.3},
-        orientation: {x: 0.0, y: 0.0, z: 0.0, w: 1.0}
-      },
-      length: 0.15,
-      width: 0.7,
-      height: 0.6
-    }
-  ]
+  obstacles: [{
+    frame_id: 'ball', type: 'Sphere', group: 'Static',
+    pose: {position: {x: 0.4, y: 0.0, z: 0.1}, orientation: {w: 1.0}},
+    radius: 0.1
+  }]
+}"
+
+# Box (15 cm × 70 cm × 60 cm)
+ros2 topic pub --once /pfield/obstacles potential_fields_interfaces/msg/ObstacleArray "{
+  header: {frame_id: 'world'},
+  obstacles: [{
+    frame_id: 'table', type: 'Box', group: 'Static',
+    pose: {position: {x: 0.66, y: 0.0, z: 0.3}, orientation: {w: 1.0}},
+    length: 0.15, width: 0.7, height: 0.6
+  }]
+}"
+
+# Cylinder (radius = 9 cm, height = 30 cm)
+ros2 topic pub --once /pfield/obstacles potential_fields_interfaces/msg/ObstacleArray "{
+  header: {frame_id: 'world'},
+  obstacles: [{
+    frame_id: 'pitcher', type: 'Cylinder', group: 'Static',
+    pose: {position: {x: 0.51, y: 0.0, z: 0.15}, orientation: {w: 1.0}},
+    radius: 0.09, height: 0.3
+  }]
+}"
+
+# Ellipsoid (semi-axes 8 cm × 5 cm × 12 cm)
+ros2 topic pub --once /pfield/obstacles potential_fields_interfaces/msg/ObstacleArray "{
+  header: {frame_id: 'world'},
+  obstacles: [{
+    frame_id: 'ellipsoid_obs', type: 'Ellipsoid', group: 'Static',
+    pose: {position: {x: 0.5, y: 0.1, z: 0.2}, orientation: {w: 1.0}},
+    semi_x: 0.08, semi_y: 0.05, semi_z: 0.12
+  }]
+}"
+
+# Capsule (radius = 5 cm, shaft length = 20 cm)
+ros2 topic pub --once /pfield/obstacles potential_fields_interfaces/msg/ObstacleArray "{
+  header: {frame_id: 'world'},
+  obstacles: [{
+    frame_id: 'capsule_obs', type: 'Capsule', group: 'Static',
+    pose: {position: {x: 0.45, y: 0.0, z: 0.2}, orientation: {w: 1.0}},
+    radius: 0.05, height: 0.2
+  }]
+}"
+
+# Mesh
+ros2 topic pub --once /pfield/obstacles potential_fields_interfaces/msg/ObstacleArray "{
+  header: {frame_id: 'world'},
+  obstacles: [{
+    frame_id: 'mesh_obs', type: 'Mesh', group: 'Static',
+    pose: {position: {x: 0.5, y: 0.0, z: 0.1}, orientation: {w: 1.0}},
+    mesh_resource: 'package://my_robot_description/meshes/obstacle.dae',
+    scale_x: 1.0, scale_y: 1.0, scale_z: 1.0
+  }]
 }"
 ```
 
