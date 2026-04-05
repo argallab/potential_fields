@@ -338,10 +338,10 @@ namespace pfield {
     size_t getNumJoints() const { return this->pfKinematics ? this->pfKinematics->getNumJoints() : 0; }
     size_t getNumLinks() const { return this->pfKinematics ? this->pfKinematics->getNumLinks() : 0; }
     bool isUsingDynamicQuadraticThreshold() const { return this->dynamicQuadraticThresholdEnabled; }
-    bool isGoalSet() const { return this->goalSet; }
-    SpatialVector getGoalPose() const { return this->goalPose; }
-    std::vector<PotentialFieldObstacle> getEnvObstacles() const { return this->envObstacles; }
-    std::vector<PotentialFieldObstacle> getRobotObstacles() const { return this->robotObstacles; }
+    [[nodiscard]] bool isGoalSet() const { return this->goalSet; }
+    [[nodiscard]] SpatialVector getGoalPose() const { return this->goalPose; }
+    [[nodiscard]] std::vector<PotentialFieldObstacle> getEnvObstacles() const { return this->envObstacles; }
+    [[nodiscard]] std::vector<PotentialFieldObstacle> getRobotObstacles() const { return this->robotObstacles; }
 
     /**
      * @brief Integrates the current pose forward in time based on the potential field.
@@ -603,7 +603,23 @@ namespace pfield {
       const Eigen::Vector3d& angularVelocity,
       double deltaTime);
 
-    Eigen::VectorXd convertJointTorquesToJointVelocities(
+    /**
+     * @brief Converts joint torques to joint velocities utilizing the robot dynamics equation or a simple proportional gain.
+     *
+     * The full robot dynamics equation, where joint accelerations (q̈) are integrated to get joint velocities (q̇):
+     *   M(q)·q̈ = τ − C(q,q̇)·q̇ − G(q) − D·q̇
+     * If the robot dynamics equation is disabled, it uses a simple proportional gain:
+     *   q̇ = torqueToVelocityGain · τ
+     *
+     * @note This function currently always disables the Robot Dynamics Equation due to bugs (see Issue #23).
+     *
+     * @param jointTorques       Generalized joint torques [Nm].
+     * @param jointAngles        Current joint configuration [rad].
+     * @param prevJointVelocities Previous joint velocities for Coriolis and damping [rad/s].
+     * @param dt                 Integration timestep [s].
+     * @return Eigen::VectorXd   Joint velocities [rad/s].
+     */
+    [[nodiscard]] Eigen::VectorXd convertJointTorquesToJointVelocities(
       const Eigen::VectorXd& jointTorques, const std::vector<double>& jointAngles,
       const std::vector<double>& prevJointVelocities, const double dt) const;
 
@@ -858,7 +874,7 @@ namespace pfield {
     std::string eeLinkName; // End-effector link name for kinematic model, IK, and planning
     std::unique_ptr<PFKinematics> pfKinematics; // Kinematics helper for obstacle updates via joint angles
     std::shared_ptr<IKSolver> ikSolver; // Inverse kinematics solver for joint angle computation
-    // Constant Parameters that can be adjusted if neccessary
+    // Constant parameters that can be adjusted if necessary
     const double translationalTolerance = 1e-3; // Threshold for distances to the goal and obstacles [m]
     const double rotationalThreshold = 0.05; // Threshold for rotational geodesic distance [rad]
     const double softSatBeta = 1.0; // Soft-saturation parameter, higher = more aggressive curve

@@ -23,7 +23,7 @@
 
 namespace pfield {
 
-  inline static bool isPositiveFinite(double v) { return std::isfinite(v) && v > 1e-12; }
+  [[nodiscard]] inline bool isPositiveFinite(double v) { return std::isfinite(v) && v > 1e-12; }
 
   /**
    * @brief Given a vector (typically linear or angular velocity), a maximum norm,
@@ -34,7 +34,7 @@ namespace pfield {
    * @param beta Softness parameter for the saturation, higher = more abrupt (default=1.0)
    * @return Eigen::Vector3d The saturated vector
    */
-  inline static Eigen::Vector3d softSaturateNorm(const Eigen::Vector3d& v, double maxNorm, double beta = 1.0) {
+  [[nodiscard]] inline Eigen::Vector3d softSaturateNorm(const Eigen::Vector3d& v, double maxNorm, double beta = 1.0) {
     if (!isPositiveFinite(maxNorm)) return v;
     const double n = v.norm();
     if (!isPositiveFinite(n)) return v;
@@ -53,7 +53,7 @@ namespace pfield {
    * @param dMax The   maximum allowed step size
    * @return Eigen::Vector3d The rate-limited vector
    */
-  inline Eigen::Vector3d rateLimitStep(const Eigen::Vector3d& prev, const Eigen::Vector3d& curr, double dMax) {
+  [[nodiscard]] inline Eigen::Vector3d rateLimitStep(const Eigen::Vector3d& prev, const Eigen::Vector3d& curr, double dMax) {
     if (!isPositiveFinite(dMax) || dMax <= 0.0) return curr;
     Eigen::Vector3d d = curr - prev;
     const double dn = d.norm();
@@ -68,7 +68,7 @@ namespace pfield {
    * @param v The 3D Vector to be rotated
    * @return Eigen::Vector3d The rotated vector
    */
-  static inline Eigen::Vector3d rotateVector(const Eigen::Quaterniond& q, const Eigen::Vector3d& v) { return q * v; }
+  [[nodiscard]] inline Eigen::Vector3d rotateVector(const Eigen::Quaterniond& q, const Eigen::Vector3d& v) { return q * v; }
 
   /**
    * @brief Convert a urdf::Pose to an Eigen::Affine3d
@@ -76,7 +76,7 @@ namespace pfield {
    * The URDF pose stores position (x,y,z) and a quaternion (x,y,z,w). This helper
    * creates an Eigen isometry with the same translation and rotation.
    */
-  static inline Eigen::Affine3d urdfPoseToEigen(const urdf::Pose& p) {
+  [[nodiscard]] inline Eigen::Affine3d urdfPoseToEigen(const urdf::Pose& p) {
     const Eigen::Quaterniond q(p.rotation.w, p.rotation.x, p.rotation.y, p.rotation.z);
     const Eigen::Translation3d t(p.position.x, p.position.y, p.position.z);
     Eigen::Affine3d T = Eigen::Affine3d::Identity();
@@ -94,7 +94,7 @@ namespace pfield {
    * @param lambda The damping factor for the least squares solution
    * @return Eigen::VectorXd The computed joint velocities
    */
-  static inline Eigen::VectorXd dampedLeastSquares(
+  [[nodiscard]] inline Eigen::VectorXd dampedLeastSquares(
     const Eigen::MatrixXd& J,
     const Eigen::VectorXd& V,
     const double lambda = 1e-3) {
@@ -119,7 +119,7 @@ namespace pfield {
    * @param dt The time difference between the current and previous joint angles [s]
    * @return std::vector<double> The approximated joint velocities [rad/s]
    */
-  static inline std::vector<double> approximateJointVelocities(
+  inline std::vector<double> approximateJointVelocities(
     const std::vector<double>& currentJointAngles,
     const std::vector<double>& previousJointAngles,
     const double dt) {
