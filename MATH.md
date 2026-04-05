@@ -1,265 +1,329 @@
 # Potential Fields Mathematical Overview
-These equations were obtained from the [Principles of Robot Motion: Theory, Algorithms, and Implementations](https://ieeexplore.ieee.org/book/6267238) textbook [2] and [Real-Time Obstacle Avoidance for Manipulators and Mobile Robots](https://ieeexplore.ieee.org/stamp/stampCaCancaCccCfaksdfojas;kfjd;ksldadjf.jsp?tp=&arnumber=1087247) [1], which describes the derivation of the potential equations, how to obtain the gradients, and how to obtain a velocity from the gradients.
 
-In this library, the potential field produces a task-space wrench over the robot’s end-effector pose:
+These equations are drawn from *Principles of Robot Motion* (Choset et al.) [2] and *Real-Time Obstacle Avoidance for Manipulators and Mobile Robots* (Khatib) [1], which derive the potential functions, their gradients, and how to obtain a velocity from those gradients.
 
-- Linear force $\mathbf{F}(q)$ [N] from the translational potential
-- Torque $\boldsymbol{\tau}(q)$ [Nm] from the rotational potential
+The potential field produces a **task-space wrench** over the robot's end-effector pose, a linear force $\mathbf{F}(q)$ from the translational potential and a torque $\boldsymbol{\tau}(q)$ from the rotational potential. This wrench is converted to a task-space twist using constant admittance gains:
 
-This wrench is mapped to a task-space twist $T(q)$ using constant gains:
+$$
+\mathbf{v}(q) = k_{lin}\,\mathbf{F}(q), \qquad \boldsymbol{\omega}(q) = k_{ang}\,\boldsymbol{\tau}(q)
+$$
 
-$$\begin{align}
-\mathbf{v}(q) &= k_{lin}\ \cdot \mathbf{F}(q) \\
-\boldsymbol{\omega}(q) &= k_{ang} \cdot \boldsymbol{\tau}(q) \\
-T(q) &= \begin{bmatrix}\mathbf{v}(q) \\ \boldsymbol{\omega}(q) \end{bmatrix}
-\end{align}$$
+with defaults $k_{lin} = 1.0\,[(\mathrm{m/s})/\mathrm{N}]$ and $k_{ang} = 1.0\,[(\mathrm{rad/s})/\mathrm{Nm}]$.
 
-with defaults of $k_{lin} = 1.0\,[(\mathrm{m/s})/\mathrm{N}]$ and $k_{ang} = 1.0\,[(\mathrm{rad/s})/\mathrm{Nm}]$.
+The potential functions are scalar fields in units of energy [Nm]. Their gradients are forces [N]. The gains $\zeta$ (attractive) and $\eta$ (repulsive) act as inverse damping coefficients [Ns/m], converting forces into velocities [m/s].
 
-The potential functions are scalar fields representing potential energy (Newton-meters [Nm]). The gradient of the potential is represented as a force (Newtons [N]). To obtain velocity vectors, we use some parameter ($\zeta$ and $\eta$) that acts as an inverse damping coefficient (Newton-seconds / meter [Ns/m]) to convert the force into a velocity (meters / second [m/s]).
+---
 
 ## Attractive Potential
-Attractive Potential is computed using a combined Conical and Quadratic potential function. This approach ensures a constant attractive force at large distances (Conical) to prevent high velocities, while switching to a quadratic behavior near the goal to ensure smooth convergence without chattering.
-The transition occurs at a distance $\Gamma$, which can be dynamic based on the environment (e.g., clearance from obstacles) or a fixed parameter.
+
+The attractive potential combines a **quadratic** near the goal (for smooth convergence) with a **conical** far from the goal (for a constant-magnitude pull that avoids high velocities). The transition occurs at distance $\Gamma$.
 
 $$
 U_{att}(q) = \begin{cases}
-\frac{1}{2}\zeta D(q, q_{goal})^2 & D(q, q_{goal}) \le \Gamma \\
-\Gamma \zeta D(q, q_{goal}) - \frac{1}{2}\zeta \Gamma^2 & D(q, q_{goal}) > \Gamma
+\dfrac{1}{2}\zeta\, D(q, q_{goal})^2 & D(q, q_{goal}) \le \Gamma \\[6pt]
+\Gamma\zeta\, D(q, q_{goal}) - \dfrac{1}{2}\zeta\Gamma^2 & D(q, q_{goal}) > \Gamma
 \end{cases}
 $$
 
-The gradient (force) is:
+The gradient gives the attractive force directed toward the goal:
 
 $$
 \mathbf{F}_{att}(q) = -\nabla U_{att}(q) = \begin{cases}
--\zeta (q - q_{goal}) & D(q, q_{goal}) \le \Gamma \\
--\frac{\Gamma \zeta}{D(q, q_{goal})} (q - q_{goal}) & D(q, q_{goal}) > \Gamma
+-\zeta\,(q - q_{goal}) & D(q, q_{goal}) \le \Gamma \\[6pt]
+-\dfrac{\Gamma\zeta}{D(q, q_{goal})}\,(q - q_{goal}) & D(q, q_{goal}) > \Gamma
 \end{cases}
 $$
 
-Where:
-- $\zeta$ is the *attractive gain* parameter
-- $D(q, q_{goal})$ is the Euclidean distance between $q$ and $q_{goal}$
-- $\Gamma$ is the quadratic threshold distance
+| Symbol | Description | Units |
+|--------|-------------|-------|
+| $\zeta$ | Attractive gain | Ns/m |
+| $q_{goal}$ | Goal pose |  |
+| $D(q, q_{goal})$ | Euclidean distance from current pose to goal | m |
+| $\Gamma$ | Threshold distance between quadratic and conical regimes | m |
+
+> **Implementation note:** The conical branch is currently disabled in `computeAttractiveForceLinear` (`pfield.cpp`). The function returns the pure quadratic force $-\zeta(q - q_{goal})$ at all distances, because the conical branch was observed to cause oscillations. As a result, $\Gamma$ has no effect at runtime. See [Issue #44](https://github.com/argallab/potential_fields/issues/44) for the ongoing investigation.
+
+---
 
 ## Rotational Attraction
-Let $q_c$ be the current unit quaternion and $q_g$ the goal orientation. The geodesic distance $\theta \in [0,\pi]$ is the shortest rotation aligning $q_c$ to $q_g$. Define the quaternion difference
 
-$$q_{diff} = q_c^{*} \otimes q_g$$
+Let $q_c$ be the current unit quaternion and $q_g$ the goal orientation. The geodesic distance $\theta \in [0, \pi]$ is the shortest rotation aligning $q_c$ to $q_g$. Define the quaternion difference and its rotation axis:
 
-and the corresponding unit rotation axis $\mathbf{u} = \frac{\vec{q_{diff}}}{\lVert\vec{q_{diff}}\rVert}$. The attractive rotational torque is proportional to the geodesic angle and acts about $\mathbf{u}$:
+$$
+q_{diff} = q_c^{*} \otimes q_g, \qquad \mathbf{u} = \frac{\vec{q}_{diff}}{\lVert\vec{q}_{diff}\rVert}
+$$
 
-$$\boldsymbol{\tau}_{att}(q) = -\,\omega\,\theta\,\mathbf{u}$$
+The attractive rotational torque is proportional to the geodesic angle, applied only when $\theta$ exceeds a small threshold:
 
-applied only when $\theta$ exceeds a small threshold. Here $\omega$ is the rotational attractive gain.
+$$
+\boldsymbol{\tau}_{att}(q) = -\,\omega\,\theta\,\mathbf{u}
+$$
+
+| Symbol | Description | Units |
+|--------|-------------|-------|
+| $\omega$ | Rotational attractive gain | Ns/rad |
+| $\theta$ | Geodesic angle between current and goal orientations | rad |
+| $\mathbf{u}$ | Unit rotation axis from $q_c$ toward $q_g$ |  |
+
+---
 
 ## Repulsive Potential
-Repulsion increases with proximity to each obstacle and is summed across obstacles. We use the obstacle surface’s signed distance $d$ and outward normal $\mathbf{n}_{out}$ at the closest point. Outside the obstacle $d \ge 0$; inside $d < 0$ is treated as $d \approx \varepsilon$ to produce a strong outward push. The gradient of the potential yields the repulsive force
+
+Repulsion increases with proximity to each obstacle and is zero beyond the influence distance $Q$. The signed distance $d$ to the obstacle surface is positive outside and negative inside; a value inside the obstacle is clamped to a small $\varepsilon > 0$ to produce a strong outward push. The repulsive force points along the outward surface normal $\mathbf{n}_{out}$:
 
 $$
 \mathbf{F}_{rep}(q) = \begin{cases}
-\eta\,\Big(\frac{1}{D(q)} - \frac{1}{Q}\Big)\,\frac{1}{D(q)^2}\,\mathbf{n}_{out} & 0 < D(q) < Q \\
+\eta\,\left(\dfrac{1}{D(q)} - \dfrac{1}{Q}\right)\dfrac{1}{D(q)^2}\,\mathbf{n}_{out} & 0 < D(q) < Q \\[8pt]
 \mathbf{0} & D(q) \ge Q
 \end{cases}
 $$
 
-Where:
-- $\eta$ is the repulsive gain
-- $Q$ is the influence distance
-- $D(q)$ is the signed distance magnitude to the obstacle surface
-- $\mathbf{n}_{out}$ is the outward surface normal at the closest point
+This is summed over all obstacles in the environment.
+
+| Symbol | Description | Units |
+|--------|-------------|-------|
+| $\eta$ | Repulsive gain | Ns/m |
+| $Q$ | Influence distance (repulsion is zero beyond this) | m |
+| $D(q)$ | Signed distance from the query point to the obstacle surface | m |
+| $\mathbf{n}_{out}$ | Outward unit normal of the obstacle surface at the closest point |  |
+
+---
 
 ## Total Potential, Wrench, and Twist
 
+The total potential is the sum of attractive and all repulsive contributions. Its negative gradient gives the net force, which is combined with the rotational torque to form the wrench, then mapped to a twist:
+
 $$
 \begin{align}
-U(q) &= U_{att}(q) + \sum_i U_{rep,i}(q) \\
-\mathbf{F}(q) &= -\nabla U(q) \quad\text{(linear force)} \\
-\boldsymbol{\tau}_{att}(q) &= -\,\omega\,\theta\,\mathbf{u} \quad\text{(rotational attraction)} \\
-\mathbf{v}(q) &= k_{lin}\,\mathbf{F}(q) \\
-\boldsymbol{\omega}(q) &= k_{ang}\,\boldsymbol{\tau}_{att}(q)
+U(q) &= U_{att}(q) + \sum_i U_{rep,i}(q) \\[4pt]
+\mathbf{F}(q) &= -\nabla U(q) \\[4pt]
+\mathbf{v}(q) &= k_{lin}\,\mathbf{F}(q), \qquad \boldsymbol{\omega}(q) = k_{ang}\,\boldsymbol{\tau}_{att}(q)
 \end{align}
 $$
 
-Where:
-- $q$ is the pose (position and orientation)
-- $\mathbf{F}$ is the net linear force, the negative gradient of the scalar potential
-- $\boldsymbol{\tau}_{att}$ is the attractive torque toward the goal orientation
-- $\mathbf{v}$ and $\boldsymbol{\omega}$ are the linear and angular velocities after mapping with $(k_{lin}, k_{ang})$
+---
 
-### Integration and Motion Strategy
-We conceptually utilize gradient descent to move down the potential’s gradient, but the implementation uses a velocity-constrained Runge–Kutta (RK4) step over the twist for better stability and constraint handling. In pseudocode, gradient descent looks like:
+## Mitigating Local Minima (Planning-only)
+
+A local minimum occurs when the attractive and repulsive forces exactly cancel, causing the planner to stall, most commonly when the robot is directly between a goal and an obstacle. To reduce sticking, the planner strips the repulsive component that directly opposes the attractive direction while keeping tangential components that encourage the robot to slide around the obstacle:
 
 $$
-\begin{align*}
-&q[0] = q_{start} \\
-&i = 0 \\
-&\text{while }\Vert\nabla U(q_i)\Vert > \epsilon \\
-& q_{i+1} = q_i - \alpha_i \nabla U(q_i) \\
-& i = i + 1
-\end{align*}
+\mathbf{F}_{rep}^{\text{filtered}} = \mathbf{F}_{rep} - \min\big(0,\, \mathbf{F}_{rep}\cdot \hat{\mathbf{u}}_{att}\big)\,\hat{\mathbf{u}}_{att}, \qquad \hat{\mathbf{u}}_{att} = \frac{\mathbf{F}_{att}}{\lVert\mathbf{F}_{att}\rVert}
 $$
 
-Where:
-- $\epsilon$ parameterizes when to stop
-- $\alpha_i$ is a step-size (learning rate)
+The $\min(0, \cdot)$ ensures only the opposing (negative) projection is removed; repulsion that is already tangential or aligned with attraction is left unchanged. This filtering is applied only during planning, the unfiltered field is used for real-time control and visualization.
+
+---
+
+## Path Planning Algorithm
+
+This library supports two planning methods with different trade-offs between computational cost and collision-avoidance coverage. Both follow the same conceptual strategy: at each step, evaluate the potential field, convert the gradient to a velocity, and integrate to advance the robot's state. The planner stops when the robot reaches the goal within a positional tolerance.
+
+### Task-Space Wrench Path Planning
+
+Forces and torques are evaluated at the **end-effector** in Cartesian space. The resulting twist is integrated directly in task space, and IK solves for the joint configuration at each waypoint.
+
+**Best suited for:** uncluttered environments where precise end-effector path control matters more than link-level collision avoidance.
+
+**Steps:**
+
+1. **Wrench**: sum attractive and repulsive contributions at the end-effector:
+
+$$
+\mathcal{W}_{task} = \begin{bmatrix} \mathbf{F}_{att} + \mathbf{F}_{rep} \\ \boldsymbol{\tau}_{att} \end{bmatrix}
+$$
+
+2. **Twist**: apply admittance gains:
+
+$$
+\mathcal{V}_{task} = \begin{bmatrix} k_{lin} & \mathbf{0} \\ \mathbf{0} & k_{ang} \end{bmatrix} \mathcal{W}_{task}
+$$
+
+3. **Integrate**: advance the end-effector pose with RK4 (see [RK4 Integration](#runge-kutta-4-rk4-integration)):
+
+$$
+x_{next} = \mathrm{RK4}(x_{curr},\, \mathcal{V}_{task},\, \Delta t)
+$$
 
 #### Runge-Kutta 4 (RK4) Integration
-We integrate over the twist (linear and angular velocities) using a constrained RK4 step. Each stage evaluates a constrained twist at an intermediate pose and time step, then averages the four stages to advance the pose.
 
-Given current pose $q_i = (\mathbf{x}_i, \mathbf{R}_i)$ and previous applied twist $T_{i-1}$, with step size $\Delta t$:
+Rather than a simple Euler step, the planner uses a constrained RK4 scheme for better accuracy and stability. Each of the four stages evaluates a constrained twist at an intermediate pose, applies velocity and acceleration limits, then the four stages are averaged for the final update.
 
-1) Stage 1
+Given current pose $q_i = (\mathbf{x}_i, \mathbf{R}_i)$, previous applied twist $T_{i-1}$, and step size $\Delta t$:
 
+**Stage 1**: evaluate at the current pose:
 $$
-\begin{aligned}
-\mathbf{k}_1 &= T_c\big(q_i,\, T_{i-1},\, \Delta t\big) \\
-q_{i}^{(1/2)} &= \Big(\, \mathbf{x}_i + \tfrac{\Delta t}{2}\,\mathbf{v}_1\,,\; \mathbf{R}_i\;\exp\big( [\boldsymbol{\omega}_1]_\times \tfrac{\Delta t}{2} \big) \Big)
-\end{aligned}
+\mathbf{k}_1 = T_c\big(q_i,\, T_{i-1},\, \Delta t\big), \qquad
+q_{i}^{(1/2)} = \Big(\mathbf{x}_i + \tfrac{\Delta t}{2}\mathbf{v}_1,\; \mathbf{R}_i\exp\!\big([\boldsymbol{\omega}_1]_\times \tfrac{\Delta t}{2}\big)\Big)
 $$
 
-2) Stage 2
-
+**Stage 2**: evaluate at the half-step pose from stage 1:
 $$
-\begin{aligned}
-\mathbf{k}_2 &= T_c\big(q_{i}^{(1/2)},\, \mathbf{k}_1,\, \tfrac{\Delta t}{2}\big) \\
-q_{i}^{(1/2)'} &= \Big(\, \mathbf{x}_i + \tfrac{\Delta t}{2}\,\mathbf{v}_2\,,\; \mathbf{R}_i\;\exp\big( [\boldsymbol{\omega}_2]_\times \tfrac{\Delta t}{2} \big) \Big)
-\end{aligned}
+\mathbf{k}_2 = T_c\big(q_{i}^{(1/2)},\, \mathbf{k}_1,\, \tfrac{\Delta t}{2}\big), \qquad
+q_{i}^{(1/2)'} = \Big(\mathbf{x}_i + \tfrac{\Delta t}{2}\mathbf{v}_2,\; \mathbf{R}_i\exp\!\big([\boldsymbol{\omega}_2]_\times \tfrac{\Delta t}{2}\big)\Big)
 $$
 
-3) Stage 3
-
+**Stage 3**: evaluate at the half-step pose from stage 2:
 $$
-\begin{aligned}
-\mathbf{k}_3 &= T_c\big(q_{i}^{(1/2)'},\, \mathbf{k}_2,\, \tfrac{\Delta t}{2}\big) \\
-q_{i}^{(1)} &= \Big(\, \mathbf{x}_i + \Delta t\,\mathbf{v}_3\,,\; \mathbf{R}_i\;\exp\big( [\boldsymbol{\omega}_3]_\times \Delta t \big) \Big)
-\end{aligned}
+\mathbf{k}_3 = T_c\big(q_{i}^{(1/2)'},\, \mathbf{k}_2,\, \tfrac{\Delta t}{2}\big), \qquad
+q_{i}^{(1)} = \Big(\mathbf{x}_i + \Delta t\,\mathbf{v}_3,\; \mathbf{R}_i\exp\!\big([\boldsymbol{\omega}_3]_\times \Delta t\big)\Big)
 $$
 
-4) Stage 4
-
+**Stage 4**: evaluate at the full-step pose from stage 3:
 $$
 \mathbf{k}_4 = T_c\big(q_{i}^{(1)},\, \mathbf{k}_3,\, \Delta t\big)
 $$
 
-Weighted average twist (component-wise for linear and angular parts):
-
+**Weighted average** of the four stage twists:
 $$
-\bar{\mathbf{v}} = \frac{\mathbf{v}_1 + 2\mathbf{v}_2 + 2\mathbf{v}_3 + \mathbf{v}_4}{6},\quad
-\bar{\boldsymbol{\omega}} = \frac{\boldsymbol{\omega}_1 + 2\boldsymbol{\omega}_2 + 2\boldsymbol{\omega}_3 + \boldsymbol{\omega}_4}{6}.
-$$
-
-The averaged twist is re-limited (soft saturation and rate limits) to ensure it respects the velocity/acceleration bounds. The pose is then advanced once:
-
-$$
-\mathbf{x}_{i+1} = \mathbf{x}_i + \bar{\mathbf{v}}\,\Delta t,\qquad
-\mathbf{R}_{i+1} = \mathbf{R}_i\;\exp\big( [\bar{\boldsymbol{\omega}}]_\times\, \Delta t \big),
+\bar{\mathbf{v}} = \frac{\mathbf{v}_1 + 2\mathbf{v}_2 + 2\mathbf{v}_3 + \mathbf{v}_4}{6}, \qquad
+\bar{\boldsymbol{\omega}} = \frac{\boldsymbol{\omega}_1 + 2\boldsymbol{\omega}_2 + 2\boldsymbol{\omega}_3 + \boldsymbol{\omega}_4}{6}
 $$
 
-where $\exp([\boldsymbol{\omega}]_\times\, \Delta t)$ is implemented via an angle–axis exponential map (i.e., $\mathrm{AngleAxis}(|\boldsymbol{\omega}|\,\Delta t,\, \boldsymbol{\omega}/|\boldsymbol{\omega}|)$) and the resulting quaternion is normalized.
-
-Notes:
-- $T_c(\cdot)$ applies planning-only opposing-force removal, maps wrench to twist, and enforces motion constraints for each stage.
-- Per-stage rate limits use the stage’s effective step size ($\Delta t$ for stages 1 and 4, $\Delta t/2$ for stages 2–3) by supplying the previous stage’s twist to the constraint function.
-- After averaging, constraints are applied again before the final integration step (as in the implementation).
-
-### Velocity and Acceleration Limits
-Before integrating the twist, linear and angular speeds are soft-saturated by norm and then rate-limited using maximum linear/angular accelerations over the step size $\Delta t$. The library enforces:
-
-- Max linear speed $\lVert\mathbf{v}\rVert \leq v_{max}$
-- Max angular speed $\lVert\boldsymbol{\omega}\rVert \leq \omega_{max}$
-- Linear/Angular acceleration limits over $\Delta t$
-
-This produces smooth, feasible motions while following the potential field.
-
-#### Soft Saturation
-Soft saturation smoothly caps a vector’s norm while preserving its direction. For a vector $\mathbf{v}$, maximum allowed norm $v_{max}$, and softness parameter $\beta$:
-
+The averaged twist is re-limited (soft saturation and rate limits) before the final pose update:
 $$
-\mathbf{v}_{sat} \;=\; \mathbf{v} \cdot \frac{v_{max}\,\tanh\!\left(\beta\,\lVert\mathbf{v}\rVert / v_{max}\right)}{\lVert\mathbf{v}\rVert}.
+\mathbf{x}_{i+1} = \mathbf{x}_i + \bar{\mathbf{v}}\,\Delta t, \qquad
+\mathbf{R}_{i+1} = \mathbf{R}_i\;\exp\!\big([\bar{\boldsymbol{\omega}}]_\times\,\Delta t\big)
 $$
 
-- If $\lVert\mathbf{v}\rVert \ll v_{max}$, $\tanh(x) \approx x$ and the scaling is nearly linear (no abrupt clipping).
-- As $\lVert\mathbf{v}\rVert \to \infty$, the saturated norm approaches $v_{max}$ asymptotically.
-- Higher $\beta$ produces a steeper transition near $v_{max}$; lower $\beta$ makes it gentler.
+where $\exp([\boldsymbol{\omega}]_\times\,\Delta t)$ is the angle–axis exponential map $\mathrm{AngleAxis}(|\boldsymbol{\omega}|\Delta t,\, \boldsymbol{\omega}/|\boldsymbol{\omega}|)$, with the resulting quaternion normalized.
 
-This is applied to both linear and angular velocities before rate limiting.
+| Symbol | Description | Units |
+|--------|-------------|-------|
+| $T_c(\cdot)$ | Constrained twist function: applies local-minima filtering, maps wrench to twist, enforces velocity and acceleration limits |  |
+| $[\boldsymbol{\omega}]_\times$ | Skew-symmetric matrix of $\boldsymbol{\omega}$ (so(3) element for the exponential map) |  |
+| $\Delta t$ | Integration timestep | s |
 
-#### Rate Limiting
-Rate limiting bounds the change from the previous vector $\mathbf{v}_{prev}$ to the current target $\mathbf{v}_{curr}$ by a maximum step $\Delta_{max}$ (e.g., from acceleration limits over $\Delta t$):
+> **Note:** Per-stage rate limits use the stage's effective step size ($\Delta t$ for stages 1 and 4, $\Delta t/2$ for stages 2–3). After averaging, constraints are applied once more before the final integration step.
+
+#### Velocity and Acceleration Limits
+
+Before integrating each twist, linear and angular velocities are constrained in two passes:
+
+**Soft saturation**: smoothly caps a vector's norm to $v_{max}$ while preserving its direction, using the $\tanh$ function to avoid hard clipping:
 
 $$
-\mathbf{d} = \mathbf{v}_{curr} - \mathbf{v}_{prev},\quad
-\mathbf{v}_{rl} =
-\begin{cases}
-\mathbf{v}_{curr}, & \lVert\mathbf{d}\rVert \le \Delta_{max} \\
-\mathbf{v}_{prev} + \mathbf{d}\,\dfrac{\Delta_{max}}{\lVert\mathbf{d}\rVert}, & \lVert\mathbf{d}\rVert > \Delta_{max}
+\mathbf{v}_{sat} = \mathbf{v}\cdot\frac{v_{max}\,\tanh\!\left(\beta\,\lVert\mathbf{v}\rVert / v_{max}\right)}{\lVert\mathbf{v}\rVert}
+$$
+
+When $\lVert\mathbf{v}\rVert \ll v_{max}$ the scaling is nearly linear; as $\lVert\mathbf{v}\rVert \to \infty$ the saturated norm asymptotes to $v_{max}$. Higher $\beta$ gives a sharper transition near the cap.
+
+**Rate limiting**: bounds the change from the previous vector $\mathbf{v}_{prev}$ to the current target by a maximum step $\Delta_{max}$ (derived from acceleration limits over $\Delta t$):
+
+$$
+\mathbf{d} = \mathbf{v}_{curr} - \mathbf{v}_{prev}, \qquad
+\mathbf{v}_{rl} = \begin{cases}
+\mathbf{v}_{curr} & \lVert\mathbf{d}\rVert \le \Delta_{max} \\[4pt]
+\mathbf{v}_{prev} + \mathbf{d}\,\dfrac{\Delta_{max}}{\lVert\mathbf{d}\rVert} & \lVert\mathbf{d}\rVert > \Delta_{max}
 \end{cases}
 $$
 
-This guarantees the step size is never larger than $\Delta_{max}$ while preserving the intended direction of change. After rate limiting, soft saturation is re-applied to ensure the final vector also respects the velocity caps.
+Soft saturation is re-applied after rate limiting to ensure the final vector satisfies both constraints.
 
-### Mitigating Local Minima (Planning-only)
-To reduce sticking on broad obstacle faces, the planner removes only the repulsive component that directly opposes the attractive force and keeps tangential components that encourage sliding:
+| Symbol | Description | Units |
+|--------|-------------|-------|
+| $v_{max}$ | Maximum linear speed | m/s |
+| $\omega_{max}$ | Maximum angular speed | rad/s |
+| $\beta$ | Soft-saturation steepness parameter |  |
+| $\Delta_{max}$ | Maximum allowed velocity change per step (acceleration limit $\times\,\Delta t$) | m/s |
 
-$$
-\mathbf{F}_{rep}^{\text{filtered}} = \mathbf{F}_{rep} - \min\big(0,\, \mathbf{F}_{rep}\cdot \mathbf{u}_{att}\big)\,\mathbf{u}_{att},\quad \mathbf{u}_{att} = \frac{\mathbf{F}_{att}}{\lVert\mathbf{F}_{att}\rVert}.
-$$
-
-This filtering is applied only during planning; the unfiltered field is kept for visualization and testing semantics.
-
-## Path Planning Algorithm
-This library supports two distinct path planning methods, each with different trade-offs regarding computational complexity and collision avoidance coverage.
-
-### Task-Space Wrench Path Planning
-This method calculates forces and torques (wrench) directly at the end-effector in the task space (Cartesian space). The wrench is converted into a twist (velocity) and integrated to update the end-effector's pose. Inverse Kinematics (IK) is then used to solve for the joint angles that achieve this pose.
-
-**Main Benefit:** Computationally efficient and provides precise control over the end-effector's trajectory. Best suited when the primary concern is the end-effector's path and the robot arm is relatively unobstructed.
-
-**Key Evaluations:**
-1.  **Task-Space Wrench:** Sum of attractive and repulsive forces/torques at the end-effector.
-
-$$ \mathcal{W}_{task} = \begin{bmatrix} \mathbf{F}_{att} + \mathbf{F}_{rep} \\ \boldsymbol{\tau}_{att} \end{bmatrix} $$
-
-2.  **Task-Space Twist:** Wrench converted to velocity using admittance gains ($k_{lin} = k_{ang} = 1.0$).
-
-$$ \mathcal{V}_{task} = \begin{bmatrix} k_{lin} & \mathbf{0} \\ \mathbf{0} & k_{ang} \end{bmatrix} \mathcal{W}_{task} $$
-
-3.  **Integration:** The twist is integrated (using RK4) to find the next end-effector pose $x_{next}$.
-
-$$ x_{next} = \text{RK4}(x_{curr}, \mathcal{V}_{task}, \Delta t) $$
+---
 
 ### Whole-Body Velocity Path Planning
-This method calculates virtual forces acting on *every* link of the robot body, not just the end-effector. These forces are mapped to joint torques using the Jacobian transpose of each link. The total joint torques are then converted to joint velocities, which are integrated to update the robot's configuration directly.
 
-**Main Benefit:** Provides whole-body collision avoidance. The robot "feels" obstacles along its entire arm and will naturally fold or move its elbows to avoid them while trying to reach the goal. Ideal for cluttered environments.
+This method extends potential field planning to the full robot body by placing repulsive control points on every link, not just the end-effector. The approach follows §4.7.2–4.7.3 of Choset et al. [2].
 
-**Key Evaluations:**
-1.  **Joint Torques:** Sum of end-effector attraction and whole-body repulsion mapped to joint space.
+**Best suited for:** cluttered environments where links and elbows risk colliding with obstacles. Every link of the arm contributes a repulsive force, so the robot naturally folds or repositions itself while driving the end-effector toward the goal.
 
-$$ \boldsymbol{\tau}_{joints} = J_{ee}^T(\mathbf{q}) \mathcal{W}_{att} + \sum_{i \in \text{links}} J_{i}^T(\mathbf{q}) \mathbf{F}_{rep, i} $$
+#### Workspace Forces → Configuration Space Forces (§4.7.1)
 
-2.  **Joint Velocities:** Torques converted to velocities using an admittance gain.
+Potential functions are easiest to define in the workspace ($\mathbb{R}^3$), but planning requires forces in **configuration space** (joint torques). We bridge these using the **principle of virtual work**: power is coordinate-independent, so $f^T\dot{x} = u^T\dot{q}$. With $\dot{x} = J(q)\dot{q}$, this gives:
 
-$$ \dot{\mathbf{q}} = k_{adm} \boldsymbol{\tau}_{joints} $$
+$$
+u = J^T(q)\,f
+$$
 
-_Can be replaced with the [Robot Dynamics Equation](https://github.com/argallab/pfields_2025/issues/23)_
+A workspace force $f$ acting at any point $x = \phi(q)$ maps to a generalized joint-space force $u$ via the transpose of the Jacobian at that point.
 
-3.  **Integration:** Joint velocities are integrated (Euler) to find the next joint configuration.
+#### Control Points (§4.7.2)
 
-$$ \mathbf{q}_{next} = \mathbf{q}_{curr} + \dot{\mathbf{q}} \Delta t $$
+Rather than integrating forces over the robot's volume, a finite set of **control points** $\{r_j\}$ is selected on the robot body. Each control point has its own workspace potential; the resulting workspace forces are mapped to joint torques via $J^T$ and summed in configuration space.
+
+**Floating control point:** Fixed points at link origins or vertices may miss the true closest approach between a link and an obstacle. For example, the midpoint of a long link edge can be far closer to an obstacle than either endpoint. The textbook therefore introduces a *floating* control point $r_\text{float}$: the point on the robot boundary closest to any obstacle at the current configuration $q$. Its repulsive force is computed identically to any other control point.
+
+**In this implementation**, each link is approximated as a **capsule** fitted to the URDF mesh via PCA. The capsule's two endcap centers and shaft midpoint are the fixed candidate control points per link. For each link–obstacle pair, the candidate with the smallest clearance is selected as the floating control point, giving a smooth and geometrically tight clearance estimate as the configuration changes.
+
+#### Repulsive Potential at a Control Point (§4.7.2, eq. 4.24–4.25)
+
+For control point $r_j$ and obstacle $\mathcal{WO}_i$, the repulsive potential and its gradient (the workspace repulsive force) are:
+
+$$
+U_{\text{rep},i,j}(q) =
+\begin{cases}
+\dfrac{1}{2}\eta_j \left(\dfrac{1}{d_i(r_j(q))} - \dfrac{1}{Q^*_i}\right)^2 & d_i(r_j(q)) \le Q^*_i \\[8pt]
+0 & d_i(r_j(q)) > Q^*_i
+\end{cases}
+$$
+
+$$
+\nabla U_{\text{rep},i,j}(q) =
+\begin{cases}
+\eta_j \left(\dfrac{1}{Q^*_i} - \dfrac{1}{d_i(r_j(q))}\right)\dfrac{1}{d_i^2(r_j(q))}\,\nabla d_i(r_j(q)) & d_i(r_j(q)) \le Q^*_i \\[8pt]
+0 & d_i(r_j(q)) > Q^*_i
+\end{cases}
+$$
+
+$\nabla d_i(r_j(q))$ is the outward unit normal of the obstacle surface at the point closest to $r_j$.
+
+| Symbol | Description | Units |
+|--------|-------------|-------|
+| $r_j$ | Control point $j$ on the robot body |  |
+| $d_i(r_j(q))$ | Shortest distance from control point $r_j$ to obstacle $\mathcal{WO}_i$ | m |
+| $Q^*_i$ | Influence distance for obstacle $i$ | m |
+| $\eta_j$ | Repulsive gain for control point $r_j$ | Ns/m |
+| $\nabla d_i(r_j(q))$ | Outward unit normal of obstacle $i$'s surface at the closest point to $r_j$ |  |
+
+#### Total Configuration Space Force (§4.7.2, eq. 4.26)
+
+The total generalized force is the sum of end-effector attraction and whole-body repulsion, accumulated over all links and all obstacles. Crucially, this summation happens in **configuration space**, summing workspace forces directly would be incorrect because the same workspace force has different joint-torque implications depending on which link it acts on.
+
+$$
+u(q) = \underbrace{J_{ee}^T(q)\,\mathbf{F}_{att}}_{\text{EE attraction}} \;+\; \underbrace{\sum_{j \in \text{links}}\;\sum_{i \in \text{obstacles}} J_j^T(q)\,\nabla U_{\text{rep},i,j}(q)}_{\text{whole-body repulsion}}
+$$
+
+| Symbol | Description | Units |
+|--------|-------------|-------|
+| $J_{ee}(q)$ | Jacobian at the end-effector |  |
+| $\mathbf{F}_{att}$ | Attractive force toward the goal, evaluated at the end-effector | N |
+| $J_j(q)$ | Jacobian evaluated at the floating control point on link $j$ |  |
+
+#### Joint Velocity Integration
+
+The total configuration space force $u(q)$ is treated as a joint velocity command via an admittance gain, then integrated with an Euler step:
+
+$$
+\dot{\mathbf{q}} = k_{\text{adm}}\,u(q), \qquad \mathbf{q}_{next} = \mathbf{q}_{curr} + \dot{\mathbf{q}}\,\Delta t
+$$
+
+| Symbol | Description | Units |
+|--------|-------------|-------|
+| $k_{\text{adm}}$ | Admittance gain (scales configuration-space force to joint velocity) |  |
+| $\dot{\mathbf{q}}$ | Joint velocity vector | rad/s |
+
+> **Note:** The admittance mapping $\dot{\mathbf{q}} = k_{\text{adm}}\,u(q)$ can be replaced by the full robot dynamics equation (using the mass matrix and Coriolis terms) for more physically accurate joint velocity commands (see [Issue #23](https://github.com/argallab/potential_fields/issues/23)).
+
+---
 
 # References
 
- [1] [Real-Time Obstacle Avoidance for Manipulators and Mobile Robots](https://ieeexplore.ieee.org/stamp/stampCaCancaCccCfaksdfojas;kfjd;ksldadjf.jsp?tp=&arnumber=1087247)
+[1] [Real-Time Obstacle Avoidance for Manipulators and Mobile Robots](https://ieeexplore.ieee.org/document/1087247)
 
- ```
- O. Khatib, “Real-time obstacle avoidance for manipulators and mobile robots,” in Proc. 1985 IEEE Int. Conf. Robotics and Automation, vol. 2, pp. 500–505, 1985, doi: 10.1109/ROBOT.1985.1087247.
- ```
+```
+O. Khatib, "Real-time obstacle avoidance for manipulators and mobile robots," in Proc. 1985 IEEE Int. Conf. Robotics and Automation, vol. 2, pp. 500–505, 1985, doi: 10.1109/ROBOT.1985.1087247.
+```
 
- [2] [Principles of Robot Motion: Theory, Algorithms, and Implementations](https://ieeexplore.ieee.org/book/6267238)
+[2] [Principles of Robot Motion: Theory, Algorithms, and Implementations](https://ieeexplore.ieee.org/book/6267238)
 
- ```
- H. Choset, K. M. Lynch, S. Hutchinson, G. A. Kantor, W. Burgard, L. E. Kavraki, and S. Thrun, Principles of Robot Motion: Theory, Algorithms, and Implementations. Cambridge, MA: MIT Press, 2005.
- ```
+```
+H. Choset, K. M. Lynch, S. Hutchinson, G. A. Kantor, W. Burgard, L. E. Kavraki, and S. Thrun, Principles of Robot Motion: Theory, Algorithms, and Implementations. Cambridge, MA: MIT Press, 2005.
+```
