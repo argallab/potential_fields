@@ -23,7 +23,7 @@ namespace pfield {
     }
 
     this->data = pinocchio::Data(this->model);
-    initialized_ = true;
+    initialized = true;
   }
 
   bool XArmIKSolver::solve(
@@ -32,7 +32,7 @@ namespace pfield {
     std::vector<double>& solution,
     Eigen::Matrix<double, 6, Eigen::Dynamic>& J,
     std::string& errorMsg) {
-    if (!initialized_) {
+    if (!initialized) {
       errorMsg = "XArmIKSolver not initialized (failed to load URDF)";
       return false;
     }
@@ -168,9 +168,7 @@ namespace pfield {
     const std::vector<double>& joint_positions,
     Eigen::Matrix<double, 6, Eigen::Dynamic>& J) {
 
-    if (!initialized_) {
-      return false;
-    }
+    if (!initialized) { return false; }
 
     std::vector<std::string> joint_names = getJointNames();
     if (joint_positions.size() != 7) {

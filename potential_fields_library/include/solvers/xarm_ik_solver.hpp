@@ -57,7 +57,7 @@ namespace pfield {
     // Pinocchio members
     pinocchio::Model model;
     pinocchio::Data data;
-    bool initialized_ = false;
+    bool initialized = false;
 
     // Jparse parameters
     double gamma_ = 0.2;
