@@ -31,26 +31,28 @@
 
 #include "pfield/spatial_vector.hpp"
 #include "pfield/mesh_collision.hpp"
+#include "pfield/pf_obstacle_geometry.hpp"
 
 namespace pfield {
 
   /**
    * @brief Enumeration of different obstacle types.
    *
-   * @note Each type determines which parameters in ObstacleGeometry are used.
-   *
+   * Each value corresponds to a concrete ObstacleGeometry subclass.
    */
   enum class ObstacleType {
-    SPHERE, // [center, radius]
-    BOX, // [center, length, width, height]
-    CYLINDER, // [center, radius, height]
-    MESH // [center, scale_x, scale_y, scale_z]
+    SPHERE,     ///< Sphere — defined by radius.
+    BOX,        ///< Box (axis-aligned or OBB) — defined by length, width, height.
+    CYLINDER,   ///< Cylinder — defined by radius and height.
+    MESH,       ///< Triangle mesh — geometry defined by an external mesh resource.
+    ELLIPSOID,  ///< Ellipsoid — defined by three semi-axes; smooth analytic SDF, used for robot link approximation.
+    CAPSULE     ///< Capsule — cylindrical shaft (height) with hemispherical endcaps (radius); total length = height + 2*radius.
   };
 
   enum class ObstacleGroup {
-    STATIC, // Static environment obstacles
-    DYNAMIC, // Dynamic environment obstacles
-    ROBOT // The Robot links themselves, used for collision avoidance
+    STATIC,   ///< Static environment obstacles.
+    DYNAMIC,  ///< Dynamic environment obstacles (Unused).
+    ROBOT     ///< Robot links, used for self-collision avoidance.
   };
 
   inline std::string obstacleTypeToString(const ObstacleType& type) {
@@ -63,6 +65,10 @@ namespace pfield {
       return "Cylinder";
     case ObstacleType::MESH:
       return "Mesh";
+    case ObstacleType::ELLIPSOID:
+      return "Ellipsoid";
+    case ObstacleType::CAPSULE:
+      return "Capsule";
     default:
       throw std::invalid_argument("Unknown obstacle type");
     }
@@ -80,6 +86,12 @@ namespace pfield {
     }
     else if (typeStr == "Mesh") {
       return ObstacleType::MESH;
+    }
+    else if (typeStr == "Ellipsoid") {
+      return ObstacleType::ELLIPSOID;
+    }
+    else if (typeStr == "Capsule") {
+      return ObstacleType::CAPSULE;
     }
     else {
       throw std::invalid_argument("Unknown obstacle type string: " + typeStr);
@@ -114,101 +126,87 @@ namespace pfield {
     }
   }
 
-  struct ObstacleGeometry {
-    double radius = 0.0; // Radius for sphere and cylinder, unused for box
-    double length = 0.0; // Length for box, unused for sphere and cylinder
-    double width = 0.0; // Width for box, unused for sphere and cylinder
-    double height = 0.0; // Height for cylinder and box, unused for sphere
-
-    ObstacleGeometry() = default;
-    ObstacleGeometry(double radius, double length, double width, double height)
-      : radius(radius), length(length), width(width), height(height) {}
-
-    bool operator==(const ObstacleGeometry& other) const {
-      return radius == other.radius && length == other.length &&
-        width == other.width && height == other.height;
-    }
-    bool operator!=(const ObstacleGeometry& other) const {
-      return !(*this == other);
-    }
-
-    std::vector<double> asVector(const ObstacleType& type) const {
-      switch (type) {
-      case ObstacleType::SPHERE:
-        return {radius};
-      case ObstacleType::BOX:
-        return {length, width, height};
-      case ObstacleType::CYLINDER:
-        return {radius, height};
-      case ObstacleType::MESH:
-        return {length, width, height};
-      default:
-        throw std::invalid_argument("Unknown obstacle type");
-      }
-    }
-  };
-
+  /**
+   * @brief Represents a single obstacle in the potential field environment.
+   *
+   * Holds a world-frame pose (position + orientation), a group classification,
+   * and a concrete ObstacleGeometry that describes the shape. All signed-distance,
+   * normal, and Coal collision-object operations are delegated to the geometry.
+   */
   class PotentialFieldObstacle {
   public:
     PotentialFieldObstacle() = delete;
     ~PotentialFieldObstacle() = default;
 
+    /**
+     * @brief Constructs a PotentialFieldObstacle.
+     *
+     * @param frameID      Unique identifier for this obstacle (e.g. "link1::collision").
+     * @param centerPosition  World-frame center position.
+     * @param orientation     World-frame orientation.
+     * @param group           Obstacle group (STATIC, DYNAMIC, ROBOT).
+     * @param geometry        Concrete geometry describing the obstacle shape.
+     *                        Ownership is transferred via unique_ptr.
+     * @param meshResource    URI to the mesh file (used only when geometry is MeshGeometry).
+     * @param meshScale       Scale applied to the mesh for visualization.
+     */
     PotentialFieldObstacle(
       std::string frameID,
       Eigen::Vector3d centerPosition, Eigen::Quaterniond orientation,
-      ObstacleType type, ObstacleGroup group, ObstacleGeometry geometry,
+      ObstacleGroup group, std::unique_ptr<ObstacleGeometry> geometry,
       const std::string& meshResource = std::string(),
       const Eigen::Vector3d& meshScale = Eigen::Vector3d::Ones())
-      : frameID(frameID),
-      position(centerPosition),
+      : frameID(std::move(frameID)),
+      position(std::move(centerPosition)),
       orientation(orientation),
       orientationConjugate(orientation.conjugate()),
-      type(type),
       group(group),
-      geometry(geometry),
+      geometry(std::move(geometry)),
       meshResource(meshResource),
       meshScale(meshScale) {
-      if (type == ObstacleType::MESH && !meshResource.empty()) {
+      if (this->geometry->getType() == ObstacleType::MESH && !meshResource.empty()) {
         try {
-          meshCollisionData = loadMesh(meshResource);
+          auto meshData = loadMesh(meshResource);
+          auto* meshGeom = dynamic_cast<MeshGeometry*>(this->geometry.get());
+          if (meshGeom && meshData) {
+            meshGeom->meshCollisionData = meshData;
+          }
         }
-        catch (const std::exception&) {
-          meshCollisionData.reset();
-        }
+        catch (const std::exception&) {}
       }
       // Only attempt to create the COAL object if we have valid data.
-      // For MESH types, this means meshCollisionData must be loaded.
-      if (type != ObstacleType::MESH || meshCollisionData) {
+      // For MESH types this means meshCollisionData must be loaded.
+      if (this->geometry->getType() != ObstacleType::MESH) {
         this->toCoalCollisionObject();
+      } else {
+        auto* meshGeom2 = dynamic_cast<MeshGeometry*>(this->geometry.get());
+        if (meshGeom2 && meshGeom2->meshCollisionData) {
+          this->toCoalCollisionObject();
+        }
       }
     }
 
-    PotentialFieldObstacle(const PotentialFieldObstacle& other) :
-      frameID(other.frameID),
+    PotentialFieldObstacle(const PotentialFieldObstacle& other)
+      : frameID(other.frameID),
       position(other.position),
       orientation(other.orientation),
       orientationConjugate(other.orientationConjugate),
-      type(other.type),
       group(other.group),
-      geometry(other.geometry),
+      geometry(other.geometry->clone()),
       meshResource(other.meshResource),
       meshScale(other.meshScale) {
-      // Shallow copy of shared mesh data
-      this->meshCollisionData = other.meshCollisionData;
       this->toCoalCollisionObject();
     }
 
-    PotentialFieldObstacle(PotentialFieldObstacle&& other) noexcept :
-      frameID(std::move(other.frameID)),
+    PotentialFieldObstacle(PotentialFieldObstacle&& other) noexcept
+      : frameID(std::move(other.frameID)),
       position(std::move(other.position)),
       orientation(std::move(other.orientation)),
       orientationConjugate(std::move(other.orientationConjugate)),
-      type(other.type),
       group(other.group),
       geometry(std::move(other.geometry)),
       meshResource(std::move(other.meshResource)),
       meshScale(std::move(other.meshScale)) {
-      this->meshCollisionData = std::move(other.meshCollisionData);
       this->toCoalCollisionObject();
     }
 
@@ -218,19 +216,17 @@ namespace pfield {
         this->position = other.position;
         this->orientation = other.orientation;
         this->orientationConjugate = other.orientationConjugate;
-        this->type = other.type;
         this->group = other.group;
-        this->geometry = other.geometry;
+        this->geometry = other.geometry->clone();
         this->meshResource = other.meshResource;
         this->meshScale = other.meshScale;
-        this->meshCollisionData = other.meshCollisionData; // share existing (may be null)
         this->toCoalCollisionObject();
       }
       return *this;
     }
 
     bool operator==(const PotentialFieldObstacle& other) const {
-      return this->position == other.position && this->geometry == other.geometry;
+      return this->position == other.position && *this->geometry == *other.geometry;
     }
     bool operator!=(const PotentialFieldObstacle& other) const { return !(*this == other); }
 
@@ -238,8 +234,8 @@ namespace pfield {
     ObstacleGroup getGroup() const { return this->group; }
     Eigen::Vector3d getPosition() const { return this->position; }
     Eigen::Quaterniond getOrientation() const { return this->orientation; }
-    ObstacleType getType() const { return this->type; }
-    ObstacleGeometry getGeometry() const { return this->geometry; }
+    ObstacleType getType() const { return this->geometry->getType(); }
+    const ObstacleGeometry& getGeometry() const { return *this->geometry; }
     const std::string& getMeshResource() const { return this->meshResource; }
     Eigen::Vector3d getMeshScale() const { return this->meshScale; }
     std::shared_ptr<coal::CollisionObject> getCoalCollisionObject() const { return this->coalCollisionObject; }
@@ -262,78 +258,81 @@ namespace pfield {
       this->updateCoalCollisionObjectPose();
     }
 
+    void setMeshCollisionData(const std::shared_ptr<MeshCollisionData>& meshData) {
+      auto* meshGeom = dynamic_cast<MeshGeometry*>(this->geometry.get());
+      if (meshGeom) { meshGeom->meshCollisionData = meshData; }
+    }
+
     void setMeshProperties(const std::string& meshResource, const Eigen::Vector3d& meshScale) {
       this->meshResource = meshResource;
       this->meshScale = meshScale;
-      if (type == ObstacleType::MESH && !meshResource.empty()) {
+      if (this->geometry->getType() == ObstacleType::MESH && !meshResource.empty()) {
         try {
-          meshCollisionData = loadMesh(meshResource);
+          auto meshData = loadMesh(meshResource);
+          auto* meshGeom = dynamic_cast<MeshGeometry*>(this->geometry.get());
+          if (meshGeom && meshData) {
+            meshGeom->meshCollisionData = meshData;
+          }
         }
-        catch (const std::exception&) {
-          meshCollisionData.reset();
-        }
+        catch (const std::exception&) {}
       }
     }
-
-    void setMeshCollisionData(const std::shared_ptr<MeshCollisionData>& meshData) { this->meshCollisionData = meshData; }
 
     bool withinInfluenceZone(Eigen::Vector3d worldPoint, double influenceDistance) const;
     bool withinObstacle(Eigen::Vector3d worldPoint) const;
 
     /**
-     * @brief Rotate the given point to the obstacle's frame of reference
+     * @brief Rotate the given point into the obstacle's local frame.
      *
-     * @note Useful for computing distances and collision checks in the obstacle's local frame
-     *
-     * @param worldPoint the point to transform into obstacle frame
-     * @return Eigen::Vector3d the point in the obstacle's local frame
+     * @param worldPoint  Point in world coordinates.
+     * @return The point expressed in the obstacle's local frame.
      */
     Eigen::Vector3d toObstacleFrame(const Eigen::Vector3d& worldPoint) const;
 
     /**
-     * @brief Get the half dimensions of the obstacle
+     * @brief Returns the half-dimensions of the obstacle's axis-aligned bounding box.
      *
-     * @note Used for collision checking for "radius" style measurements
-     *
-     * @return Eigen::Vector3d Half dimensions [half_length, half_width, half_height]
+     * Used for broad-phase influence-zone checks.
      */
     Eigen::Vector3d halfDimensions() const;
 
     /**
-     * @brief Computes the signed distance and normal from a world point to the obstacle surface
+     * @brief Computes the signed distance and outward normal from a world point to
+     *        the obstacle surface.
      *
-     * @param[in] worldPoint The point in world coordinates
-     * @param[out] signedDistance The distance to the obstacle surface (negative if inside)
-     * @param[out] normal The outward normal vector at the closest point on the obstacle surface
+     * @param[in]  worldPoint      Query point in world coordinates.
+     * @param[out] signedDistance  Distance to the surface (negative if inside).
+     * @param[out] normal          Outward unit normal in world coordinates.
      */
-    void computeSignedDistanceAndNormal(const Eigen::Vector3d& worldPoint, double& signedDistance, Eigen::Vector3d& normal) const;
+    void computeSignedDistanceAndNormal(
+      const Eigen::Vector3d& worldPoint,
+      double& signedDistance,
+      Eigen::Vector3d& normal) const;
 
     /**
-     * @brief Creates a COAL collision object from this obstacle for distance/collision queries
+     * @brief Creates (or returns the cached) Coal collision object for this obstacle.
      *
-     * @return std::shared_ptr<coal::CollisionObject> The COAL collision object representing this obstacle
+     * @return Shared pointer to the Coal collision object.
      */
     std::shared_ptr<coal::CollisionObject> toCoalCollisionObject();
 
     /**
-     * @brief Updates the COAL collision object pose to match the obstacle's current pose
-     *
+     * @brief Updates the cached Coal collision object's pose to match the current
+     *        obstacle position and orientation.
      */
     void updateCoalCollisionObjectPose() const;
 
   private:
-    std::string frameID; // Frame ID for the obstacle
-    Eigen::Vector3d position; // Center Position of the obstacle in 3D space
-    Eigen::Quaterniond orientation; // Orientation of the obstacle in 3D space
-    Eigen::Quaterniond orientationConjugate; // Cached conjugate of the orientation for efficiency
-    ObstacleType type; // Type of the obstacle
-    ObstacleGroup group; // Obstacle group/category
-    ObstacleGeometry geometry; // Geometry of the obstacle, containing relevant dimensions
-    std::string meshResource; // URI or file path to the mesh resource (e.g., package://, file://)
-    Eigen::Vector3d meshScale; // Scale for mesh visualization if using MESH_RESOURCE
-    std::shared_ptr<MeshCollisionData> meshCollisionData; // populated when mesh resource loaded (shared to avoid deep copies)
-    std::shared_ptr<coal::CollisionObject> coalCollisionObject; // Cached COAL collision object for distance queries
-    std::shared_ptr<coal::CollisionGeometry> coalCollisionGeometry; // Cached COAL collision geometry for distance queries
+    std::string frameID;
+    Eigen::Vector3d position;
+    Eigen::Quaterniond orientation;
+    Eigen::Quaterniond orientationConjugate;
+    ObstacleGroup group;
+    std::unique_ptr<ObstacleGeometry> geometry;
+    std::string meshResource;
+    Eigen::Vector3d meshScale;
+    std::shared_ptr<coal::CollisionObject> coalCollisionObject;
+    std::shared_ptr<coal::CollisionGeometry> coalCollisionGeometry;
   };
 
   struct PotentialFieldObstacleHash {
@@ -346,9 +345,9 @@ namespace pfield {
 
   static int inline createHashID(const PotentialFieldObstacle& obstacle) {
     PotentialFieldObstacleHash hasher;
-    return static_cast<int>(hasher(obstacle) & 0x7FFFFFFF); // keep positive
+    return static_cast<int>(hasher(obstacle) & 0x7FFFFFFF);  // keep positive
   }
 
-} // namespace pfield
+}  // namespace pfield
 
-#endif // PF_OBSTACLE_HPP
+#endif  // PF_OBSTACLE_HPP

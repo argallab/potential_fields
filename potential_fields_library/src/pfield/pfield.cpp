@@ -14,6 +14,7 @@
 
 #include "pfield/pfield.hpp"
 #include "pfield/pf_obstacle.hpp"
+#include "pfield/pf_obstacle_geometry.hpp"
 #include "pfield/spatial_vector.hpp"
 #include <algorithm>
 #include <limits>
@@ -726,80 +727,74 @@ namespace pfield {
       outLinkClearances->reserve(robotLinks.size());
     }
 
-    // Setup distance computation request
-    coal::DistanceRequest distRequest;
-    distRequest.enable_nearest_points = true;
-    coal::DistanceResult distResult;
+    // Build a helper that returns world-frame control points for a link obstacle.
+    // For each control point the associated "link surface radius" is the distance from that
+    // point to the link surface, so SDF(controlPoint) - surfaceRadius = clearance to obstacle.
+    //
+    // Textbook (4.7.3): use a floating control point per link — the point on the link boundary
+    // closest to any obstacle. We approximate this by sampling exact geometric points on the link
+    // and picking the one with the smallest clearance per obstacle pair. This is smooth because
+    // all sample points move continuously with the joint configuration.
+    //
+    // Extract link name from frameID ("linkName::collisionName" → "linkName")
+    auto extractLinkName = [](const std::string& frameID) -> std::string {
+      const size_t sep = frameID.find("::");
+      return (sep != std::string::npos) ? frameID.substr(0, sep) : frameID;
+    };
 
-    // Iterate over all robot link-obstacle pairs
     for (const auto& link : robotLinks) {
       Eigen::Vector3d linkNetForce = Eigen::Vector3d::Zero();
       double linkMinDist = std::numeric_limits<double>::infinity();
 
-      for (const auto& obs : envObstacles) {
-        distResult.clear();
-        coal::distance(
-          link.getCoalCollisionObject().get(),
-          obs.getCoalCollisionObject().get(),
-          distRequest, distResult
-        );
+      const std::string linkName = extractLinkName(link.getFrameID());
+      const std::vector<ControlPoint> controlPoints = PotentialField::buildControlPoints(link);
 
-        if (distResult.min_distance < linkMinDist) {
-          linkMinDist = distResult.min_distance;
+      for (const auto& obs : envObstacles) {
+        // Find the control point that gives the tightest (minimum) clearance to this obstacle.
+        // This is the floating control point in the textbook sense.
+        double bestDist = std::numeric_limits<double>::infinity();
+        Eigen::Vector3d bestPoint = controlPoints[0].first;
+        Eigen::Vector3d bestNormal = Eigen::Vector3d::UnitZ();
+
+        for (const auto& [cpWorld, cpRadius] : controlPoints) {
+          double sdf = 0.0;
+          Eigen::Vector3d normal = Eigen::Vector3d::Zero();
+          obs.computeSignedDistanceAndNormal(cpWorld, sdf, normal);
+          const double d = sdf - cpRadius; // clearance from link surface to obstacle surface
+          if (d < bestDist) {
+            bestDist = d;
+            bestPoint = cpWorld - normal * cpRadius; // point on link surface closest to obstacle
+            bestNormal = normal;
+          }
         }
 
-        // Only consider obstacles within influence distance
-        if (distResult.min_distance < this->influenceDistance) {
-          // Extract nearest points (in world frame)
-          Eigen::Vector3d robotPoint(
-            distResult.nearest_points[0][0],
-            distResult.nearest_points[0][1],
-            distResult.nearest_points[0][2]
-          );
-          Eigen::Vector3d obstaclePoint(
-            distResult.nearest_points[1][0],
-            distResult.nearest_points[1][1],
-            distResult.nearest_points[1][2]
-          );
+        if (bestDist < linkMinDist) {
+          linkMinDist = bestDist;
+        }
 
-          // Compute repulsive force direction (from obstacle to robot)
-          Eigen::Vector3d direction = robotPoint - obstaclePoint;
+        if (bestDist < this->influenceDistance) {
+          Eigen::Vector3d direction = bestNormal;
           if (direction.norm() < NEAR_ZERO_THRESHOLD) {
-            direction = Eigen::Vector3d::UnitZ(); // Degenerate case fallback
-          }
-          else {
-            direction.normalize();
+            direction = Eigen::Vector3d::UnitZ();
           }
 
-          // Compute repulsive force magnitude using Khatib potential
-          const double d = std::max(distResult.min_distance, NEAR_ZERO_THRESHOLD);
+          const double d = std::max(bestDist, NEAR_ZERO_THRESHOLD);
           const double Q = this->influenceDistance;
           const double magnitude = this->repulsiveGain * (1.0 / d - 1.0 / Q) * (1.0 / (d * d));
-          Eigen::Vector3d repulsiveForce = direction * magnitude;
+          const Eigen::Vector3d repulsiveForce = direction * magnitude;
 
           linkNetForce += repulsiveForce;
 
-          // Extract the actual link name from the obstacle ID (format: "linkName::collisionName")
-          std::string obstacleID = link.getFrameID();
-          std::string linkName = obstacleID;
-          size_t separatorPos = obstacleID.find("::");
-          if (separatorPos != std::string::npos) {
-            linkName = obstacleID.substr(0, separatorPos);
-          }
-
-          // Get Jacobian at the nearest point on this link
+          // Jacobian at the floating control point on the link surface
           Eigen::MatrixXd J_link = this->pfKinematics->getJacobianAtPoint(
-            linkName, robotPoint, jointAngles
+            linkName, bestPoint, jointAngles
           );
 
-          // Initialize joint torques vector on first iteration
           if (!initializedJointTorqueSize) {
             jointTorques = Eigen::VectorXd::Zero(J_link.cols());
             initializedJointTorqueSize = true;
           }
 
-          // Map repulsive force to joint torques and accumulate
-          // J_link is 3xN (linear Jacobian only for point forces)
           jointTorques += J_link.transpose() * repulsiveForce;
         }
       }
@@ -1258,10 +1253,11 @@ namespace pfield {
           if (row < mat.size() && col < mat[row].size()) {
             const auto& v = mat[row][col];
             csvFile << "," << v.x() << "," << v.y() << "," << v.z();
-          } else {
+          }
+          else {
             csvFile << "," << std::numeric_limits<double>::quiet_NaN()
-                    << "," << std::numeric_limits<double>::quiet_NaN()
-                    << "," << std::numeric_limits<double>::quiet_NaN();
+              << "," << std::numeric_limits<double>::quiet_NaN()
+              << "," << std::numeric_limits<double>::quiet_NaN();
           }
         };
 
@@ -1300,6 +1296,63 @@ namespace pfield {
 
     csvFile.close();
     return true;
+  }
+
+  std::vector<PotentialField::ControlPoint> PotentialField::buildControlPoints(
+    const PotentialFieldObstacle& link) {
+    const Eigen::Vector3d& pos = link.getPosition();
+    const Eigen::Quaterniond& ori = link.getOrientation();
+
+    switch (link.getType()) {
+    case ObstacleType::CAPSULE: {
+      const auto& g = static_cast<const CapsuleGeometry&>(link.getGeometry());
+      // Capsule axis = column 2 of axes (capsule Z), in world frame
+      const Eigen::Vector3d capsuleAxisWorld = ori * (g.axes * Eigen::Vector3d::UnitZ());
+      const double halfShaft = g.height / 2.0;
+      const Eigen::Vector3d center = pos + ori * g.centroidOffset;
+      return {
+        {center + halfShaft * capsuleAxisWorld, g.radius},   // top endcap center
+        {center - halfShaft * capsuleAxisWorld, g.radius},   // bottom endcap center
+        {center,                                g.radius},   // shaft midpoint
+      };
+    }
+    case ObstacleType::BOX: {
+      // 8 corners of the OBB; corners are on the surface so surfaceRadius = 0
+      const auto& g = static_cast<const BoxGeometry&>(link.getGeometry());
+      const Eigen::Vector3d center = pos + ori * g.centroidOffset;
+      const double hx = g.length / 2.0;
+      const double hy = g.width / 2.0;
+      const double hz = g.height / 2.0;
+      const Eigen::Vector3d ax = ori * g.axes.col(0);
+      const Eigen::Vector3d ay = ori * g.axes.col(1);
+      const Eigen::Vector3d az = ori * g.axes.col(2);
+      std::vector<ControlPoint> pts;
+      pts.reserve(8);
+      for (int sx : {-1, 1})
+        for (int sy : {-1, 1})
+          for (int sz : {-1, 1})
+            pts.push_back({center + sx * hx * ax + sy * hy * ay + sz * hz * az, 0.0});
+      return pts;
+    }
+    case ObstacleType::SPHERE: {
+      const auto& g = static_cast<const SphereGeometry&>(link.getGeometry());
+      return {{pos, g.radius}};
+    }
+    case ObstacleType::CYLINDER: {
+      const auto& g = static_cast<const CylinderGeometry&>(link.getGeometry());
+      const double halfH = g.height / 2.0;
+      const Eigen::Vector3d axisWorld = ori * Eigen::Vector3d::UnitZ();
+      return {
+        {pos + halfH * axisWorld, g.radius},
+        {pos - halfH * axisWorld, g.radius},
+        {pos,                     g.radius},
+      };
+    }
+    default: {
+      const double r = link.halfDimensions().norm();
+      return {{pos, r}};
+    }
+    }
   }
 
 } // namespace pfield

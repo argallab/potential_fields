@@ -345,7 +345,7 @@ namespace pfield {
 
     /**
      * @brief Integrates the current pose forward in time based on the potential field.
-     * 
+     *
      * @param currentPose The current pose of the robot/query point.
      * @param prevTwist The previous twist (for acceleration limiting).
      * @param dt The time step [s].
@@ -813,6 +813,31 @@ namespace pfield {
      * @return false If there was an error creating the CSV
      */
     bool createPlannedPathCSV(const PlannedPath& path, const std::string& filePath) const;
+
+    /**
+     * @brief A world-space point on a robot link surface used for repulsion queries.
+     *
+     * `point` is the world-frame location; `surfaceRadius` is the local geometry radius
+     * at that point (e.g. capsule radius, sphere radius; 0 for box corners).
+     * Clearance to an obstacle is computed as `sdf(point) - surfaceRadius`.
+     */
+    using ControlPoint = std::pair<Eigen::Vector3d, double>;
+
+    /**
+     * @brief Computes the set of control points for a robot link obstacle.
+     *
+     * Control points are world-space representative points on the link surface used
+     * for floating-control-point repulsion. The set depends on geometry type:
+     *   - CAPSULE:  two endcap centers + shaft midpoint; surfaceRadius = capsule radius.
+     *   - BOX:      8 OBB corners; surfaceRadius = 0.
+     *   - SPHERE:   link center; surfaceRadius = sphere radius.
+     *   - CYLINDER: two endcap centers + shaft midpoint; surfaceRadius = cylinder radius.
+     *   - default:  link center; surfaceRadius = halfDimensions().norm().
+     *
+     * @param link The robot link obstacle.
+     * @return Vector of (world point, surface radius) pairs.
+     */
+    static std::vector<ControlPoint> buildControlPoints(const PotentialFieldObstacle& link);
 
   private:
     double attractiveGain; // Gain for attractive force
