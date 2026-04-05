@@ -134,7 +134,8 @@ private:
   rclcpp::Subscription<PoseMsg>::SharedPtr queryPoseSub; // Subscriber for query poses
   rclcpp::Subscription<ObstacleArrayMsg>::SharedPtr obstacleSub; // Subscriber for obstacles
   rclcpp::Service<PlanPathSrv>::SharedPtr pathPlanningService; // Now hosted here
-  rclcpp::Service<ComputeAutonomyVectorSrv>::SharedPtr autonomyVectorService; // Service to compute velocity vector at a given pose
+  // Service to compute velocity vector at a given pose
+  rclcpp::Service<ComputeAutonomyVectorSrv>::SharedPtr autonomyVectorService;
 
   void timerCallback();
 
